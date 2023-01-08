@@ -1,0 +1,6 @@
+
+.DS_Store
+cmd/test copy.png
+cmd/server/main
+cmd/runner
+cmd/cpu.prof
