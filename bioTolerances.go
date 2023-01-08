@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/Flokey82/go_gens/genbiome"
+	"github.com/Flokey82/genbiome"
 )
 
 // SpeciesTolerances defines the environmental tolerances of a species.

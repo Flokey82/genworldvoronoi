@@ -5,7 +5,7 @@ import (
 	"math/rand"
 	"strings"
 
-	"github.com/Flokey82/go_gens/genbiome"
+	"github.com/Flokey82/genbiome"
 )
 
 func (m *Geo) GenerateRegPropertyDescription(p RegProperty) string {

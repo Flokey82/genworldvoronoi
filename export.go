@@ -10,7 +10,7 @@ import (
 	"math"
 	"os"
 
-	"github.com/Flokey82/go_gens/genbiome"
+	"github.com/Flokey82/genbiome"
 	"github.com/mazznoer/colorgrad"
 	"github.com/sizeofint/webpanimation"
 

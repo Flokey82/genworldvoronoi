@@ -7,8 +7,8 @@ import (
 	"math/rand"
 	"sort"
 
+	"github.com/Flokey82/genbiome"
 	"github.com/Flokey82/go_gens/gameconstants"
-	"github.com/Flokey82/go_gens/genbiome"
 )
 
 func (m *Civ) getExistingCities() []*City {

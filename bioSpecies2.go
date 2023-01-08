@@ -5,7 +5,7 @@ import (
 	"math"
 	"math/rand"
 
-	"github.com/Flokey82/go_gens/genbiome"
+	"github.com/Flokey82/genbiome"
 )
 
 func (b *Bio) placeAllSpecies(kingdom *BioLevel) {

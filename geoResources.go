@@ -4,7 +4,7 @@ import (
 	"log"
 	"math"
 
-	"github.com/Flokey82/go_gens/genbiome"
+	"github.com/Flokey82/genbiome"
 )
 
 // sumResources returns the sum of the resource flag IDs in the byte.

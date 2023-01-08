@@ -5,7 +5,7 @@ import (
 	"math"
 	"math/rand"
 
-	"github.com/Flokey82/go_gens/genbiome"
+	"github.com/Flokey82/genbiome"
 )
 
 // GetCulture returns the culture of the given region (if any).

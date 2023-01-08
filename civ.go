@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/Flokey82/go_gens/genbiome"
+	"github.com/Flokey82/genbiome"
 )
 
 type Civ struct {

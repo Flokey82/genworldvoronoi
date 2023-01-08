@@ -3,8 +3,8 @@ package genworldvoronoi
 import (
 	"log"
 
+	"github.com/Flokey82/genbiome"
 	"github.com/Flokey82/go_gens/gameconstants"
-	"github.com/Flokey82/go_gens/genbiome"
 )
 
 type Stats struct {
