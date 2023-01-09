@@ -5,7 +5,6 @@ import (
 	"math"
 	"math/rand"
 
-	"github.com/Flokey82/go_gens/vectors"
 	"github.com/fogleman/delaunay"
 )
 
@@ -40,33 +39,6 @@ func generateFibonacciSphere(seed int64, numPoints int, jitter float64) []float6
 		z -= dz
 	}
 	return latLon
-}
-
-// pushCartesianFromSpherical calculates x,y,z from spherical coordinates lat,lon and then push
-// them onto out array; for one-offs pass nil as the first argument
-func pushCartesianFromSpherical(out []float64, latDeg, lonDeg float64) []float64 {
-	return append(out, latLonToCartesian(latDeg, lonDeg)...)
-}
-
-// latLonToCartesian converts latitude and longitude to x, y, z coordinates.
-// See: https://rbrundritt.wordpress.com/2008/10/14/conversion-between-spherical-and-cartesian-coordinates-systems/
-func latLonToCartesian(latDeg, lonDeg float64) []float64 {
-	latRad := (latDeg / 180.0) * math.Pi
-	lonRad := (lonDeg / 180.0) * math.Pi
-	return []float64{
-		math.Cos(latRad) * math.Cos(lonRad),
-		math.Cos(latRad) * math.Sin(lonRad),
-		math.Sin(latRad),
-	}
-}
-
-// latLonFromVec3 converts a vectors.Vec3 to latitude and longitude.
-// See: https://rbrundritt.wordpress.com/2008/10/14/conversion-between-spherical-and-cartesian-coordinates-systems/
-func latLonFromVec3(position vectors.Vec3, sphereRadius float64) (float64, float64) {
-	// See https://stackoverflow.com/questions/46247499/vector3-to-latitude-longitude
-	lat := math.Asin(position.Z / sphereRadius) // theta
-	lon := math.Atan2(position.Y, position.X)   // phi
-	return radToDeg(lat), radToDeg(lon)
 }
 
 /** Add south pole back into the mesh.
@@ -164,7 +136,9 @@ func MakeSphere(seed int64, numPoints int, jitter float64) (*SphereMesh, error) 
 		// HACKY! Fix this properly!
 		nla, nlo := latLonFromVec3(convToVec3(latLonToCartesian(latlong[r], latlong[r+1])).Normalize(), 1.0)
 		latLon = append(latLon, [2]float64{nla, nlo})
-		xyz = pushCartesianFromSpherical(xyz, latlong[r], latlong[r+1])
+
+		// This calculates x,y,z from the spherical coordinates lat,lon.
+		xyz = append(xyz, latLonToCartesian(latlong[r], latlong[r+1])...)
 	}
 
 	xy := stereographicProjection(xyz)

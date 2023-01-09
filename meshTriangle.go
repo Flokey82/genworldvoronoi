@@ -52,12 +52,14 @@ func (tm *TriangleMesh) s_ghost(s int) bool {
 func s_to_t(s int) int {
 	return (s / 3)
 }
+
 func s_prev_s(s int) int {
 	if s%3 == 0 {
 		return s + 2
 	}
 	return s - 1
 }
+
 func s_next_s(s int) int {
 	if s%3 == 2 {
 		return s - 2

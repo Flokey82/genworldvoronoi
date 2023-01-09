@@ -17,44 +17,6 @@ import (
 	svgo "github.com/ajstarks/svgo"
 )
 
-func genBlue(intensity float64) color.NRGBA {
-	return color.NRGBA{
-		R: uint8(intensity * 255),
-		G: uint8(intensity * 255),
-		B: 255,
-		A: 255,
-	}
-}
-
-func genGreen(intensity float64) color.NRGBA {
-	return color.NRGBA{
-		R: uint8(intensity * 255),
-		B: uint8((1 - intensity) * 255),
-		G: 255,
-		A: 255,
-	}
-}
-
-// genBlackShadow returns a black color that is more transparent the higher the intensity.
-func genBlackShadow(intensity float64) color.NRGBA {
-	return color.NRGBA{
-		R: 0,
-		G: 0,
-		B: 0,
-		A: uint8((1 - intensity) * 255),
-	}
-}
-
-func genColor(col color.Color, intensity float64) color.Color {
-	var col2 color.NRGBA
-	cr, cg, cb, _ := col.RGBA()
-	col2.R = uint8(float64(255) * float64(cr) / float64(0xffff))
-	col2.G = uint8(float64(255) * float64(cg) / float64(0xffff))
-	col2.B = uint8(float64(255) * float64(cb) / float64(0xffff))
-	col2.A = 255
-	return col2
-}
-
 // ExportSVG exports the terrain as SVG to the given path.
 // NOTE: This produces broken somewhat incomplete output due to the wraparound of the mesh.
 func (m *Map) ExportSVG(path string) error {

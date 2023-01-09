@@ -1,27 +1,15 @@
 package genworldvoronoi
 
 import (
+	"image/color"
 	"log"
 	"math"
 	"math/rand"
 	"sort"
 
+	"github.com/Flokey82/go_gens/utils"
 	"github.com/Flokey82/go_gens/vectors"
 )
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
 
 // getCentroidOfTriangle returns the centroid of a triangle defined by
 // the xyz coordinates a, b, c as a vectors.Vec3.
@@ -40,14 +28,17 @@ func dist2(a, b [2]float64) float64 {
 	return math.Sqrt(xDiff*xDiff + yDiff*yDiff)
 }
 
+// dot2 returns the dot product of two vectors.
 func dot2(a, b [2]float64) float64 {
 	return a[0]*b[0] + a[1]*b[1]
 }
 
+// len2 returns the length of the given vector.
 func len2(a [2]float64) float64 {
 	return math.Sqrt(a[0]*a[0] + a[1]*a[1])
 }
 
+// normal2 returns the normalized vector of the given vector.
 func normal2(v [2]float64) [2]float64 {
 	l := 1.0 / len2(v)
 	return [2]float64{
@@ -56,6 +47,8 @@ func normal2(v [2]float64) [2]float64 {
 	}
 }
 
+// distToSegment2 returns the distance between a point p and a line
+// segment defined by the points v and w.
 func distToSegment2(v, w, p [2]float64) float64 {
 	l2 := dist2(v, w)
 	if l2 == 0 {
@@ -67,56 +60,6 @@ func distToSegment2(v, w, p [2]float64) float64 {
 	t := ((p[0]-v[0])*(w[0]-v[0]) + (p[1]-v[1])*(w[1]-v[1])) / (l2 * l2)
 	t = math.Max(0, math.Min(1, t))
 	return dist2(p, [2]float64{v[0] + t*(w[0]-v[0]), v[1] + t*(w[1]-v[1])})
-}
-
-// minMax returns the smallest and largest value in hm.
-func minMax(hm []float64) (float64, float64) {
-	if len(hm) == 0 {
-		return 0, 0
-	}
-	min, max := hm[0], hm[0]
-	for _, h := range hm {
-		if h > max {
-			max = h
-		}
-		if h < min {
-			min = h
-		}
-	}
-	return min, max
-}
-
-func minMax64(hm []int64) (int64, int64) {
-	if len(hm) == 0 {
-		return 0, 0
-	}
-	min, max := hm[0], hm[0]
-	for _, h := range hm {
-		if h > max {
-			max = h
-		}
-		if h < min {
-			min = h
-		}
-	}
-	return min, max
-}
-
-func convToMap(in []int) map[int]bool {
-	res := make(map[int]bool)
-	for _, v := range in {
-		res[v] = true
-	}
-	return res
-}
-
-func convToArray(in map[int]bool) []int {
-	var res []int
-	for v := range in {
-		res = append(res, v)
-	}
-	sort.Ints(res)
-	return res
 }
 
 // convToVec3 converts a float slice containing 3 values into a vectors.Vec3.
@@ -136,6 +79,7 @@ func radToDeg(rad float64) float64 {
 	return rad * 180 / math.Pi
 }
 
+// calcVecFromLatLong calculates the vector between two lat/long pairs.
 func calcVecFromLatLong(lat1, lon1, lat2, lon2 float64) [2]float64 {
 	// convert to radians
 	lat1 = degToRad(lat1)
@@ -146,6 +90,27 @@ func calcVecFromLatLong(lat1, lon1, lat2, lon2 float64) [2]float64 {
 		math.Cos(lat1)*math.Sin(lat2) - math.Sin(lat1)*math.Cos(lat2)*math.Cos(lon2-lon1), // X
 		math.Sin(lon2-lon1) * math.Cos(lat2),                                              // Y
 	}
+}
+
+// latLonToCartesian converts latitude and longitude to x, y, z coordinates.
+// See: https://rbrundritt.wordpress.com/2008/10/14/conversion-between-spherical-and-cartesian-coordinates-systems/
+func latLonToCartesian(latDeg, lonDeg float64) []float64 {
+	latRad := (latDeg / 180.0) * math.Pi
+	lonRad := (lonDeg / 180.0) * math.Pi
+	return []float64{
+		math.Cos(latRad) * math.Cos(lonRad),
+		math.Cos(latRad) * math.Sin(lonRad),
+		math.Sin(latRad),
+	}
+}
+
+// latLonFromVec3 converts a vectors.Vec3 to latitude and longitude.
+// See: https://rbrundritt.wordpress.com/2008/10/14/conversion-between-spherical-and-cartesian-coordinates-systems/
+func latLonFromVec3(position vectors.Vec3, sphereRadius float64) (float64, float64) {
+	// See https://stackoverflow.com/questions/46247499/vector3-to-latitude-longitude
+	lat := math.Asin(position.Z / sphereRadius) // theta
+	lon := math.Atan2(position.Y, position.X)   // phi
+	return radToDeg(lat), radToDeg(lon)
 }
 
 // haversine returns the great arc distance between two lat/long pairs.
@@ -216,6 +181,26 @@ func heronsTriArea(a, b, c float64) float64 {
 	return math.Sqrt(p * (p - a) * (p - b) * (p - c))
 }
 
+// convToMap converts a slice of ints into a map of ints to bools.
+func convToMap(in []int) map[int]bool {
+	res := make(map[int]bool)
+	for _, v := range in {
+		res[v] = true
+	}
+	return res
+}
+
+// convToArray converts a map of ints to bools into a slice of ints.
+func convToArray(in map[int]bool) []int {
+	var res []int
+	for v := range in {
+		res = append(res, v)
+	}
+	sort.Ints(res)
+	return res
+}
+
+// isInIntList returns true if the given int is in the given slice.
 func isInIntList(l []int, i int) bool {
 	for _, v := range l {
 		if v == i {
@@ -225,27 +210,27 @@ func isInIntList(l []int, i int) bool {
 	return false
 }
 
+var minMax = utils.MinMax[float64]
+var minMax64 = utils.MinMax[int64]
+
 // initFloatSlice returns a slice of floats of the given size, initialized to -1.
 func initFloatSlice(size int) []float64 {
-	res := make([]float64, size)
-	for i := range res {
-		res[i] = -1
-	}
-	return res
+	return initSlice[float64](size)
 }
 
 // initRegionSlice returns a slice of ints of the given size, initialized to -1.
 func initRegionSlice(size int) []int {
-	res := make([]int, size)
-	for i := range res {
-		res[i] = -1
-	}
-	return res
+	return initSlice[int](size)
 }
 
 // initTimeSlice returns a slice of int64s of the given size, initialized to -1.
 func initTimeSlice(size int) []int64 {
-	res := make([]int64, size)
+	return initSlice[int64](size)
+}
+
+// initSlice returns a slice of the given type of the given size, initialized to -1.
+func initSlice[V utils.Number](size int) []V {
+	res := make([]V, size)
 	for i := range res {
 		res[i] = -1
 	}
@@ -337,13 +322,13 @@ func unshiftIndexPath(path []int, p int) []int {
 	return res
 }
 
-// round value to d decimals
+// roundToDecimals rounds the given float to the given number of decimals.
 func roundToDecimals(v, d float64) float64 {
 	m := math.Pow(10, d)
 	return math.Round(v*m) / m
 }
 
-// turn weighted array into simple array
+// weightedToArray converts a map of weighted values to an array.
 func weightedToArray(weighted map[string]int) []string {
 	var res []string
 	for key, weight := range weighted {
@@ -438,4 +423,42 @@ func getRangeFit(x float64, rng [2]float64) float64 {
 		return math.Abs(x-rng[1]) / (rng[1] * 0.2)
 	}
 	return 1
+}
+
+func genBlue(intensity float64) color.NRGBA {
+	return color.NRGBA{
+		R: uint8(intensity * 255),
+		G: uint8(intensity * 255),
+		B: 255,
+		A: 255,
+	}
+}
+
+func genGreen(intensity float64) color.NRGBA {
+	return color.NRGBA{
+		R: uint8(intensity * 255),
+		B: uint8((1 - intensity) * 255),
+		G: 255,
+		A: 255,
+	}
+}
+
+// genBlackShadow returns a black color that is more transparent the higher the intensity.
+func genBlackShadow(intensity float64) color.NRGBA {
+	return color.NRGBA{
+		R: 0,
+		G: 0,
+		B: 0,
+		A: uint8((1 - intensity) * 255),
+	}
+}
+
+func genColor(col color.Color, intensity float64) color.Color {
+	var col2 color.NRGBA
+	cr, cg, cb, _ := col.RGBA()
+	col2.R = uint8(float64(255) * float64(cr) / float64(0xffff))
+	col2.G = uint8(float64(255) * float64(cg) / float64(0xffff))
+	col2.B = uint8(float64(255) * float64(cb) / float64(0xffff))
+	col2.A = 255
+	return col2
 }

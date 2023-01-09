@@ -9,6 +9,7 @@ import (
 
 	"github.com/Flokey82/genbiome"
 	"github.com/Flokey82/go_gens/gameconstants"
+	"github.com/Flokey82/go_gens/utils"
 )
 
 func (m *Civ) getExistingCities() []*City {
@@ -353,10 +354,10 @@ func (m *Civ) tickCityDays(c *City, days int) {
 
 		// Move 10% of the population or 1.2 times the excess population,
 		// whichever is larger.
-		excessPopulation = maxInt(excessPopulation*12/10, c.Population/10)
+		excessPopulation = utils.Max(excessPopulation*12/10, c.Population/10)
 
 		// Make sure we don't move more than the entire population.
-		excessPopulation = minInt(excessPopulation, c.Population)
+		excessPopulation = utils.Min(excessPopulation, c.Population)
 
 		m.relocateFromCity(c, excessPopulation)
 	}
@@ -417,7 +418,7 @@ func (m *Civ) relocateFromCity(c *City, population int) {
 	numClosestCities := 10
 
 	// The closest city is the city itself, so skip it.
-	for _, city := range cities[1:minInt(len(cities), numClosestCities+1)] {
+	for _, city := range cities[1:utils.Min(len(cities), numClosestCities+1)] {
 		maxPop := city.MaxPopulationLimit()
 		popCapacity := maxPop - city.Population
 
@@ -425,12 +426,12 @@ func (m *Civ) relocateFromCity(c *City, population int) {
 		if popCapacity > 0 {
 			// Now pick a fraction of the population that will move to the city,
 			// with the largest fraction going to the closest city.
-			numMigrants := minInt(population, popCapacity/2)
+			numMigrants := utils.Min(population, popCapacity/2)
 
 			// Make sure we don't increase the population by more than 20%,
 			// except if the city is abandoned.
 			if city.Population > 0 {
-				numMigrants = minInt(numMigrants, city.Population/5)
+				numMigrants = utils.Min(numMigrants, city.Population/5)
 			}
 
 			// Depending on the distance, some of the population might
