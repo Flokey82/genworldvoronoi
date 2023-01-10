@@ -18,9 +18,8 @@ import (
 )
 
 // GetTile returns the image of the tile at the given coordinates and zoom level.
-func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, drawShadows bool) image.Image {
-	var colorFunc func(int) color.Color
-
+func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, drawShadows, drawTriangleSegments bool) image.Image {
+	var colorFunc func(int, float64) color.Color
 	switch displayMode {
 	case 13, 14, 15, 16:
 		colorGrad := colorgrad.Rainbow()
@@ -60,7 +59,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 		min, max := minMax(m.Elevation)
 		_, maxMois := minMax(m.Moisture)
 		cols := colorGrad.Colors(uint(terrLen))
-		colorFunc = func(i int) color.Color {
+		colorFunc = func(i int, n float64) color.Color {
 			// Calculate the color of the region.
 			rLat := m.LatLon[i][0]
 			elev := m.Elevation[i]
@@ -71,11 +70,11 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 				} else {
 					valElev := elev / max
 					valMois := m.Moisture[i] / maxMois
-					return getWhittakerModBiomeColor(rLat, valElev, valMois, val)
+					return getWhittakerModBiomeColor(rLat, valElev, valMois, val*n)
 				}
 			}
 			terrID := terrToColor[territory[i]]
-			return genColor(cols[terrID], val)
+			return genColor(cols[terrID], val*n)
 		}
 	default:
 		vals := m.Elevation
@@ -109,7 +108,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 		_, max := minMax(m.Elevation)
 		_, maxMois := minMax(m.Moisture)
 		minVal, maxVal := minMax(vals)
-		colorFunc = func(i int) color.Color {
+		colorFunc = func(i int, n float64) color.Color {
 			// Calculate the color of the region.
 			rLat := m.LatLon[i][0]
 			elev := m.Elevation[i]
@@ -120,7 +119,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 			} else {
 				valElev := elev / max
 				valMois := m.Moisture[i] / maxMois
-				col = getWhittakerModBiomeColor(rLat, valElev, valMois, val)
+				col = getWhittakerModBiomeColor(rLat, valElev, valMois, val*n)
 			}
 			return col
 		}
@@ -194,7 +193,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 		}
 
 		// Calculate the color of the region.
-		col := colorFunc(i)
+		col := colorFunc(i, 1.0)
 
 		// If the path is empty, we can skip it.
 		if len(path) == 0 {
@@ -270,9 +269,17 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 	}
 
 	if drawShadows {
+		rMin, rMax := minMax(m.triElevation)
+		if rMax == 0 {
+			rMax = 1
+		}
 		min, max := minMax(m.triElevation)
 		if max == 0 {
 			max = 1
+		}
+		_, rMaxMois := minMax(m.Moisture)
+		if rMaxMois == 0 {
+			rMaxMois = 1
 		}
 		_, maxMois := minMax(m.triMoisture)
 		if maxMois == 0 {
@@ -343,41 +350,96 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 				}
 			}
 
-			elev := m.triElevation[i/3]
-			val := (elev - min) / (max - min)
-			var col color.NRGBA
-			if elev <= 0 || poolCount > 2 {
-				col = genBlue(val)
-			} else {
+			// If we have triangle segments enabled, we split the triangle into 3 segments
+			// and use the 3 points of the triangle (which are regions) to determine the
+			// color of the triangle segment.
+			if drawTriangleSegments {
+				// Get the 3 regions of the triangle.
+				regions := m.mesh.t_circulate_r(out_t, i/3)
+
 				// Get the slope of the triangle.
-				slope := m.regTriNormal(i/3, m.mesh.t_circulate_r(out_t, i/3))
+				slope := m.regTriNormal(i/3, regions)
 
 				// Now take the dot product of the slope and our global
 				// light direction to get the amount of light on the triangle.
 				light := math.Max(0, vectors.Dot3(slope, lightDir))
+				// We have already the coordinates of all 3 regions, so we can just use them.
+				for j := 0; j < 3; j++ {
+					// Get the 2 points of the triangle segment.
+					x1, y1 := path[j][0], path[j][1]
+					x2, y2 := path[(j+1)%3][0], path[(j+1)%3][1]
+					x3, y3 := path[(j+2)%3][0], path[(j+2)%3][1]
 
-				// Calculate the brightness of the triangle.
-				// For shaded reliefs the contrast should increase by elevation.
-				// http://www.reliefshading.com/design/
-				brightness := val * (1 - val*(1-light))
-				col = getWhittakerModBiomeColor(triLat, elev/max, m.triMoisture[i/3]/maxMois, brightness)
-			}
+					// Get the elevation of the region.
+					elev := m.Elevation[regions[j]]
+					//valElev := elev / rMax
+					//rLat := m.LatLon[regions[j]][0]
 
-			// If the path is empty, we can skip it.
-			if len(path) == 0 {
-				continue
-			}
+					// Get the moisture of the region.
+					//mois := m.Moisture[regions[j]]
+					//valMois := mois / rMaxMois
 
-			// Draw the path.
-			gc.SetStrokeColor(col)
-			gc.SetFillColor(col)
-			gc.BeginPath()
-			gc.MoveTo(path[0][0], path[0][1])
-			for _, p := range path[1:] {
-				gc.LineTo(p[0], p[1])
+					val := (elev - rMin) / (rMax - rMin)
+
+					// Calculate the brightness of the triangle.
+					// For shaded reliefs the contrast should increase by elevation.
+					// http://www.reliefshading.com/design/
+					brightness := val * (1 - val*(1-light)) / val
+					col := colorFunc(regions[j], brightness)
+					// Set the color of the triangle segment.
+					gc.SetFillColor(col)
+					gc.SetStrokeColor(col)
+
+					// Draw the triangle segment.
+					// First, we move to the first point of the triangle segment,
+					// then we draw a line to the midpoint between the first and second point,
+					// then we draw a line to the center of the triangle,
+					// then we draw a line to the midpoint between the third and first point.
+					gc.BeginPath()
+					gc.MoveTo(x1, y1)
+					gc.LineTo((x1+x2)/2, (y1+y2)/2)
+					gc.LineTo((x1+x2+x3)/3, (y1+y2+y3)/3)
+					gc.LineTo((x1+x3)/2, (y1+y3)/2)
+					gc.Close()
+					gc.FillStroke()
+				}
+			} else {
+				elev := m.triElevation[i/3]
+				val := (elev - min) / (max - min)
+				var col color.NRGBA
+				if elev <= 0 || poolCount > 2 {
+					col = genBlue(val)
+				} else {
+					// Get the slope of the triangle.
+					slope := m.regTriNormal(i/3, m.mesh.t_circulate_r(out_t, i/3))
+
+					// Now take the dot product of the slope and our global
+					// light direction to get the amount of light on the triangle.
+					light := math.Max(0, vectors.Dot3(slope, lightDir))
+
+					// Calculate the brightness of the triangle.
+					// For shaded reliefs the contrast should increase by elevation.
+					// http://www.reliefshading.com/design/
+					brightness := val * (1 - val*(1-light))
+					col = getWhittakerModBiomeColor(triLat, elev/max, m.triMoisture[i/3]/maxMois, brightness)
+				}
+
+				// If the path is empty, we can skip it.
+				if len(path) == 0 {
+					continue
+				}
+
+				// Draw the path.
+				gc.SetStrokeColor(col)
+				gc.SetFillColor(col)
+				gc.BeginPath()
+				gc.MoveTo(path[0][0], path[0][1])
+				for _, p := range path[1:] {
+					gc.LineTo(p[0], p[1])
+				}
+				gc.Close()
+				gc.FillStroke()
 			}
-			gc.Close()
-			gc.FillStroke()
 		}
 	}
 

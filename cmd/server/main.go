@@ -143,6 +143,12 @@ func tileHandler(res http.ResponseWriter, req *http.Request) {
 		shadows = "false"
 	}
 
+	// get the url parameter 'trishadows'.
+	trishadows := req.URL.Query().Get("trishadows")
+	if trishadows == "" {
+		trishadows = "false"
+	}
+
 	// Get the tile coordinates and zoom level.
 	vars := mux.Vars(req)
 	tileX, err := strconv.Atoi(vars["x"])
@@ -159,7 +165,7 @@ func tileHandler(res http.ResponseWriter, req *http.Request) {
 	}
 
 	// Get the tile image.
-	img := worldmap.GetTile(tileX, tileY, tileZ, displayMode, wind == "true", rivers == "true", shadows == "true")
+	img := worldmap.GetTile(tileX, tileY, tileZ, displayMode, wind == "true", rivers == "true", shadows == "true", trishadows == "true")
 	writeImage(res, &img)
 }
 

@@ -63,6 +63,7 @@
     var drawWindVectors = false;
     var drawRivers = false;
     var drawShadows = false;
+    var drawTriShadows = false;
 
     var displayModeBorders = 5;
     var displayModeBordersMax = 6;
@@ -81,7 +82,7 @@
 
     new L.Hash(map);
 
-    var tl = L.tileLayer('tiles/{z}/{x}/{y}?d={d}&wind={wind}&rivers={rivers}&shadows={shadows}', {
+    var tl = L.tileLayer('tiles/{z}/{x}/{y}?d={d}&wind={wind}&rivers={rivers}&shadows={shadows}&trishadows={trishadows}', {
       attribution: '&copy;',
       maxZoom: 20,
       minZoom: 1,
@@ -97,6 +98,9 @@
       },
       shadows: function () {
         return drawShadows;
+      },
+      trishadows: function() {
+        return drawTriShadows;
       },
     }).addTo(map);
 
@@ -257,6 +261,15 @@
       tl.redraw();
     });
     map.addControl(new shadowControl());
+
+    // Add our custom control for toggling trishadows.
+    var trishadowControl = newCustomControl('T:' + drawTriShadows, function (link) {
+      // Toggle trishadow display.
+      drawTriShadows = !drawTriShadows;
+      link.innerText = 'T:' + drawTriShadows;
+      tl.redraw();
+    });
+    map.addControl(new trishadowControl());
 
     L.Control.Measure.include({
       // set icon on the capture marker
