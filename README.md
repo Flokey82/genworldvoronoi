@@ -54,6 +54,9 @@ Here some old pictures what it does...
 ## Poor man's relief map.
 ![alt text](https://raw.githubusercontent.com/Flokey82/genworldvoronoi/master/images/relief.png "Relief Maps!")
 
+## Slightly wealthier man's relief map.
+![alt text](https://raw.githubusercontent.com/Flokey82/genworldvoronoi/master/images/relief_2.png "Relief Maps!")
+
 ## Does political maps.
 ![alt text](https://raw.githubusercontent.com/Flokey82/genworldvoronoi/master/images/political.png "Political Maps!")
 
