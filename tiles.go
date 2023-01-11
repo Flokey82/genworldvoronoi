@@ -74,7 +74,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 				}
 			}
 			terrID := terrToColor[territory[i]]
-			return genColor(cols[terrID], val*n)
+			return genColor(cols[terrID], val)
 		}
 	default:
 		vals := m.Elevation
@@ -269,7 +269,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 	}
 
 	if drawShadows {
-		rMin, rMax := minMax(m.triElevation)
+		_, rMax := minMax(m.triElevation)
 		if rMax == 0 {
 			rMax = 1
 		}
@@ -289,7 +289,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 		// Set our initial line width.
 		gc.SetLineWidth(1)
 
-		// Set the global light direction almost straight up, with a slight offset to the right.
+		// Set the global light direction (upper left when looking at the map)
 		lightDir := vectors.Vec3{X: 1.0, Y: 1.0, Z: 1.0}.Normalize()
 	Loop:
 		for i := 0; i < len(m.mesh.Triangles); i += 3 {
@@ -360,45 +360,47 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 				// Get the slope of the triangle.
 				slope := m.regTriNormal(i/3, regions)
 
+				// Get the azimuth of the light source vector3.
+				azimuth := math.Atan2(lightDir.Z, lightDir.X)
+
+				// Get the aspect of the triangle based on the normal vector.
+				aspect := math.Atan2(slope.Z, slope.X)
+
+				// Now calculate the aspect based shading.
+				shade := math.Max(0, math.Cos(azimuth-aspect))
+
+				// Calculate the slope angle from the normal vector as
+				// a value between 0 and 1.
+				slopeAngle := math.Abs(math.Acos(slope.Y) / (math.Pi / 2))
+
 				// Now take the dot product of the slope and our global
 				// light direction to get the amount of light on the triangle.
 				light := math.Max(0, vectors.Dot3(slope, lightDir))
 				// We have already the coordinates of all 3 regions, so we can just use them.
 				for j := 0; j < 3; j++ {
+					// Calculate the brightness of the triangle and mix
+					// brightness and shade based on the slope angle.
+					brightness := math.Min(1, math.Max(0, light*(1-slopeAngle)+shade*slopeAngle))
+
+					// Set the color of the triangle segment.
+					col := colorFunc(regions[j], brightness)
+					gc.SetFillColor(col)
+					gc.SetStrokeColor(col)
+
 					// Get the 2 points of the triangle segment.
 					x1, y1 := path[j][0], path[j][1]
 					x2, y2 := path[(j+1)%3][0], path[(j+1)%3][1]
 					x3, y3 := path[(j+2)%3][0], path[(j+2)%3][1]
 
-					// Get the elevation of the region.
-					elev := m.Elevation[regions[j]]
-					//valElev := elev / rMax
-					//rLat := m.LatLon[regions[j]][0]
-
-					// Get the moisture of the region.
-					//mois := m.Moisture[regions[j]]
-					//valMois := mois / rMaxMois
-
-					val := (elev - rMin) / (rMax - rMin)
-
-					// Calculate the brightness of the triangle.
-					// For shaded reliefs the contrast should increase by elevation.
-					// http://www.reliefshading.com/design/
-					brightness := val * (1 - val*(1-light)) / val
-					col := colorFunc(regions[j], brightness)
-					// Set the color of the triangle segment.
-					gc.SetFillColor(col)
-					gc.SetStrokeColor(col)
-
 					// Draw the triangle segment.
-					// First, we move to the first point of the triangle segment,
-					// then we draw a line to the midpoint between the first and second point,
-					// then we draw a line to the center of the triangle,
-					// then we draw a line to the midpoint between the third and first point.
 					gc.BeginPath()
+					// First, we move to the first point of the triangle segment,
 					gc.MoveTo(x1, y1)
+					// then we draw a line to the midpoint between the first and second point,
 					gc.LineTo((x1+x2)/2, (y1+y2)/2)
+					// then we draw a line to the center of the triangle,
 					gc.LineTo((x1+x2+x3)/3, (y1+y2+y3)/3)
+					// then we draw a line to the midpoint between the third and first point.
 					gc.LineTo((x1+x3)/2, (y1+y3)/2)
 					gc.Close()
 					gc.FillStroke()

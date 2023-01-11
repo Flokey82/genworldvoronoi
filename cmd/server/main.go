@@ -17,8 +17,8 @@ var worldmap *genworldvoronoi.Map
 
 var (
 	seed      int64   = 1234
-	numPlates int     = 35
-	numPoints int     = 40000
+	numPlates int     = 25
+	numPoints int     = 400000
 	jitter    float64 = 0.0
 )
 
