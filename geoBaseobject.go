@@ -555,9 +555,9 @@ func (m *BaseObject) regTriNormal(t int, nbs []int) vectors.Vec3 {
 	p1 := convToVec3(m.XYZ[nbs[1]*3:])
 	p2 := convToVec3(m.XYZ[nbs[2]*3:])
 
-	p0 = p0.Rotate(axis, angle).Mul(1 + 0.1*m.Elevation[nbs[0]])
-	p1 = p1.Rotate(axis, angle).Mul(1 + 0.1*m.Elevation[nbs[1]])
-	p2 = p2.Rotate(axis, angle).Mul(1 + 0.1*m.Elevation[nbs[2]])
+	p0 = p0.Rotate(axis, angle).Mul(1 + 0.05*m.Elevation[nbs[0]])
+	p1 = p1.Rotate(axis, angle).Mul(1 + 0.05*m.Elevation[nbs[1]])
+	p2 = p2.Rotate(axis, angle).Mul(1 + 0.05*m.Elevation[nbs[2]])
 
 	// Calculate the normal.
 	return p1.Sub(p0).Cross(p2.Sub(p0)).Normalize()

@@ -18,7 +18,7 @@ var worldmap *genworldvoronoi.Map
 var (
 	seed      int64   = 1234
 	numPlates int     = 25
-	numPoints int     = 400000
+	numPoints int     = 40000
 	jitter    float64 = 0.0
 )
 
@@ -143,10 +143,10 @@ func tileHandler(res http.ResponseWriter, req *http.Request) {
 		shadows = "false"
 	}
 
-	// get the url parameter 'trishadows'.
-	trishadows := req.URL.Query().Get("trishadows")
-	if trishadows == "" {
-		trishadows = "false"
+	// get the url parameter 'aspectshadows'.
+	aspectshadows := req.URL.Query().Get("aspectshadows")
+	if aspectshadows == "" {
+		aspectshadows = "false"
 	}
 
 	// Get the tile coordinates and zoom level.
@@ -165,7 +165,7 @@ func tileHandler(res http.ResponseWriter, req *http.Request) {
 	}
 
 	// Get the tile image.
-	img := worldmap.GetTile(tileX, tileY, tileZ, displayMode, wind == "true", rivers == "true", shadows == "true", trishadows == "true")
+	img := worldmap.GetTile(tileX, tileY, tileZ, displayMode, wind == "true", rivers == "true", shadows == "true", aspectshadows == "true")
 	writeImage(res, &img)
 }
 

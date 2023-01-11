@@ -18,7 +18,7 @@ import (
 )
 
 // GetTile returns the image of the tile at the given coordinates and zoom level.
-func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, drawShadows, drawTriangleSegments bool) image.Image {
+func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, drawShadows, aspectShading bool) image.Image {
 	var colorFunc func(int, float64) color.Color
 	switch displayMode {
 	case 13, 14, 15, 16:
@@ -61,20 +61,25 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 		cols := colorGrad.Colors(uint(terrLen))
 		colorFunc = func(i int, n float64) color.Color {
 			// Calculate the color of the region.
-			rLat := m.LatLon[i][0]
 			elev := m.Elevation[i]
 			val := (elev - min) / (max - min)
-			if territory[i] == -1 {
-				if elev <= 0 {
-					return genBlue(val)
-				} else {
-					valElev := elev / max
-					valMois := m.Moisture[i] / maxMois
-					return getWhittakerModBiomeColor(rLat, valElev, valMois, val*n)
-				}
+
+			// If we have a territory, return the color of the territory.
+			if territory[i] != -1 {
+				terrID := terrToColor[territory[i]]
+				return genColor(cols[terrID], val*n)
 			}
-			terrID := terrToColor[territory[i]]
-			return genColor(cols[terrID], val)
+
+			// Return blue for water.
+			if elev <= 0 {
+				return genBlue(val)
+			}
+
+			// Return the biome color for land.
+			rLat := m.LatLon[i][0]
+			valElev := elev / max
+			valMois := m.Moisture[i] / maxMois
+			return getWhittakerModBiomeColor(rLat, valElev, valMois, val*n)
 		}
 	default:
 		vals := m.Elevation
@@ -110,32 +115,47 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 		minVal, maxVal := minMax(vals)
 		colorFunc = func(i int, n float64) color.Color {
 			// Calculate the color of the region.
-			rLat := m.LatLon[i][0]
 			elev := m.Elevation[i]
 			val := (vals[i] - minVal) / (maxVal - minVal)
-			var col color.NRGBA
+			// Return blue for water.
 			if elev <= 0 {
-				col = genBlue(val)
-			} else {
-				valElev := elev / max
-				valMois := m.Moisture[i] / maxMois
-				col = getWhittakerModBiomeColor(rLat, valElev, valMois, val*n)
+				return genBlue(val)
 			}
-			return col
+
+			// Return the biome color for land.
+			rLat := m.LatLon[i][0]
+			valElev := elev / max
+			valMois := m.Moisture[i] / maxMois
+			return getWhittakerModBiomeColor(rLat, valElev, valMois, val*n)
 		}
 	}
 
 	// Wrap the tile coordinates.
 	x, y = wrapTileCoordinates(x, y, zoom)
 
+	// Calculate the bounds of the tile.
 	tbb := newTileBoundingBox(x, y, zoom)
 	la1, lo1, la2, lo2 := tbb.toLatLon()
 	latLonMargin := 20 / float64(zoom)
 
+	// Calculate the bounds with margin for the tile.
 	la1Margin := math.Max(-90, math.Min(90, la1-latLonMargin))
 	la2Margin := math.Max(-90, math.Min(90, la2+latLonMargin))
 	lo1Margin := lo1 - latLonMargin
 	lo2Margin := lo2 + latLonMargin
+
+	// Check if we are within the tile with a small margin, taking
+	// into account that we might have wrapped around the world.
+	isLatLonInBounds := func(lat, lon float64) bool {
+		if lat < la1Margin || lat > la2Margin || lon < lo1Margin || lon > lo2Margin {
+			// Check if the tile and the region we are looking at is adjecent to +/- 180 degrees and
+			// NOTE: This could be improved by checking if one of the corners of the region is within the tile.
+			if lo1 > -175 && lo2 < 175 || lon < 175 && lon > -175 {
+				return false
+			}
+		}
+		return true
+	}
 
 	// Since our mercator conversion gives us absolute pixel coordinates, we need to
 	// remove the offset of the tile we are rendering from the path coordinates.
@@ -152,14 +172,10 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 		rLat := m.LatLon[i][0]
 		rLon := m.LatLon[i][1]
 
-		// Check if we are within the tile with a small margin,
-		// taking into account that we might have wrapped around the world.
-		if rLat < la1Margin || rLat > la2Margin || rLon < lo1Margin || rLon > lo2Margin {
-			// Check if the tile and the region we are looking at is adjecent to +/- 180 degrees and
-			// NOTE: This could be improved by checking if one of the corners of the region is within the tile.
-			if lo1 > -175 && lo2 < 175 || rLon < 175 && rLon > -175 {
-				continue
-			}
+		// Check if we are within the tile with a small margin, taking
+		// into account that we might have wrapped around the world.
+		if !isLatLonInBounds(rLat, rLon) {
+			continue
 		}
 
 		// Draw the path that outlines the region.
@@ -221,18 +237,16 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 			rLat := m.LatLon[i][0]
 			rLon := m.LatLon[i][1]
 
-			// Check if we are within the tile with a small margin,
-			// taking into account that we might have wrapped around the world.
-			if rLat < la1Margin || rLat > la2Margin || rLon < lo1Margin || rLon > lo2Margin {
-				// Check if the tile and the region we are looking at is adjecent to +/- 180 degrees and
-				// NOTE: This could be improved by checking if one of the corners of the region is within the tile.
-				if lo1 > -175 && lo2 < 175 || rLon < 175 && rLon > -175 {
-					continue
-				}
+			// Check if we are within the tile with a small margin, taking
+			// into account that we might have wrapped around the world.
+			if !isLatLonInBounds(rLat, rLon) {
+				continue
 			}
+
 			// Now draw the wind vector for the region.
 			// windVec := m.RegionToWindVec[i]
 			windVec := m.RegionToWindVecLocal[i]
+
 			// Calculate the coordinates of the center of the region.
 			x, y := latLonToPixels(rLat, rLon, zoom)
 			x -= dx
@@ -269,49 +283,22 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 	}
 
 	if drawShadows {
-		_, rMax := minMax(m.triElevation)
-		if rMax == 0 {
-			rMax = 1
-		}
-		min, max := minMax(m.triElevation)
-		if max == 0 {
-			max = 1
-		}
-		_, rMaxMois := minMax(m.Moisture)
-		if rMaxMois == 0 {
-			rMaxMois = 1
-		}
-		_, maxMois := minMax(m.triMoisture)
-		if maxMois == 0 {
-			maxMois = 1
-		}
+		// Set the global light direction (upper left when looking at the map)
+		lightDir := vectors.Vec3{X: 1.0, Y: 1.0, Z: 1.0}.Normalize()
 
 		// Set our initial line width.
 		gc.SetLineWidth(1)
 
-		// Set the global light direction (upper left when looking at the map)
-		lightDir := vectors.Vec3{X: 1.0, Y: 1.0, Z: 1.0}.Normalize()
 	Loop:
 		for i := 0; i < len(m.mesh.Triangles); i += 3 {
 			// Hacky way to filter paths/triangles that wrap around the entire SVG.
 			triLat := m.triLatLon[i/3][0]
 			triLon := m.triLatLon[i/3][1]
 
-			// Check if we are within the tile with a small margin, taking into account that we might have wrapped around the world.
-			// Also keep in mind that the latitude and longitude can be negative, so we need to add the margin to the lower bound,
-			// and subtract the margin from the upper bound.
-			if triLat < la1Margin || triLat > la2Margin || triLon < lo1Margin || triLon > lo2Margin {
-				// Check if the tile and the region we are looking at is adjecent to +/- 180 degrees and
-				// NOTE: This could be improved by checking if one of the corners of the region is within the tile.
-				if lo1 > -175 && lo2 < 175 || triLon < 175 && triLon > -175 {
-					continue
-				}
-			}
-			var poolCount int
-			for _, j := range m.mesh.Triangles[i : i+3] {
-				if m.Waterpool[j] > 0 {
-					poolCount++
-				}
+			// Check if we are within the tile with a small margin, taking
+			// into account that we might have wrapped around the world.
+			if !isLatLonInBounds(triLat, triLon) {
+				continue
 			}
 
 			// Draw the path that outlines the region.
@@ -320,8 +307,10 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 				rLat := m.LatLon[j][0]
 				rLon := m.LatLon[j][1]
 
-				// Check if we the region is across the +/- 180 degrees longitude line compared to the triangle.
-				// In this case, the longitude is almost 360 degrees off, which means we need to adjust the longitude.
+				// Check if we the region is across the +/- 180 degrees longitude line
+				// compared to the triangle.
+				// In this case, the longitude is almost 360 degrees off, which means
+				// we need to adjust the longitude.
 				if rLon-triLon > 110 {
 					rLon -= 360
 				} else if rLon-triLon < -110 {
@@ -331,6 +320,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 				// Calculate the coordinates of the path point.
 				x, y := latLonToPixels(rLat, rLon, zoom)
 				p := [2]float64{(x - dx), (y - dy2)}
+
 				// Check if we are way outside the tile.
 				if p[0] < -1000 || p[0] > 1000 || p[1] < -1000 || p[1] > 1000 {
 					continue Loop
@@ -350,95 +340,65 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 				}
 			}
 
-			// If we have triangle segments enabled, we split the triangle into 3 segments
-			// and use the 3 points of the triangle (which are regions) to determine the
-			// color of the triangle segment.
-			if drawTriangleSegments {
-				// Get the 3 regions of the triangle.
-				regions := m.mesh.t_circulate_r(out_t, i/3)
+			// Get the 3 regions of the triangle.
+			regions := m.mesh.t_circulate_r(out_t, i/3)
 
-				// Get the slope of the triangle.
-				slope := m.regTriNormal(i/3, regions)
+			// Get the normal of the triangle.
+			normal := m.regTriNormal(i/3, regions)
+
+			// Now take the dot product of the slope and our global light
+			// direction to get the amount of light on the triangle.
+			diffuseShading := math.Max(0, vectors.Dot3(normal, lightDir))
+
+			// Brightness is the amount of light on the triangle.
+			var brightness float64
+
+			// If we have aspect shading enabled, calculate the aspect shading
+			// and mix it with the diffuse shading.
+			if aspectShading {
+				// Calculate the slope angle from the normal vector as
+				// a value between 0 and 1.
+				slope := math.Abs(math.Acos(normal.Y) / (math.Pi / 2))
 
 				// Get the azimuth of the light source vector3.
 				azimuth := math.Atan2(lightDir.Z, lightDir.X)
 
 				// Get the aspect of the triangle based on the normal vector.
-				aspect := math.Atan2(slope.Z, slope.X)
+				aspect := math.Atan2(normal.Z, normal.X)
 
 				// Now calculate the aspect based shading.
-				shade := math.Max(0, math.Cos(azimuth-aspect))
+				aspectShading := math.Max(0, math.Cos(azimuth-aspect))
 
-				// Calculate the slope angle from the normal vector as
-				// a value between 0 and 1.
-				slopeAngle := math.Abs(math.Acos(slope.Y) / (math.Pi / 2))
-
-				// Now take the dot product of the slope and our global
-				// light direction to get the amount of light on the triangle.
-				light := math.Max(0, vectors.Dot3(slope, lightDir))
-				// We have already the coordinates of all 3 regions, so we can just use them.
-				for j := 0; j < 3; j++ {
-					// Calculate the brightness of the triangle and mix
-					// brightness and shade based on the slope angle.
-					brightness := math.Min(1, math.Max(0, light*(1-slopeAngle)+shade*slopeAngle))
-
-					// Set the color of the triangle segment.
-					col := colorFunc(regions[j], brightness)
-					gc.SetFillColor(col)
-					gc.SetStrokeColor(col)
-
-					// Get the 2 points of the triangle segment.
-					x1, y1 := path[j][0], path[j][1]
-					x2, y2 := path[(j+1)%3][0], path[(j+1)%3][1]
-					x3, y3 := path[(j+2)%3][0], path[(j+2)%3][1]
-
-					// Draw the triangle segment.
-					gc.BeginPath()
-					// First, we move to the first point of the triangle segment,
-					gc.MoveTo(x1, y1)
-					// then we draw a line to the midpoint between the first and second point,
-					gc.LineTo((x1+x2)/2, (y1+y2)/2)
-					// then we draw a line to the center of the triangle,
-					gc.LineTo((x1+x2+x3)/3, (y1+y2+y3)/3)
-					// then we draw a line to the midpoint between the third and first point.
-					gc.LineTo((x1+x3)/2, (y1+y3)/2)
-					gc.Close()
-					gc.FillStroke()
-				}
+				// Calculate the brightness of the triangle and mix
+				// brightness and shade based on the slope angle.
+				brightness = math.Min(1, math.Max(0, diffuseShading*(1-slope)+aspectShading*slope))
 			} else {
-				elev := m.triElevation[i/3]
-				val := (elev - min) / (max - min)
-				var col color.NRGBA
-				if elev <= 0 || poolCount > 2 {
-					col = genBlue(val)
-				} else {
-					// Get the slope of the triangle.
-					slope := m.regTriNormal(i/3, m.mesh.t_circulate_r(out_t, i/3))
+				// Calculate the brightness of the triangle.
+				brightness = diffuseShading
+			}
 
-					// Now take the dot product of the slope and our global
-					// light direction to get the amount of light on the triangle.
-					light := math.Max(0, vectors.Dot3(slope, lightDir))
-
-					// Calculate the brightness of the triangle.
-					// For shaded reliefs the contrast should increase by elevation.
-					// http://www.reliefshading.com/design/
-					brightness := val * (1 - val*(1-light))
-					col = getWhittakerModBiomeColor(triLat, elev/max, m.triMoisture[i/3]/maxMois, brightness)
-				}
-
-				// If the path is empty, we can skip it.
-				if len(path) == 0 {
-					continue
-				}
-
-				// Draw the path.
+			// We have already the coordinates of all 3 regions, so we can just use them.
+			for j := 0; j < 3; j++ {
+				// Set the color of the triangle segment.
+				col := colorFunc(regions[j], brightness)
 				gc.SetStrokeColor(col)
 				gc.SetFillColor(col)
+
+				// Get the 2 points of the triangle segment.
+				x1, y1 := path[j][0], path[j][1]
+				x2, y2 := path[(j+1)%3][0], path[(j+1)%3][1]
+				x3, y3 := path[(j+2)%3][0], path[(j+2)%3][1]
+
+				// Draw the triangle segment.
 				gc.BeginPath()
-				gc.MoveTo(path[0][0], path[0][1])
-				for _, p := range path[1:] {
-					gc.LineTo(p[0], p[1])
-				}
+				// First, we move to the first point of the triangle segment,
+				gc.MoveTo(x1, y1)
+				// then we draw a line to the midpoint between the first and second point,
+				gc.LineTo((x1+x2)/2, (y1+y2)/2)
+				// then we draw a line to the center of the triangle,
+				gc.LineTo((x1+x2+x3)/3, (y1+y2+y3)/3)
+				// then we draw a line to the midpoint between the third and first point.
+				gc.LineTo((x1+x3)/2, (y1+y3)/2)
 				gc.Close()
 				gc.FillStroke()
 			}

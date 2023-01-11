@@ -63,7 +63,7 @@
     var drawWindVectors = false;
     var drawRivers = false;
     var drawShadows = false;
-    var drawTriShadows = false;
+    var drawAspectShadows = false;
 
     var displayModeBorders = 5;
     var displayModeBordersMax = 6;
@@ -82,7 +82,7 @@
 
     new L.Hash(map);
 
-    var tl = L.tileLayer('tiles/{z}/{x}/{y}?d={d}&wind={wind}&rivers={rivers}&shadows={shadows}&trishadows={trishadows}', {
+    var tl = L.tileLayer('tiles/{z}/{x}/{y}?d={d}&wind={wind}&rivers={rivers}&shadows={shadows}&aspectshadows={aspectshadows}', {
       attribution: '&copy;',
       maxZoom: 20,
       minZoom: 1,
@@ -99,8 +99,8 @@
       shadows: function () {
         return drawShadows;
       },
-      trishadows: function() {
-        return drawTriShadows;
+      aspectshadows: function () {
+        return drawAspectShadows;
       },
     }).addTo(map);
 
@@ -125,7 +125,7 @@
     };
 
     // Load the geojson layer when we load a tile
-    function reloadJSONfunction () {
+    function reloadJSONfunction() {
       // First clear the geojson layer
       geojsonLayer.clearLayers();
       var bounds = map.getBounds();
@@ -176,7 +176,7 @@
       });
 
       // Load all borders.
-      loadGeoJSON('geojson_borders/' + params + '?d='+displayModeBorders, {
+      loadGeoJSON('geojson_borders/' + params + '?d=' + displayModeBorders, {
         style: function (feature) {
           return {
             color: 'black',
@@ -190,7 +190,7 @@
     };
     map.on('moveend', reloadJSONfunction);
 
-    function newCustomControl(startLabel, onClick) {
+    function newCustomControl(startLabel, tooltip, onClick) {
       var control = L.Control.extend({
         options: {
           position: 'topleft'
@@ -199,12 +199,14 @@
           var container = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
           container.style.backgroundColor = 'white';
           container.style.userSelect = 'none';
+          container.tooltip = tooltip;
 
           var link = document.createElement('a');
           link.innerText = startLabel;
           link.style.cursor = 'pointer';
-          container.appendChild(link);
+          link.tooltip = tooltip;
 
+          container.appendChild(link);
           container.onclick = function () {
             onClick(link);
           };
@@ -215,7 +217,7 @@
     }
 
     // Add our custom control for cycling display modes.
-    var displayControl = newCustomControl('D:' + displayModeNames[displayMode], function (link) {
+    var displayControl = newCustomControl('D:' + displayModeNames[displayMode], 'Display Mode', function (link) {
       // Loop though all display modes.
       displayMode = (displayMode + 1) % displayModeMax;
       link.innerText = 'D:' + displayModeNames[displayMode];
@@ -225,51 +227,79 @@
     map.addControl(new displayControl());
 
     // Add our custom control for cycling borders.
-    var borderControl = newCustomControl('B:' + displayModeBordersNames[displayModeBorders], function (link) {
+    var borderControl = newCustomControl('B:' + displayModeBordersNames[displayModeBorders], 'Borders', function (link) {
       // Loop though all display modes.
       displayModeBorders = (displayModeBorders + 1) % displayModeBordersMax;
       link.innerText = 'B:' + displayModeBordersNames[displayModeBorders];
       tl.redraw();
-            reloadJSONfunction();
+      reloadJSONfunction();
     });
 
     map.addControl(new borderControl());
 
     // Add our custom control for toggling wind vectors.
-    var windControl = newCustomControl('W:' + drawWindVectors, function (link) {
+    var windControl = newCustomControl('W:' + drawWindVectors, 'Wind Vectors', function (link) {
       // Toggle wind vector display.
       drawWindVectors = !drawWindVectors;
       link.innerText = 'W:' + drawWindVectors;
+
+      // Make bold if enabled.
+      if (drawWindVectors) {
+        link.style.fontWeight = 'bold';
+      } else {
+        link.style.fontWeight = 'normal';
+      }
       tl.redraw();
     });
     map.addControl(new windControl());
 
     // Add our custom control for toggling rivers.
-    var riverControl = newCustomControl('R:' + drawRivers, function (link) {
+    var riverControl = newCustomControl('R:' + drawRivers, 'Rivers', function (link) {
       // Toggle river display.
       drawRivers = !drawRivers;
       link.innerText = 'R:' + drawRivers;
+
+      // Make bold if enabled.
+      if (drawRivers) {
+        link.style.fontWeight = 'bold';
+      } else {
+        link.style.fontWeight = 'normal';
+      }
       tl.redraw();
     });
     map.addControl(new riverControl());
 
     // Add our custom control for toggling shadows.
-    var shadowControl = newCustomControl('S:' + drawShadows, function (link) {
+    var shadowControl = newCustomControl('S:' + drawShadows, 'Shadows', function (link) {
       // Toggle shadow display.
       drawShadows = !drawShadows;
       link.innerText = 'S:' + drawShadows;
+
+      // Make bold if enabled.
+      if (drawShadows) {
+        link.style.fontWeight = 'bold';
+      } else {
+        link.style.fontWeight = 'normal';
+      }
       tl.redraw();
     });
     map.addControl(new shadowControl());
 
-    // Add our custom control for toggling trishadows.
-    var trishadowControl = newCustomControl('T:' + drawTriShadows, function (link) {
+    // Add our custom control for toggling aspect shadows.
+    var aspectshadowControl = newCustomControl('A:' + drawAspectShadows, 'Aspect Shadows', function (link) {
       // Toggle trishadow display.
-      drawTriShadows = !drawTriShadows;
-      link.innerText = 'T:' + drawTriShadows;
+      drawAspectShadows = !drawAspectShadows;
+      link.innerText = 'A:' + drawAspectShadows;
+
+      // Make bold if enabled.
+      if (drawAspectShadows) {
+        link.style.fontWeight = 'bold';
+      } else {
+        link.style.fontWeight = 'normal';
+      }
       tl.redraw();
     });
-    map.addControl(new trishadowControl());
+    map.addControl(new aspectshadowControl());
 
     L.Control.Measure.include({
       // set icon on the capture marker
