@@ -67,7 +67,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 			// If we have a territory, return the color of the territory.
 			if territory[i] != -1 {
 				terrID := terrToColor[territory[i]]
-				return genColor(cols[terrID], val*n)
+				return genColor(cols[terrID], math.Pow(val, 1/n))
 			}
 
 			// Return blue for water.
@@ -79,7 +79,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 			rLat := m.LatLon[i][0]
 			valElev := elev / max
 			valMois := m.Moisture[i] / maxMois
-			return getWhittakerModBiomeColor(rLat, valElev, valMois, val*n)
+			return getWhittakerModBiomeColor(rLat, valElev, valMois, math.Pow(val, 1/n))
 		}
 	default:
 		vals := m.Elevation
@@ -126,7 +126,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 			rLat := m.LatLon[i][0]
 			valElev := elev / max
 			valMois := m.Moisture[i] / maxMois
-			return getWhittakerModBiomeColor(rLat, valElev, valMois, val*n)
+			return getWhittakerModBiomeColor(rLat, valElev, valMois, math.Pow(val, 1/n))
 		}
 	}
 
@@ -284,7 +284,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 
 	if drawShadows {
 		// Set the global light direction (upper left when looking at the map)
-		lightDir := vectors.Vec3{X: 1.0, Y: 1.0, Z: 1.0}.Normalize()
+		lightDir := vectors.Vec3{X: -1.0, Y: 1.0, Z: 1.0}.Normalize()
 
 		// Set our initial line width.
 		gc.SetLineWidth(1)
