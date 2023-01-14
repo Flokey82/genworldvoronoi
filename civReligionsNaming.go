@@ -2,7 +2,6 @@ package genworldvoronoi
 
 import (
 	"math/rand"
-	"regexp"
 	"strings"
 )
 
@@ -19,34 +18,43 @@ func (m *Civ) getFolkReligionName(c *Culture, form string) string {
 // getReligionName generates a name for the given form and deity at the given center.
 // This code is based on:
 // https://github.com/Azgaar/Fantasy-Map-Generator/blob/master/modules/religions-generator.js
-func (m *Civ) getReligionName(form, deity string, regCenter int) (string, string) {
+func (m *Civ) getReligionName(form, deity string, r int) (string, string) {
+	// Returns a random name from the culture at the given region.
 	random := func() string {
-		c := m.GetCulture(regCenter)
+		c := m.GetCulture(r)
 		return c.Language.MakeName()
 	}
+
+	// Returns a random, weighted type for the religion form.
 	rType := func() string {
 		return rw(types[form])
 	}
-	deitySplit := regexp.MustCompile(`/[ ,]+/`)
+
+	// Splits the deity name into parts and returns the first part.
+	// Example: "Grognark, The Supreme Being" -> "Grognark"
 	supreme := func() string {
-		return deitySplit.Split(deity, -1)[0]
+		return strings.Split(deity, (" ,"))[0]
 	}
+
+	// Returns the name of the culture at the given region.
 	culture := func() string {
-		c := m.GetCulture(regCenter)
+		c := m.GetCulture(r)
 		return c.Name
 	}
+
+	// Returns the name of the cit or state at the given region.
 	place := func(adj string) string {
-		// Check if we have a city at the center.
+		// Check if we have a city at the region.
 		var base string
 		for _, city := range m.Cities {
-			if city.ID == regCenter {
+			if city.ID == r {
 				base = city.Name
 				break
 			}
 		}
 		if base == "" {
-			// Check if we have a state at the center.
-			if stateId := m.RegionToCityState[regCenter]; stateId != 0 {
+			// Check if we have a state at the region.
+			if stateId := m.RegionToCityState[r]; stateId != 0 {
 				for _, city := range m.Cities {
 					if city.ID == stateId {
 						base = city.Name
@@ -56,8 +64,8 @@ func (m *Civ) getReligionName(form, deity string, regCenter int) (string, string
 			}
 		}
 		if base == "" {
-			// Check if we have a culture at the center.
-			if cultureId := m.RegionToCulture[regCenter]; cultureId != 0 {
+			// Check if we have a culture at the region.
+			if cultureId := m.RegionToCulture[r]; cultureId != 0 {
 				base = m.Cultures[cultureId].Name
 			}
 		}
@@ -82,7 +90,46 @@ func (m *Civ) getReligionName(form, deity string, regCenter int) (string, string
 		}
 	case MethodFaithOfSupreme:
 		if deity != "" {
-			return ra([]string{"Faith", "Way", "Path", "Word", "Witnesses"}) + " of " + supreme(), ReligionExpGlobal
+			// Select a random name from the list.
+			// but ensure that the name is not a subset of the deity name
+			// and vice versa. This is to avoid names like "The Way of The Way".
+			var prefix string
+			for i := 0; i < 100; i++ {
+				prefix = ra([]string{
+					"Faith",
+					"Way",
+					"Path",
+					"Word",
+					"Truth",
+					"Law",
+					"Order",
+					"Light",
+					"Darkness",
+					"Gift",
+					"Grace",
+					"Witnesses",
+					"Servants",
+					"Messengers",
+					"Believers",
+					"Disciples",
+					"Followers",
+					"Children",
+					"Brothers",
+					"Sisters",
+					"Brothers and Sisters",
+					"Sons",
+					"Daughters",
+					"Sons and Daughters",
+					"Brides",
+					"Grooms",
+					"Brides and Grooms",
+				})
+				if !strings.Contains(strings.ToLower(deity), strings.ToLower(prefix)) &&
+					!strings.Contains(strings.ToLower(prefix), strings.ToLower(deity)) {
+					break
+				}
+			}
+			return prefix + " of " + supreme(), ReligionExpGlobal
 		}
 	case MethodPlaceIsm:
 		return place("") + "ism", ReligionExpState
@@ -97,46 +144,46 @@ func (m *Civ) getReligionName(form, deity string, regCenter int) (string, string
 }
 
 // getDeityName returns a deity name for the given culture.
-func getDeityName(culture *Culture) string {
+func getDeityName(culture *Culture) (string, string) {
 	if culture == nil {
-		return "ERROR"
+		return "TODO_DEITY", "TODO_DEITY"
 	}
 	meaning := generateDeityMeaning()
-	cultureName := culture.Language.MakeName() // Names.getCulture(culture, nil, nil, "", 0.8)
-	return cultureName + ", The " + meaning
+	cultureName := culture.Language.MakeName()
+	return cultureName, meaning
 }
 
 // generateDeityMeaning generates a meaning for a deity name.
 func generateDeityMeaning() string {
 	switch ra(approaches) { // select generation approach
 	case ApproachNumber:
-		return ra(genBase["number"])
+		return ra(genBase[GenBaseNumber])
 	case ApproachBeing:
-		return ra(genBase["being"])
+		return ra(genBase[GenBaseBeing])
 	case ApproachAdjective:
-		return ra(genBase["adjective"])
+		return ra(genBase[GenBaseAdjective])
 	case ApproachColorAnimal:
-		return ra(genBase["color"]) + " " + ra(genBase["animal"])
+		return ra(genBase[GenBaseColor]) + " " + ra(genBase[GenBaseAnimal])
 	case ApproachAdjectiveAnimal:
-		return ra(genBase["adjective"]) + " " + ra(genBase["animal"])
+		return ra(genBase[GenBaseAdjective]) + " " + ra(genBase[GenBaseAnimal])
 	case ApproachAdjectiveBeing:
-		return ra(genBase["adjective"]) + " " + ra(genBase["being"])
+		return ra(genBase[GenBaseAdjective]) + " " + ra(genBase[GenBaseBeing])
 	case ApproachAdjectiveGenitive:
-		return ra(genBase["adjective"]) + " " + ra(genBase["being"])
+		return ra(genBase[GenBaseAdjective]) + " " + ra(genBase[GenBaseGenitive])
 	case ApproachColorBeing:
-		return ra(genBase["color"]) + " " + ra(genBase["being"])
+		return ra(genBase[GenBaseColor]) + " " + ra(genBase[GenBaseBeing])
 	case ApproachColorGenitive:
-		return ra(genBase["color"]) + " " + ra(genBase["genitive"])
+		return ra(genBase[GenBaseColor]) + " " + ra(genBase[GenBaseGenitive])
 	case ApproachBeingOfGenitive:
-		return ra(genBase["being"]) + " of " + ra(genBase["genitive"])
+		return ra(genBase[GenBaseBeing]) + " of " + ra(genBase[GenBaseGenitive])
 	case ApproachBeingOfTheGenitive:
-		return ra(genBase["being"]) + " of the " + ra(genBase["genitive"])
+		return ra(genBase[GenBaseBeing]) + " of the " + ra(genBase[GenBaseTheGenitive])
 	case ApproachAnimalOfGenitive:
-		return ra(genBase["animal"]) + " of " + ra(genBase["genitive"])
+		return ra(genBase[GenBaseAnimal]) + " of " + ra(genBase[GenBaseGenitive])
 	case ApproachAdjectiveBeingOfGenitive:
-		return ra(genBase["adjective"]) + " " + ra(genBase["being"]) + " of " + ra(genBase["genitive"])
+		return ra(genBase[GenBaseAdjective]) + " " + ra(genBase[GenBaseBeing]) + " of " + ra(genBase[GenBaseGenitive])
 	case ApproachAdjectiveAnimalOfGenitive:
-		return ra(genBase["adjective"]) + " " + ra(genBase["animal"]) + " of " + ra(genBase["genitive"])
+		return ra(genBase[GenBaseAdjective]) + " " + ra(genBase[GenBaseAnimal]) + " of " + ra(genBase[GenBaseGenitive])
 	default:
 		return "ERROR"
 	}
@@ -210,38 +257,82 @@ func rw(mp map[string]int) string {
 	return ra(weightedToArray(mp))
 }
 
+const (
+	GenBaseNumber      = "number"
+	GenBaseBeing       = "being"
+	GenBaseAnimal      = "animal"
+	GenBaseAdjective   = "adjective"
+	GenBaseGenitive    = "genitive"
+	GenBaseTheGenitive = "theGenitive"
+	GenBaseColor       = "color"
+)
+
+// genBase contains a map of word lists used for name generation.
+// TODO: Group individual entries by logical categories.
+// So we can build up a pantheon of gods, each associated with different domains.
+// For example:
+// {North, South, East, West} -> {Direction}
+// {Bride, Groom, Widow, Widower, Wife, Husband} -> {Marriage}
+// {Giver, Taker, Destroyer, Creator, Maker, Breaker} -> {Action}
+// {Sky, Earth, Water, Fire, Air, Spirit} -> {Elements}
+// {Light, Dark, Bright, Shining, Shadow, Darkness} -> {Light}
 var genBase = map[string][]string{
-	"number": {"One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve"},
-	"being": {
+	GenBaseNumber: {"One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve"},
+	GenBaseBeing: {
 		"Ancestor",
 		"Ancient",
+		"Angel",
+		"Betrayer",
+		"Bride",
 		"Brother",
 		"Chief",
+		"Child",
 		"Council",
 		"Creator",
 		"Deity",
 		"Elder",
 		"Father",
-		"Forebear",
+		"Forebearer",
 		"Forefather",
+		"Foremother",
+		"Forgiven",
+		"Forgotten",
 		"Giver",
 		"God",
 		"Goddess",
+		"Golem",
+		"Groom",
 		"Guardian",
+		"Guide",
+		"Keeper",
+		"King",
 		"Lady",
 		"Lord",
+		"Lover",
 		"Maker",
 		"Master",
+		"Mistress",
 		"Mother",
 		"Numen",
+		"Orphan",
 		"Overlord",
 		"Reaper",
 		"Ruler",
+		"Seducer",
+		"Seductress",
+		"Servant",
 		"Sister",
 		"Spirit",
 		"Virgin",
+		"Warrior",
+		"Watcher",
+		"Widow",
+		"Widower",
+		"Wife",
+		"Witch",
+		"Wizard",
 	},
-	"animal": {
+	GenBaseAnimal: {
 		"Antelope",
 		"Ape",
 		"Badger",
@@ -314,10 +405,13 @@ var genBase = map[string][]string{
 		"Worm",
 		"Wyvern",
 	},
-	"adjective": {
+	GenBaseAdjective: {
 		"Aggressive",
 		"Almighty",
 		"Ancient",
+		"Angry",
+		"Anxious",
+		"Awful",
 		"Beautiful",
 		"Benevolent",
 		"Big",
@@ -329,16 +423,29 @@ var genBase = map[string][]string{
 		"Brutal",
 		"Burning",
 		"Calm",
+		"Careful",
+		"Charming",
 		"Cheerful",
+		"Chosen",
+		"Clean",
 		"Crazy",
 		"Cruel",
 		"Dead",
 		"Deadly",
+		"Deaf",
+		"Deathless",
+		"Deep",
+		"Defiant",
+		"Delicate",
+		"Delightful",
+		"Desperate",
 		"Devastating",
 		"Distant",
 		"Disturbing",
 		"Divine",
 		"Dying",
+		"Enchanting",
+		"Ephemeral",
 		"Eternal",
 		"Evil",
 		"Explicit",
@@ -354,6 +461,7 @@ var genBase = map[string][]string{
 		"Good",
 		"Grateful",
 		"Great",
+		"Greedy",
 		"Happy",
 		"High",
 		"Holy",
@@ -365,9 +473,12 @@ var genBase = map[string][]string{
 		"Inherent",
 		"Last",
 		"Latter",
+		"Lonely",
 		"Lost",
 		"Loud",
+		"Loving",
 		"Lucky",
+		"Lustful",
 		"Mad",
 		"Magical",
 		"Main",
@@ -391,11 +502,13 @@ var genBase = map[string][]string{
 		"Silent",
 		"Sleeping",
 		"Slumbering",
+		"Spiteful",
 		"Strong",
 		"Sunny",
 		"Superior",
 		"Sustainable",
 		"Troubled",
+		"Undying",
 		"Unhappy",
 		"Unknown",
 		"Waking",
@@ -404,11 +517,15 @@ var genBase = map[string][]string{
 		"Worried",
 		"Young",
 	},
-	"genitive": {
+	GenBaseGenitive: {
 		"Cold",
+		"Darkness",
+		"Dawn",
 		"Day",
 		"Death",
 		"Doom",
+		"Dreams",
+		"Dusk",
 		"Fate",
 		"Fire",
 		"Fog",
@@ -416,8 +533,10 @@ var genBase = map[string][]string{
 		"Gates",
 		"Heaven",
 		"Home",
+		"Hope",
 		"Ice",
 		"Justice",
+		"Kings",
 		"Life",
 		"Light",
 		"Lightning",
@@ -427,14 +546,19 @@ var genBase = map[string][]string{
 		"Pain",
 		"Snow",
 		"Springs",
+		"Stars",
 		"Summer",
+		"Sun",
+		"Sunset",
 		"Thunder",
 		"Time",
 		"Victory",
 		"War",
+		"Wealth",
 		"Winter",
+		"Wisdom",
 	},
-	"theGenitive": {
+	GenBaseTheGenitive: {
 		"Abyss",
 		"Blood",
 		"Dawn",
@@ -460,7 +584,7 @@ var genBase = map[string][]string{
 		"Word",
 		"World",
 	},
-	"color": {
+	GenBaseColor: {
 		"Amber",
 		"Black",
 		"Blue",

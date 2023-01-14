@@ -38,52 +38,40 @@ import (
 // would allow us to infer the relationships between deities and symbols and
 // if mundane events hold any significance for a particular religion.
 type Religion struct {
-	ID           int
-	Origin       int
-	Name         string
-	Culture      *Culture
-	Type         string
-	Form         string
-	Deity        string
-	Expansion    string
-	Expansionism float64
-	Parent       *Religion
+	ID           int       // The region where the religion was founded
+	Name         string    // The name of the religion
+	Culture      *Culture  // The culture that the religion is based on
+	Parent       *Religion // The parent religion (if any)
+	Type         string    // The type of the religion
+	Form         string    // The form of the religion
+	Deity        string    // The main deity of the religion (if any)
+	DeityMeaning string    // The meaning of the main deity of the religion (if any)
+	Expansion    string    // How the religion wants to expand
+	Expansionism float64   // How much the religion wants to expand
+	Founded      int64     // Year when the religion was founded
+}
+
+func (r *Religion) GetDeityName() string {
+	if r.Deity == "" {
+		return ""
+	}
+	return r.Deity + ", The " + r.DeityMeaning
 }
 
 func (r *Religion) String() string {
-	return fmt.Sprintf("%s (%s, %s, %s), worshipping %s", r.Name, r.Type, r.Expansion, r.Form, r.Deity)
+	if r.Deity == "" {
+		return fmt.Sprintf("%s (%s, %s, %s)", r.Name, r.Type, r.Expansion, r.Form)
+	}
+	return fmt.Sprintf("%s (%s, %s, %s)\n=%s", r.Name, r.Type, r.Expansion, r.Form, r.GetDeityName())
 }
 
 // genFolkReligion generates a folk religion for the given culture.
-// This code is based on:
-// https://github.com/Azgaar/Fantasy-Map-Generator/blob/master/modules/religions-generator.js
 func (m *Civ) genFolkReligion(c *Culture) *Religion {
-	r := m.newFolkReligion(c)
-	m.Religions = append(m.Religions, r)
-	return r
+	return m.placeReligionAt(c.ID, -1, ReligionGroupFolk, c)
 }
 
-func (m *Civ) newFolkReligion(c *Culture) *Religion {
-	form := rw(forms[ReligionGroupFolk])
-	r := &Religion{
-		Origin:       c.ID,
-		Name:         m.getFolkReligionName(c, form),
-		Culture:      c,
-		Type:         ReligionGroupFolk,
-		Form:         form,
-		Expansion:    ReligionExpCulture,
-		Expansionism: c.Expansionism * rand.Float64() * 1.5,
-	}
-	if form != ReligionFormAnimism {
-		r.Deity = getDeityName(c)
-	}
-	return r
-}
-
-// genOrganizedReligion generates organized religions.
-// This code is based on:
-// https://github.com/Azgaar/Fantasy-Map-Generator/blob/master/modules/religions-generator.js
-func (m *Civ) genOrganizedReligion() []*Religion {
+// genOrganizedReligions generates organized religions.
+func (m *Civ) genOrganizedReligions() []*Religion {
 	var religions []*Religion
 	cities := make([]*City, len(m.Cities))
 	copy(cities, m.Cities)
@@ -94,63 +82,75 @@ func (m *Civ) genOrganizedReligion() []*Religion {
 		cities = cities[:m.NumOrganizedReligions]
 	}
 	for _, c := range cities {
-		religions = append(religions, m.newOrganizedReligion(c))
+		religions = append(religions, m.placeReligionAt(c.ID, -1, ReligionGroupOrganized, c.Culture))
 	}
 	return religions
 }
 
-func (m *Civ) newOrganizedReligion(c *City) *Religion {
-	form := rw(forms[ReligionGroupOrganized])
-	// const state = cells.state[center];
-	culture := m.GetCulture(c.ID)
+// placeReligionAt places a religion of the given group at the given region.
+// This code is based on:
+// https://github.com/Azgaar/Fantasy-Map-Generator/blob/master/modules/religions-generator.js
+func (m *Civ) placeReligionAt(r int, founded int64, group string, culture *Culture) *Religion {
+	// If founded is -1, we take the current year.
+	if founded == -1 {
+		founded = m.History.GetYear()
+	}
+	form := rw(forms[group])
 
-	var deity string
-	if form != ReligionFormNontheism {
-		deity = getDeityName(culture)
+	relg := &Religion{
+		ID:      r,
+		Culture: culture,
+		Type:    group,
+		Form:    form,
+		Founded: founded,
 	}
 
-	// Check if we have a state at this location
-	name, expansion := m.getReligionName(form, deity, c.ID)
-	if expansion == ReligionExpState && m.RegionToCityState[c.ID] == -1 {
-		expansion = ReligionExpGlobal
-	}
-	if expansion == ReligionExpCulture && culture == nil {
-		expansion = ReligionExpGlobal
+	// If appropriate, add a deity to the religion.
+	if form != ReligionFormNontheism && form != ReligionFormAnimism {
+		relg.Deity, relg.DeityMeaning = getDeityName(culture)
 	}
 
-	// For now, set the origin to the city.
-	origin := c.ID
-	// if expansion == "state" {
-	// 	origin = m.RegionToCityState[c.ID]
-	// }
-	// if expansion == "culture" {
-	// 	origin = culture.ID
-	// }
+	// Select name, expansion, and expansionism.
+	if group == ReligionGroupOrganized {
+		// Check if we have a state at this location
+		name, expansion := m.getReligionName(form, relg.GetDeityName(), r)
+		if expansion == ReligionExpState && m.RegionToCityState[r] == -1 {
+			expansion = ReligionExpGlobal
+		}
+		if expansion == ReligionExpCulture && culture == nil {
+			expansion = ReligionExpGlobal
+		}
+		relg.Name = name
+		relg.Expansion = expansion
+		relg.Expansionism = culture.Expansionism*rand.Float64()*1.5 + 0.5
+		// if expansion == "state" {
+		// 	origin = m.RegionToCityState[c.ID]
+		// }
+		// if expansion == "culture" {
+		// 	origin = culture.ID
+		// }
 
-	// if (!cells.burg[center] && cells.c[center].some(c => cells.burg[c]))
-	//  center = cells.c[center].find(c => cells.burg[c]);
-	// const [x, y] = cells.p[center];
+		// if (!cells.burg[center] && cells.c[center].some(c => cells.burg[c]))
+		//  center = cells.c[center].find(c => cells.burg[c]);
+		// const [x, y] = cells.p[center];
 
-	// const s = spacing * gauss(1, 0.3, 0.2, 2, 2); // randomize to make the placement not uniform
-	// if (religionsTree.find(x, y, s) !== undefined) continue; // to close to existing religion
+		// const s = spacing * gauss(1, 0.3, 0.2, 2, 2); // randomize to make the placement not uniform
+		// if (religionsTree.find(x, y, s) !== undefined) continue; // to close to existing religion
 
-	// add "Old" to name of the folk religion on this culture
-	// isFolkBased := expansion == "culture" || P(0.5)
-	// folk := isFolkBased && religions.find(r => r.culture === culture && r.type === "Folk");
-	// if (folk && expansion === "culture" && folk.name.slice(0, 3) !== "Old") folk.name = "Old " + folk.name;
+		// add "Old" to name of the folk religion on this culture
+		// isFolkBased := expansion == "culture" || P(0.5)
+		// folk := isFolkBased && religions.find(r => r.culture === culture && r.type === "Folk");
+		// if (folk && expansion === "culture" && folk.name.slice(0, 3) !== "Old") folk.name = "Old " + folk.name;
 
-	// const origins = folk ? [folk.i] : getReligionsInRadius({x, y, r: 150 / count, max: 2});
-	// const expansionism = rand(3, 8);
-	// const baseColor = religions[culture]?.color || states[state]?.color || getRandomColor();
-	// const color = getMixedColor(baseColor, 0.3, 0);
-	return &Religion{
-		Origin:       origin,
-		Name:         name,
-		Culture:      culture,
-		Type:         ReligionGroupOrganized,
-		Form:         form,
-		Deity:        deity,
-		Expansion:    expansion,
-		Expansionism: culture.Expansionism*rand.Float64()*1.5 + 0.5,
+		// const origins = folk ? [folk.i] : getReligionsInRadius({x, y, r: 150 / count, max: 2});
+		// const expansionism = rand(3, 8);
+		// const baseColor = religions[culture]?.color || states[state]?.color || getRandomColor();
+		// const color = getMixedColor(baseColor, 0.3, 0);
+	} else if group == ReligionGroupFolk {
+		relg.Name = m.getFolkReligionName(culture, form)
+		relg.Expansion = ReligionExpCulture
+		relg.Expansionism = culture.Expansionism * rand.Float64() * 1.5
 	}
+	m.Religions = append(m.Religions, relg)
+	return relg
 }

@@ -49,7 +49,7 @@ func NewCiv(geo *Geo) *Civ {
 		NumFarmingTowns:       60,
 		NumDesertOasis:        10,
 		NumCultures:           30,
-		NumOrganizedReligions: 10,
+		NumOrganizedReligions: 90,
 		NameGen:               NewNameGenerators(geo.Seed),
 	}
 }
@@ -164,16 +164,9 @@ func (m *Civ) generateCivilization() {
 	}
 
 	// Organized religions.
-	// relgs := m.genOrganizedReligion()
-	// for _, r := range relgs {
-	//	log.Println("Organized religion:", r.String())
-	// }
-
-	// Folk religions.
-	// for _, c := range m.Cultures {
-	//	if c.Religion != nil {
-	//		log.Println("Folk religion:", c.Religion.String())
-	//	}
+	// m.genOrganizedReligions()
+	// for _, r := range m.Religions {
+	//	log.Println(r.String())
 	// }
 }
 

@@ -645,6 +645,9 @@ func (m *Civ) PlaceCity(cType TownType, scoreFunc func(int) float64, distSeedFun
 }
 
 func (m *Civ) placeCityAt(r int, cType TownType, pop int, score float64) *City {
+	// TODO: Trigger event for city founding.
+	// TODO: Allow optionally specifying a founding year.
+	// TODO: Set agricultural potential and resources based on the region.
 	c := &City{
 		ID:            r,
 		Score:         score,
@@ -654,8 +657,6 @@ func (m *Civ) placeCityAt(r int, cType TownType, pop int, score float64) *City {
 		Culture:       m.GetCulture(r),
 		Founded:       m.Settled[r] + m.rand.Int63n(100),
 	}
-
-	// TODO: Set agricultural potential and resources based on the region.
 
 	// If there is no known culture, generate a new one.
 	if c.Culture == nil {

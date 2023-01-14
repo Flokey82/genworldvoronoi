@@ -332,3 +332,13 @@ func trimVowels(str string, minLength int) string {
 	}
 	return str
 }
+
+// getNounPlural returns the plural form of a noun.
+// This takes in account "witch" and "fish" which are
+// irregular.
+func getNounPlural(noun string) string {
+	if strings.HasSuffix(noun, "s") || strings.HasSuffix(noun, "x") || strings.HasSuffix(noun, "z") || strings.HasSuffix(noun, "ch") || strings.HasSuffix(noun, "sh") {
+		return noun + "es"
+	}
+	return noun + "s"
+}
