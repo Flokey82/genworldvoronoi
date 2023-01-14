@@ -3,6 +3,8 @@ package genworldvoronoi
 import (
 	"fmt"
 	"math/rand"
+	"regexp"
+	"strings"
 
 	"github.com/Flokey82/naming-language-gen/naming"
 	"github.com/s0rg/fantasyname"
@@ -128,4 +130,205 @@ func (l *Language) MakeLastName() string {
 
 func newFantasyName() (fmt.Stringer, error) {
 	return fantasyname.Compile("")
+}
+
+type adjectivizationRule struct {
+	name        string
+	probability float64
+	condition   *regexp.Regexp
+	action      func(string) string
+}
+
+// stringSlice is the equivalent of JavaScript's string.slice(start, end).
+func stringSlice(s string, start, end int) string {
+	if end < 0 {
+		end = len(s) + end
+	}
+	return s[start:end]
+}
+
+// These rules were borrowed from Azgaar's Fantasy Map Generator.
+// See: https://github.com/Azgaar/Fantasy-Map-Generator/blob/master/utils/languageUtils.js
+var adjectivizationRules = []adjectivizationRule{{
+	name:        "guo",
+	probability: 1,
+	condition:   regexp.MustCompile(" Guo$"),
+	action:      func(noun string) string { return stringSlice(noun, 0, -4) },
+}, {
+	name:        "orszag",
+	probability: 1,
+	condition:   regexp.MustCompile("orszag$"),
+	action: func(noun string) string {
+		if len(noun) < 9 {
+			return noun + "ian"
+		}
+		return stringSlice(noun, 0, -6)
+	},
+}, {
+	name:        "stan",
+	probability: 1,
+	condition:   regexp.MustCompile("stan$"),
+	action: func(noun string) string {
+		if len(noun) < 9 {
+			return noun + "i"
+		}
+		return trimVowels(stringSlice(noun, 0, -4), 3)
+	},
+}, {
+	name:        "land",
+	probability: 1,
+	condition:   regexp.MustCompile("land$"),
+	action: func(noun string) string {
+		if len(noun) > 9 {
+			return stringSlice(noun, 0, -4)
+		}
+		root := trimVowels(stringSlice(noun, 0, -4), 0)
+		if len(root) < 3 {
+			return noun + "ic"
+		}
+		if len(root) < 4 {
+			return root + "lish"
+		}
+		return root + "ish"
+	},
+}, {
+	name:        "que",
+	probability: 1,
+	condition:   regexp.MustCompile("que$"),
+	action: func(noun string) string {
+		re := regexp.MustCompile("/que$/")
+		return re.ReplaceAllString(noun, "can")
+	},
+}, {
+	name:        "a",
+	probability: 1,
+	condition:   regexp.MustCompile("a$"),
+	action: func(noun string) string {
+		return noun + "n"
+	},
+}, {
+	name:        "o",
+	probability: 1,
+	condition:   regexp.MustCompile("o$"),
+	action: func(noun string) string {
+		re := regexp.MustCompile("/o$/")
+		return re.ReplaceAllString(noun, "an")
+	},
+}, {
+	name:        "u",
+	probability: 1,
+	condition:   regexp.MustCompile("u$"),
+	action: func(noun string) string {
+		return noun + "an"
+	},
+}, {
+	name:        "i",
+	probability: 1,
+	condition:   regexp.MustCompile("i$"),
+	action: func(noun string) string {
+		return noun + "an"
+	},
+}, {
+	name:        "e",
+	probability: 1,
+	condition:   regexp.MustCompile("e$"),
+	action: func(noun string) string {
+		return noun + "an"
+	},
+}, {
+	name:        "ay",
+	probability: 1,
+	condition:   regexp.MustCompile("ay$"),
+	action: func(noun string) string {
+		return noun + "an"
+	},
+}, {
+	name:        "os",
+	probability: 1,
+	condition:   regexp.MustCompile("os$"),
+	action: func(noun string) string {
+		root := trimVowels(stringSlice(noun, 0, -2), 0)
+		if len(root) < 4 {
+			return stringSlice(noun, 0, -1)
+		}
+		return root + "ian"
+	},
+}, {
+	name:        "es",
+	probability: 1,
+	condition:   regexp.MustCompile("es$"),
+	action: func(noun string) string {
+		root := trimVowels(stringSlice(noun, 0, -2), 0)
+		if len(root) > 7 {
+			return stringSlice(noun, 0, -1)
+		}
+		return root + "ian"
+	},
+}, {
+	name:        "l",
+	probability: 0.8,
+	condition:   regexp.MustCompile("l$"),
+	action: func(noun string) string {
+		return noun + "ese"
+	},
+}, {
+	name:        "n",
+	probability: 0.8,
+	condition:   regexp.MustCompile("n$"),
+	action: func(noun string) string {
+		return noun + "ese"
+	},
+}, {
+	name:        "ad",
+	probability: 0.8,
+	condition:   regexp.MustCompile("ad$"),
+	action: func(noun string) string {
+		return noun + "ian"
+	},
+}, {
+	name:        "an",
+	probability: 0.8,
+	condition:   regexp.MustCompile("an$"),
+	action: func(noun string) string {
+		return noun + "ian"
+	},
+}, {
+	name:        "ish",
+	probability: 0.25,
+	condition:   regexp.MustCompile("^[a-zA-Z]{6}$"),
+	action: func(noun string) string {
+		return trimVowels(stringSlice(noun, 0, -1), 3) + "ish"
+	},
+}, {
+	name:        "an",
+	probability: 0.5,
+	condition:   regexp.MustCompile("^[a-zA-Z]{0-7}$"),
+	action: func(noun string) string {
+		return trimVowels(noun, 3) + "an"
+	},
+}}
+
+// get adjective form from noun
+func getAdjective(noun string) string {
+	for _, rule := range adjectivizationRules {
+		if P(rule.probability) && rule.condition.MatchString(noun) {
+			return rule.action(noun)
+		}
+	}
+	return noun // no rule applied, return noun as is
+}
+
+// chars that serve as vowels
+const vowelRange = `aeiouyɑ'əøɛœæɶɒɨɪɔɐʊɤɯаоиеёэыуюяàèìòùỳẁȁȅȉȍȕáéíóúýẃőűâêîôûŷŵäëïöüÿẅãẽĩõũỹąęįǫųāēīōūȳăĕĭŏŭǎěǐǒǔȧėȯẏẇạẹịọụỵẉḛḭṵṳ`
+
+func isVowel(c rune) bool {
+	return strings.IndexRune(vowelRange, c) != -1
+}
+
+// remove vowels from the end of the string
+func trimVowels(str string, minLength int) string {
+	for len(str) > minLength && isVowel(rune(str[len(str)-1])) {
+		str = str[:len(str)-1]
+	}
+	return str
 }

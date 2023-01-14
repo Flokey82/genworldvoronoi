@@ -19,36 +19,38 @@ type Civ struct {
 	Religions         []*Religion // (cultural) Religion seed points / regions
 	Settled           []int64     // (cultural) Time of settlement per region
 	// SettledBySpecies []int // (cultural) Which species settled the region first
-	NumCities          int // Number of generated cities (regions)
-	NumCityStates      int // Number of generated city states
-	NumMiningTowns     int // Number of generated mining towns
-	NumMiningGemsTowns int // Number of generated (gem) mining towns
-	NumQuarryTowns     int // Number of generated quarry towns
-	NumFarmingTowns    int // Number of generated farming towns
-	NumDesertOasis     int // Number of generated desert oases
-	NumEmpires         int // Number of generated territories
-	NumCultures        int // (Min) Number of generated cultures
-	NameGen            *NameGenerators
+	NumCities             int // Number of generated cities (regions)
+	NumCityStates         int // Number of generated city states
+	NumMiningTowns        int // Number of generated mining towns
+	NumMiningGemsTowns    int // Number of generated (gem) mining towns
+	NumQuarryTowns        int // Number of generated quarry towns
+	NumFarmingTowns       int // Number of generated farming towns
+	NumDesertOasis        int // Number of generated desert oases
+	NumEmpires            int // Number of generated territories
+	NumCultures           int // (Min) Number of generated cultures
+	NumOrganizedReligions int // (Min) Number of generated religions
+	NameGen               *NameGenerators
 }
 
 func NewCiv(geo *Geo) *Civ {
 	return &Civ{
-		Geo:                geo,
-		History:            NewHistory(geo.Calendar),
-		RegionToEmpire:     initRegionSlice(geo.mesh.numRegions),
-		RegionToCityState:  initRegionSlice(geo.mesh.numRegions),
-		RegionToCulture:    initRegionSlice(geo.mesh.numRegions),
-		Settled:            initTimeSlice(geo.mesh.numRegions),
-		NumEmpires:         10,
-		NumCities:          150,
-		NumCityStates:      150,
-		NumMiningTowns:     60,
-		NumMiningGemsTowns: 60,
-		NumQuarryTowns:     60,
-		NumFarmingTowns:    60,
-		NumDesertOasis:     10,
-		NumCultures:        30,
-		NameGen:            NewNameGenerators(geo.Seed),
+		Geo:                   geo,
+		History:               NewHistory(geo.Calendar),
+		RegionToEmpire:        initRegionSlice(geo.mesh.numRegions),
+		RegionToCityState:     initRegionSlice(geo.mesh.numRegions),
+		RegionToCulture:       initRegionSlice(geo.mesh.numRegions),
+		Settled:               initTimeSlice(geo.mesh.numRegions),
+		NumEmpires:            10,
+		NumCities:             150,
+		NumCityStates:         150,
+		NumMiningTowns:        60,
+		NumMiningGemsTowns:    60,
+		NumQuarryTowns:        60,
+		NumFarmingTowns:       60,
+		NumDesertOasis:        10,
+		NumCultures:           30,
+		NumOrganizedReligions: 10,
+		NameGen:               NewNameGenerators(geo.Seed),
 	}
 }
 
@@ -160,6 +162,19 @@ func (m *Civ) generateCivilization() {
 		}
 		log.Println("Done aging cities in ", time.Since(start).String())
 	}
+
+	// Organized religions.
+	// relgs := m.genOrganizedReligion()
+	// for _, r := range relgs {
+	//	log.Println("Organized religion:", r.String())
+	// }
+
+	// Folk religions.
+	// for _, c := range m.Cultures {
+	//	if c.Religion != nil {
+	//		log.Println("Folk religion:", c.Religion.String())
+	//	}
+	// }
 }
 
 func (m *Civ) Tick() {
