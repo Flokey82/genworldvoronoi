@@ -1,6 +1,7 @@
 package genworldvoronoi
 
 import (
+	"container/list"
 	"log"
 	"math"
 	"sort"
@@ -35,7 +36,7 @@ Loop:
 	}
 
 	// Start off by filling sinks.
-	m.Elevation = m.FillSinks()
+	m.Elevation = m.FillSinks(true)
 
 	// Try to flood all sinks.
 	var attempts int
@@ -44,7 +45,8 @@ Loop:
 	for {
 		// Abort if we have no more sinks or ran out of attempts.
 		if attempts > maxAttempts {
-			m.Elevation = m.FillSinks()
+			m.Elevation = m.FillSinks(true)
+
 			// Regenerate downhill.
 			m.BaseObject.assignDownhill(true)
 
@@ -66,7 +68,7 @@ Loop:
 		for i := range m.Waterpool {
 			m.Waterpool[i] = 0
 		}
-		m.Elevation = m.FillSinks()
+		m.Elevation = m.FillSinks(true)
 
 		// TODO: Diffuse flux and pool.
 		m.assignRainfallBasic()
@@ -107,7 +109,7 @@ func (m *Geo) assignHydrologyWithFlooding() {
 
 		// Abort if we have no more sinks or ran out of attempts.
 		if len(r_sinks) == 0 || attempts > maxAttempts {
-			m.Elevation = m.FillSinks()
+			m.Elevation = m.FillSinks(true)
 			// Regenerate downhill.
 			m.BaseObject.assignDownhill(true)
 
@@ -246,9 +248,6 @@ func (m *Geo) getFlux(skipBelowSea bool) []float64 {
 
 		// Sort index array.
 		sort.Slice(idxs, func(a, b int) bool {
-			if (m.Elevation[idxs[b]] + m.Waterpool[idxs[b]]) == (m.Elevation[idxs[a]] + m.Waterpool[idxs[a]]) {
-				return drains[idxs[a]]
-			}
 			return (m.Elevation[idxs[b]] + m.Waterpool[idxs[b]]) < (m.Elevation[idxs[a]] + m.Waterpool[idxs[a]])
 		})
 
@@ -359,6 +358,191 @@ func (m *Geo) getFlux(skipBelowSea bool) []float64 {
 		}
 	}
 	return regFlux
+}
+
+// floodSinks fills the sinks in the map either by using the water pool
+// or by using the fill sinks algorithm.
+// NOTE: Use flux with FluxVolVariantBasicWithDrains for this.
+// THIS IS STILL A WORK IN PROGRESS!
+func (m *BaseObject) floodSinks() []float64 {
+	// Get the filled sinks and assign the difference to the elevation
+	// to the water pool.
+
+	// - Get the elevation from the fill sinks algorithm.
+	filledSinks := m.FillSinks(false)
+
+	newHeight := make([]float64, len(m.Elevation))
+	copy(newHeight, filledSinks)
+
+	// Compare the unaltered elevation of the lake regions
+	// with the elevation of the fill sinks algorithm to get
+	// the difference, which would be the water level.
+	//
+	// NOTE: The surface of the lakes would not level if used
+	// unaltered due to the way the fill sinks algorithm works.
+	pool := make([]float64, len(m.Elevation))
+	for i, v := range filledSinks {
+		pool[i] = v - m.Elevation[i]
+	}
+
+	// Sort the regions by their filled elevation in ascending order.
+	// This way we avoid picking a high region as the seed region.
+	// The seed region is the region that is used to represent the lake.
+	sortedRegs := make([]int, len(m.Elevation))
+	for i := range sortedRegs {
+		sortedRegs[i] = i
+	}
+	sort.Slice(sortedRegs, func(i, j int) bool {
+		return filledSinks[sortedRegs[i]] < filledSinks[sortedRegs[j]]
+	})
+
+	outRegs := make([]int, 0, 8)
+
+	// drainage holds mapping of region to drainage region.
+	drainage := initRegionSlice(len(m.Elevation))
+
+	// poolIDs olds mapping of region to pool ID.
+	poolIDs := initRegionSlice(len(m.Elevation))
+
+	// poolIDToLowestReg holds mapping of pool ID to lowest region
+	// (for normalizing/leveling the water surface).
+	poolIDToLowestReg := make(map[int]int)
+
+	// poolIDToDrainage holds mapping of pool ID to drainage region.
+	poolIDToDrainage := make(map[int]int)
+
+	// poolIDToSize holds mapping of pool ID to number of regions
+	// that are part of the same lake.
+	poolIDToSize := make(map[int]int)
+
+	// poolSeeds holds the regions that were picked to represent
+	// lakes / connected regions.
+	var poolSeeds []int
+
+	// poolParty holds the regions that are part of the same pool.
+	poolParty := make([]int, 0, 100)
+
+	// Identify connected, potential lake regions.
+	for _, i := range sortedRegs {
+		v := pool[i]
+		if v == 0 || poolIDs[i] != -1 {
+			continue
+		}
+
+		// We have a water pool and it is not part of a lake yet.
+		lowestReg := i
+		poolIDs[i] = i
+
+		list := list.New()
+		list.PushBack(i)
+		for list.Len() > 0 {
+			e := list.Front()
+			list.Remove(e)
+			reg := e.Value.(int)
+			poolParty = append(poolParty, reg)
+			for _, n := range m.mesh.r_circulate_r(outRegs, reg) {
+				if poolIDs[n] == -1 && pool[n] > 0 {
+					poolIDs[n] = i
+					list.PushBack(n)
+					if filledSinks[n] < filledSinks[lowestReg] {
+						lowestReg = n
+					}
+				}
+			}
+		}
+
+		// Store the lowest region of the lake, which will be used
+		// to level the water surface of the lake.
+		poolIDToLowestReg[i] = lowestReg
+
+		// Find the drainage point of the lake regions, which is the
+		// lowest region that is not part of the lake, bordering the lake.
+		if len(poolParty) > 0 {
+			lowestRegDrainage := -1
+			for _, reg := range poolParty {
+				for _, n := range m.mesh.r_circulate_r(outRegs, reg) {
+					if (lowestRegDrainage == -1 || filledSinks[n] < filledSinks[lowestRegDrainage]) && poolIDs[n] == -1 {
+						lowestRegDrainage = n
+					}
+				}
+			}
+			poolIDToDrainage[i] = lowestRegDrainage
+		}
+		poolSeeds = append(poolSeeds, i)
+		poolIDToSize[i] = len(poolParty)
+		poolParty = poolParty[:0]
+	}
+
+	// Loop over the lake seeds and sum up the precipitation and flux
+	// of the lake regions. If the sum is zero, we fill up the elevation
+	// of the lake regions instead of the water pool.
+	for _, seed := range poolSeeds {
+		lowestReg := poolIDToLowestReg[seed]
+		var sumPrecip, sumFlux float64
+		for reg, rID := range poolIDs {
+			if rID != seed {
+				continue
+			}
+			sumPrecip += m.Rainfall[reg]
+			sumFlux += m.Flux[reg]
+		}
+
+		// Fill up the elevation of the lake regions instead of the water pool if:
+		// - the sum of precipitation and flux is zero
+		// - the lake region does not have a drainage region
+		//
+		// TODO: Maybe use a threshold instead of zero?
+		if sumPrecip == 0 && sumFlux == 0 || poolIDToDrainage[seed] == -1 {
+			// If lake regions do not have any precipitation, we
+			// fill up the elevation of the lake regions instead
+			// of the water pool.
+			for reg, regID := range poolIDs {
+				if regID == seed {
+					pool[reg] = 0
+					poolIDs[reg] = -1
+					drainage[reg] = -1
+					newHeight[reg] = filledSinks[reg]
+				}
+			}
+		} else {
+			// Fill up the water pool to the lowest lake region.
+			// Set the pool depth to the lowest lake region according to the
+			// elevation returned by the fill sinks algorithm.
+			for reg, poolID := range poolIDs {
+				if poolID != seed {
+					continue
+				}
+
+				if filledSinks[lowestReg] < m.Elevation[reg] {
+					// Use the actual elevation of the region if it is higher
+					// than the lowest lake region.
+					pool[reg] = 0
+					poolIDs[reg] = -1
+					drainage[reg] = -1
+					newHeight[reg] = filledSinks[reg]
+					// TODO: Check if this is also the seed region.
+					// If so, we need to update the seed region.
+					// if reg == seed {
+					//   panic("seed is filled region")
+					// }
+				} else {
+					// If the the actual elevation of the region is higher than the
+					// lowest lake region, we fill up the water pool to the actual
+					pool[reg] = (m.Elevation[lowestReg] + pool[lowestReg]) - m.Elevation[reg]
+					newHeight[reg] = m.Elevation[reg]
+
+					// Set the drainage of the lake regions to the drainage region
+					// which is the lowest region of the lake neighbors.
+					// TODO: Check of this region's downhill chain leads to the ocean.
+					drainage[reg] = poolIDToDrainage[seed]
+				}
+			}
+		}
+	}
+	m.Elevation = newHeight
+	m.Drainage = drainage
+	m.Waterpool = pool
+	return pool
 }
 
 // floodV1 is the first variant of the flood fill algorithm, which finds

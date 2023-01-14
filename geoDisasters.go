@@ -61,8 +61,8 @@ func (m *Geo) getDownhillDisaster(origins map[int]bool, steepnessLimit float64) 
 			// Add the danger of the region to the chance of being affected by a
 			// downhill disaster.
 			chance[rdh] += danger
-			rdh = downhill[rdh]
 			danger *= steepness[rdh]
+			rdh = downhill[rdh]
 		}
 	}
 	return chance

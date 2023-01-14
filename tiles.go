@@ -18,7 +18,7 @@ import (
 )
 
 // GetTile returns the image of the tile at the given coordinates and zoom level.
-func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, drawShadows, aspectShading bool) image.Image {
+func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, drawLakes, drawShadows, aspectShading bool) image.Image {
 	var colorFunc func(int, float64) color.Color
 	switch displayMode {
 	case 13, 14, 15, 16:
@@ -70,8 +70,8 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 				return genColor(cols[terrID], math.Pow(val, 1/n))
 			}
 
-			// Return blue for water.
-			if elev <= 0 {
+			// Return blue for water (oceans and lakes).
+			if elev <= 0 || (m.Waterpool[i] > 0 && drawLakes) {
 				return genBlue(val)
 			}
 
@@ -117,8 +117,9 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 			// Calculate the color of the region.
 			elev := m.Elevation[i]
 			val := (vals[i] - minVal) / (maxVal - minVal)
-			// Return blue for water.
-			if elev <= 0 {
+
+			// Return blue for water (oceans and lakes).
+			if elev <= 0 || (m.Waterpool[i] > 0 && drawLakes) {
 				return genBlue(val)
 			}
 
@@ -454,8 +455,20 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 				x -= dx
 				y -= dy2
 
-				// If we are below sea level, interpolate the point with the previous point.
-				if m.Elevation[p] < 0 {
+				// If both points are in a pool or below sea level, we end the path,
+				// move to the new point and start a new path.
+				if (m.Elevation[p] <= 0 || m.Waterpool[p] > 0 && drawLakes) &&
+					(m.Elevation[river[i]] <= 0 || m.Waterpool[river[i]] > 0 && drawLakes) {
+					// Draw from the last position to the midpoint.
+					// This will cause the river to end at the sea level.
+					gc.Stroke()
+					gc.Close()
+
+					// Move to the new point and start a new path.
+					gc.BeginPath()
+					gc.MoveTo(x, y)
+				} else if m.Elevation[p] <= 0 || (m.Waterpool[p] > 0 && drawLakes) {
+					// If we are below sea level, interpolate the point with the previous point.
 					// Draw from the last position to the midpoint.
 					// This will cause the river to end at the sea level.
 					lx, ly := gc.LastPoint()
@@ -463,7 +476,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 
 					// Move to the new point.
 					gc.MoveTo(x, y)
-				} else if m.Elevation[river[i]] < 0 {
+				} else if m.Elevation[river[i]] <= 0 || (m.Waterpool[river[i]] > 0 && drawLakes) {
 					// If the previous point was below sea level, interpolate the point with the next point.
 					// This will cause the river to start at the sea level.
 					lx, ly := gc.LastPoint()

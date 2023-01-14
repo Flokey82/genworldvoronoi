@@ -570,7 +570,7 @@ func (m *BaseObject) GetSinks(skipSinksBelowSea, usePool bool) []int {
 	// Identify sinks above sea level.
 	var regSinks []int
 	for r, lowestReg := range m.GetDownhill(usePool) {
-		if lowestReg == -1 && (!skipSinksBelowSea || m.Elevation[r] >= 0) { // && m.r_drainage[r] < 0
+		if lowestReg == -1 && (!skipSinksBelowSea || m.Elevation[r] > 0) { // && m.r_drainage[r] < 0
 			regSinks = append(regSinks, r)
 		}
 	}
@@ -582,11 +582,15 @@ func (m *BaseObject) GetSinks(skipSinksBelowSea, usePool bool) []int {
 // and a partial port of the implementation in:
 // https://github.com/Rob-Voss/Learninator/blob/master/js/lib/Terrain.js
 //
+// If randEpsilon is true, a randomized epsilon value is added to the elevation
+// during each iteration. This is to prevent the algorithm from being too
+// uniform.
+//
 // NOTE: This algorithm produces a too uniform result at the moment, resulting
 // in very artificially looking rivers. It lacks some kind of variation like
 // noise. It's very fast and less destructive than my other, home-grown algorithm.
 // Maybe it's worth to combine the two in some way?
-func (m *BaseObject) FillSinks() []float64 {
+func (m *BaseObject) FillSinks(randEpsilon bool) []float64 {
 	// Reset the RNG.
 	m.resetRand()
 
@@ -608,16 +612,17 @@ func (m *BaseObject) FillSinks() []float64 {
 	var epsilon float64
 	outReg := make([]int, 0, 8)
 	for {
-		// Variation.
-		//
-		// In theory we could use noise or random values to slightly
-		// alter epsilon here. It should still work, albeit a bit slower.
-		// The idea is to make the algorithm less destructive and more
-		// natural looking.
-		//
-		// NOTE: I've decided to use m.rand.Float64() instead of noise.
-		epsilon = baseEpsilon * m.rand.Float64()
-
+		if randEpsilon {
+			// Variation.
+			//
+			// In theory we could use noise or random values to slightly
+			// alter epsilon here. It should still work, albeit a bit slower.
+			// The idea is to make the algorithm less destructive and more
+			// natural looking.
+			//
+			// NOTE: I've decided to use m.rand.Float64() instead of noise.
+			epsilon = baseEpsilon * m.rand.Float64()
+		}
 		changed := false
 
 		// By shuffling the order in which we parse regions,
