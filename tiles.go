@@ -81,6 +81,34 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 			valMois := m.Moisture[i] / maxMois
 			return getWhittakerModBiomeColor(rLat, valElev, valMois, math.Pow(val, 1/n))
 		}
+	case 17:
+		// Get a blue to red elevation gradient.
+		// Calculate the min and max elevation.
+		_, max := minMax(m.Elevation)
+
+		// Create the color gradient.
+		colorGrad := colorgrad.NewGradient()
+		colorGrad.Colors(
+			color.RGBA{0, 0, 255, 255},
+			color.RGBA{0, 255, 255, 255},
+			color.RGBA{0, 255, 0, 255},
+			color.RGBA{255, 255, 0, 255},
+			color.RGBA{255, 0, 0, 255},
+		)
+		cb, err := colorGrad.Build()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// Create the color function.
+		colorFunc = func(i int, n float64) color.Color {
+			// Calculate the color of the region.
+			elev := m.Elevation[i]
+			val := elev / max
+
+			// Return the color.
+			return genColor(cb.At(val), math.Pow(val, 1/n))
+		}
 	default:
 		vals := m.Elevation
 		if displayMode == 1 {
