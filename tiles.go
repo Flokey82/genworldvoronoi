@@ -21,7 +21,7 @@ import (
 func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, drawLakes, drawShadows, aspectShading bool) image.Image {
 	var colorFunc func(int, float64) color.Color
 	switch displayMode {
-	case 13, 14, 15, 16:
+	case 13, 14, 15, 16, 17:
 		colorGrad := colorgrad.Rainbow()
 		terrToColor := make(map[int]int)
 		var territory []int
@@ -47,6 +47,13 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 				terrToColor[c.ID] = i
 			}
 			territory = m.RegionToCulture
+		} else if displayMode == 16 {
+			terr := m.Religions
+			terrLen = len(terr)
+			for i, c := range terr {
+				terrToColor[c.ID] = i
+			}
+			territory = m.RegionToReligion
 		} else {
 			terr := m.Species
 			terrLen = len(terr)
@@ -81,7 +88,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 			valMois := m.Moisture[i] / maxMois
 			return getWhittakerModBiomeColor(rLat, valElev, valMois, math.Pow(val, 1/n))
 		}
-	case 17:
+	case 18:
 		// Get a blue to red elevation gradient.
 		// Calculate the min and max elevation.
 		_, max := minMax(m.Elevation)
@@ -692,6 +699,10 @@ func (m *Map) GetGeoJSONCities(la1, lo1, la2, lo2 float64, zoom int) ([]byte, er
 		f.SetProperty("name", c.Name)
 		f.SetProperty("type", c.Type)
 		f.SetProperty("culture", fmt.Sprintf("%s (%s)", c.Culture.Name, c.Culture.Type))
+		if r := m.GetReligion(c.ID); r != nil {
+			f.SetProperty("religion", r.Name)
+			f.SetProperty("deity", r.GetDeityName())
+		}
 		f.SetProperty("population", c.Population)
 		f.SetProperty("popgrowth", c.PopulationGrowthRate())
 		f.SetProperty("maxpop", c.MaxPopulation)

@@ -375,6 +375,15 @@ func (m *Civ) tickCityDays(c *City, days int) {
 	if c.Population > c.MaxPopulation {
 		c.MaxPopulation = c.Population
 	}
+
+	// If there is no religion originating from the city, then there is a
+	// chance that a new religion might be founded.
+	// TODO: Maybe keep note of an inciting event, like a famine, war, etc.
+	if c.Religion == nil && m.rand.Intn(3000*356) < days && c.Population > 0 {
+		c.Religion = m.genOrganizedReligion(c)
+		m.expandReligions()
+		m.History.AddEvent("Religion", fmt.Sprintf("A new religion was founded in %s", c.Name), c.Ref())
+	}
 }
 
 // relocateFromCity moves a portion of the population from the city to
@@ -560,6 +569,7 @@ type City struct {
 	MaxPopulation     int       // Maximum population of the city
 	Culture           *Culture  // Culture of the city region
 	Language          *Language // Language of the city
+	Religion          *Religion // Religion originating from the city
 	Founded           int64     // Year when the city was founded
 	EconomicPotential float64   // Economic potential of the city (DYNAMIC)
 	Trade             float64   // Trade value of the city (DYNAMIC)

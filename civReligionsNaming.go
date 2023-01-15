@@ -33,7 +33,7 @@ func (m *Civ) getReligionName(form, deity string, r int) (string, string) {
 	// Splits the deity name into parts and returns the first part.
 	// Example: "Grognark, The Supreme Being" -> "Grognark"
 	supreme := func() string {
-		return strings.Split(deity, (" ,"))[0]
+		return strings.Split(deity, (", "))[0]
 	}
 
 	// Returns the name of the culture at the given region.
@@ -144,18 +144,18 @@ func (m *Civ) getReligionName(form, deity string, r int) (string, string) {
 }
 
 // getDeityName returns a deity name for the given culture.
-func getDeityName(culture *Culture) (string, string) {
+func getDeityName(culture *Culture, approach string) (string, string) {
 	if culture == nil {
 		return "TODO_DEITY", "TODO_DEITY"
 	}
-	meaning := generateDeityMeaning()
+	meaning := generateDeityMeaning(approach)
 	cultureName := culture.Language.MakeName()
 	return cultureName, meaning
 }
 
 // generateDeityMeaning generates a meaning for a deity name.
-func generateDeityMeaning() string {
-	switch ra(approaches) { // select generation approach
+func generateDeityMeaning(approach string) string {
+	switch approach { // select generation approach
 	case ApproachNumber:
 		return ra(genBase[GenBaseNumber])
 	case ApproachBeing:

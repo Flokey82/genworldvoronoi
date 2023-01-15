@@ -6,6 +6,19 @@ import (
 	"sort"
 )
 
+// GetReligion returns the religion of the given region (if any).
+func (m *Civ) GetReligion(r int) *Religion {
+	if m.RegionToReligion[r] <= 0 {
+		return nil
+	}
+	for _, c := range m.Religions {
+		if c.ID == m.RegionToReligion[r] {
+			return c
+		}
+	}
+	return nil
+}
+
 // Religion represents a religion in the world.
 //
 // TODO: Ensure we can infer symbolisms from events and other things.
@@ -38,17 +51,18 @@ import (
 // would allow us to infer the relationships between deities and symbols and
 // if mundane events hold any significance for a particular religion.
 type Religion struct {
-	ID           int       // The region where the religion was founded
-	Name         string    // The name of the religion
-	Culture      *Culture  // The culture that the religion is based on
-	Parent       *Religion // The parent religion (if any)
-	Type         string    // The type of the religion
-	Form         string    // The form of the religion
-	Deity        string    // The main deity of the religion (if any)
-	DeityMeaning string    // The meaning of the main deity of the religion (if any)
-	Expansion    string    // How the religion wants to expand
-	Expansionism float64   // How much the religion wants to expand
-	Founded      int64     // Year when the religion was founded
+	ID            int       // The region where the religion was founded
+	Name          string    // The name of the religion
+	Culture       *Culture  // The culture that the religion is based on
+	Parent        *Religion // The parent religion (if any)
+	Type          string    // The type of the religion
+	Form          string    // The form of the religion
+	Deity         string    // The main deity of the religion (if any)
+	DeityMeaning  string    // The meaning of the main deity of the religion (if any)
+	DeityApproach string    // The approach for the deity generation.
+	Expansion     string    // How the religion wants to expand
+	Expansionism  float64   // How much the religion wants to expand
+	Founded       int64     // Year when the religion was founded
 }
 
 func (r *Religion) GetDeityName() string {
@@ -67,7 +81,21 @@ func (r *Religion) String() string {
 
 // genFolkReligion generates a folk religion for the given culture.
 func (m *Civ) genFolkReligion(c *Culture) *Religion {
-	return m.placeReligionAt(c.ID, -1, ReligionGroupFolk, c)
+	return m.placeReligionAt(c.ID, -1, ReligionGroupFolk, c, nil)
+}
+
+// genOrganizedReligion generates an organized religion for the given city.
+func (m *Civ) genOrganizedReligion(c *City) *Religion {
+	var parent *Religion
+	if rID := m.RegionToReligion[c.ID]; rID >= 0 {
+		for _, r := range m.Religions {
+			if r.ID == rID {
+				parent = r
+				break
+			}
+		}
+	}
+	return m.placeReligionAt(c.ID, -1, ReligionGroupOrganized, c.Culture, parent)
 }
 
 // genOrganizedReligions generates organized religions.
@@ -82,7 +110,7 @@ func (m *Civ) genOrganizedReligions() []*Religion {
 		cities = cities[:m.NumOrganizedReligions]
 	}
 	for _, c := range cities {
-		religions = append(religions, m.placeReligionAt(c.ID, -1, ReligionGroupOrganized, c.Culture))
+		religions = append(religions, m.genOrganizedReligion(c))
 	}
 	return religions
 }
@@ -90,7 +118,7 @@ func (m *Civ) genOrganizedReligions() []*Religion {
 // placeReligionAt places a religion of the given group at the given region.
 // This code is based on:
 // https://github.com/Azgaar/Fantasy-Map-Generator/blob/master/modules/religions-generator.js
-func (m *Civ) placeReligionAt(r int, founded int64, group string, culture *Culture) *Religion {
+func (m *Civ) placeReligionAt(r int, founded int64, group string, culture *Culture, parent *Religion) *Religion {
 	// If founded is -1, we take the current year.
 	if founded == -1 {
 		founded = m.History.GetYear()
@@ -103,15 +131,24 @@ func (m *Civ) placeReligionAt(r int, founded int64, group string, culture *Cultu
 		Type:    group,
 		Form:    form,
 		Founded: founded,
+		Parent:  parent,
 	}
 
 	// If appropriate, add a deity to the religion.
 	if form != ReligionFormNontheism && form != ReligionFormAnimism {
-		relg.Deity, relg.DeityMeaning = getDeityName(culture)
+		var approach string
+		if parent != nil && parent.DeityApproach != "" {
+			approach = parent.DeityApproach
+		} else {
+			approach = ra(approaches)
+		}
+		relg.Deity, relg.DeityMeaning = getDeityName(culture, approach)
+		relg.DeityApproach = approach
 	}
 
 	// Select name, expansion, and expansionism.
 	if group == ReligionGroupOrganized {
+		// TODO: If parent is not nil, maybe swich form to cult or heresy?
 		// Check if we have a state at this location
 		name, expansion := m.getReligionName(form, relg.GetDeityName(), r)
 		if expansion == ReligionExpState && m.RegionToCityState[r] == -1 {
@@ -151,6 +188,45 @@ func (m *Civ) placeReligionAt(r int, founded int64, group string, culture *Cultu
 		relg.Expansion = ReligionExpCulture
 		relg.Expansionism = culture.Expansionism * rand.Float64() * 1.5
 	}
+
+	// If there is a parent religion, add an event noting that this branch
+	// has split off from the parent.
+	if parent != nil {
+		m.History.AddEvent("Religion", fmt.Sprintf("%s split from %s", relg.Name, parent.Name),
+			ObjectReference{
+				Type: ObjectTypeReligion,
+				ID:   relg.ID,
+			})
+	} else {
+		m.History.AddEvent("Religion", fmt.Sprintf("%s was founded", relg.Name),
+			ObjectReference{
+				Type: ObjectTypeReligion,
+				ID:   relg.ID,
+			})
+	}
 	m.Religions = append(m.Religions, relg)
 	return relg
+}
+
+func (m *Civ) expandReligions() {
+	// The religious centers will be the seed points for the expansion.
+	var seeds []int
+	originToReligion := make(map[int]*Religion)
+	for _, r := range m.Religions {
+		seeds = append(seeds, r.ID)
+		originToReligion[r.ID] = r
+	}
+
+	territoryWeightFunc := m.getTerritoryWeightFunc()
+	m.RegionToReligion = m.regPlaceNTerritoriesCustom(seeds, func(o, u, v int) float64 {
+		r := originToReligion[o]
+
+		if r.Expansion == ReligionExpCulture && m.RegionToCulture[v] != r.Culture.ID {
+			return -1
+		}
+		if r.Expansion == ReligionExpState && m.RegionToCityState[v] != m.RegionToCityState[o] {
+			return -1
+		}
+		return territoryWeightFunc(o, u, v) / r.Expansionism
+	})
 }

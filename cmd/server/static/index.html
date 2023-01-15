@@ -40,7 +40,7 @@
   <script type="text/javascript">
 
     var displayMode = 0;
-    var displayModeMax = 18;
+    var displayModeMax = 19;
     var displayModeNames = [
       'Terrain',
       'Moisture',
@@ -58,6 +58,7 @@
       'CityStates',
       'Empires',
       'Cultures',
+      'Religions',
       'Species',
       'Elevation',
     ];
@@ -150,6 +151,8 @@
             ' (max ' + prop.maxpoplimit + ' growth ' + prop.popgrowth.toFixed(3) + ')<br/>' +
             'Settled: ' + prop.settled + 'yrs ago<br/>' +
             'Culture: ' + prop.culture + '<br/>' +
+            (prop.religion ? 'Religion: ' + prop.religion + '<br/>':'') +
+            (prop.deity ? 'Deity: ' + prop.deity + '<br/>':'') +
             'Biome: ' + prop.biome + '<br/>' +
             'Coords: ' + prop.coordinates + '<br/>' +
             'Attractiveness: ' + prop.attractiveness.toFixed(3) + '<br/>' +

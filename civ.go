@@ -16,6 +16,7 @@ type Civ struct {
 	Cities            []*City     // (political) City seed points / regions
 	RegionToCulture   []int       // (cultural) Point / region mapping to culture
 	Cultures          []*Culture  // (cultural) Culture seed points / regions
+	RegionToReligion  []int       // (cultural) Point / region mapping to religion
 	Religions         []*Religion // (cultural) Religion seed points / regions
 	Settled           []int64     // (cultural) Time of settlement per region
 	// SettledBySpecies []int // (cultural) Which species settled the region first
@@ -39,6 +40,7 @@ func NewCiv(geo *Geo) *Civ {
 		RegionToEmpire:        initRegionSlice(geo.mesh.numRegions),
 		RegionToCityState:     initRegionSlice(geo.mesh.numRegions),
 		RegionToCulture:       initRegionSlice(geo.mesh.numRegions),
+		RegionToReligion:      initRegionSlice(geo.mesh.numRegions),
 		Settled:               initTimeSlice(geo.mesh.numRegions),
 		NumEmpires:            10,
 		NumCities:             150,
@@ -49,13 +51,13 @@ func NewCiv(geo *Geo) *Civ {
 		NumFarmingTowns:       60,
 		NumDesertOasis:        10,
 		NumCultures:           30,
-		NumOrganizedReligions: 90,
+		NumOrganizedReligions: 20,
 		NameGen:               NewNameGenerators(geo.Seed),
 	}
 }
 
 func (m *Civ) generateCivilization() {
-	enableCityAging := false
+	enableCityAging := true
 
 	// TODO: The generation should happen somewhat like this...
 	// 0. Calculate time of settlement per region through flood fill.
@@ -78,7 +80,10 @@ func (m *Civ) generateCivilization() {
 	m.PlaceNCultures(m.NumCultures)
 	log.Println("Done cultures in ", time.Since(start).String())
 
-	// Place folk religions.
+	// Place / expand folk religions.
+	start = time.Now()
+	m.expandReligions()
+	log.Println("Done expanding religions in ", time.Since(start).String())
 
 	// Place cities and territories in regions.
 	// TODO: Smaller towns should be found in the vicinity of larger cities.

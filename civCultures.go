@@ -223,7 +223,6 @@ func (m *Civ) PlaceCultureAt(r int) *Culture {
 	c.Stats = m.getStats(c.Regions)
 	m.Cultures = append(m.Cultures, c)
 	m.RegionToCulture[r] = r
-	// TODO: Grow / Expand this culture.
 	// NOTE: This might be quite expensive, so we might want to
 	// avoid this calling here, or at least limit the regions
 	// we process to the ones that are close to the new culture.
