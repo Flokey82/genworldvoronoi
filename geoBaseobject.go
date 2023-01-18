@@ -853,7 +853,7 @@ func (m *BaseObject) interpolate(regions []int) (*interpolated, error) {
 	if err != nil {
 		return nil, err
 	}
-	mesh := NewTriangleMesh(0, len(tri.Triangles), make([]Vertex, ipl.numRegions), tri.Triangles, tri.Halfedges)
+	mesh := NewTriangleMesh(ipl.numRegions, tri.Triangles, tri.Halfedges)
 	ipl.mesh = mesh
 	ipl.RegionIsMountain = regionIsMountain
 	ipl.RegionIsVolcano = regionIsVolcano

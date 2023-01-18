@@ -1,7 +1,6 @@
 package genworldvoronoi
 
 import (
-	"log"
 	"math"
 	"math/rand"
 
@@ -86,7 +85,6 @@ func addSouthPoleToMesh(southPoleId int, d *delaunay.Triangulation) *delaunay.Tr
 	copy(newHalfedges, halfedges)
 
 	for i, s := 0, firstUnpairedSide; i < numUnpairedSides; i++ {
-		log.Println(i)
 		// Construct a pair for the unpaired side s
 		newSide := numSides + 3*i
 		newHalfedges[s] = newSide
@@ -155,12 +153,10 @@ func MakeSphere(seed int64, numPoints int, jitter float64) (*SphereMesh, error) 
 	// TODO: rotate an existing point into this spot instead of creating one.
 	xyz = append(xyz, 0, 0, 1)
 	latLon = append(latLon, [2]float64{-90.0, 45.0})
-
 	tri = addSouthPoleToMesh((len(xyz)/3)-1, tri)
 
-	mesh := NewTriangleMesh(0, len(tri.Triangles), make([]Vertex, numPoints+1), tri.Triangles, tri.Halfedges)
 	return &SphereMesh{
-		mesh:   mesh,
+		mesh:   NewTriangleMesh(numPoints+1, tri.Triangles, tri.Halfedges),
 		xyz:    xyz,
 		latLon: latLon,
 	}, nil
