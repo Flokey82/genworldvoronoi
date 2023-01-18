@@ -14,8 +14,8 @@ type Geo struct {
 	PlateToVector        []vectors.Vec3 // Plate tectonics / movement vectors
 	PlateIsOcean         map[int]bool   // Plate was chosen to be an ocean plate
 	PlateRegs            []int          // Plate seed points / regions
-	RegionToWindVec      []Vertex       // Point / region wind vector
-	RegionToWindVecLocal []Vertex       // Point / region wind vector (local)
+	RegionToWindVec      [][2]float64   // Point / region wind vector
+	RegionToWindVecLocal [][2]float64   // Point / region wind vector (local)
 	RegionToPlate        []int          // Point / region to plate mapping
 	NumPlates            int            // Number of generated plates
 	NumVolcanoes         int            // Number of generated volcanoes
@@ -35,8 +35,8 @@ func newGeo(seed int64, numPlates, numPoints int, jitter float64) (*Geo, error) 
 		PlateIsOcean:         make(map[int]bool),
 		BaseObject:           newBaseObject(seed, result),
 		Resources:            newResources(mesh.numRegions),
-		RegionToWindVec:      make([]Vertex, mesh.numRegions),
-		RegionToWindVecLocal: make([]Vertex, mesh.numRegions),
+		RegionToWindVec:      make([][2]float64, mesh.numRegions),
+		RegionToWindVecLocal: make([][2]float64, mesh.numRegions),
 		NumPlates:            numPlates,
 		NumVolcanoes:         10, // TODO: Allow independent configuration.
 		NumPoints:            numPoints,

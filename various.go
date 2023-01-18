@@ -11,8 +11,6 @@ import (
 	"github.com/Flokey82/go_gens/vectors"
 )
 
-type Vertex [2]float64
-
 // getCentroidOfTriangle returns the centroid of a triangle defined by
 // the xyz coordinates a, b, c as a vectors.Vec3.
 func getCentroidOfTriangle(a, b, c []float64) vectors.Vec3 {

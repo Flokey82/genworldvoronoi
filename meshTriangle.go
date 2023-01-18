@@ -7,18 +7,20 @@ type TriangleMesh struct {
 	numSides     int
 	numRegions   int
 	numTriangles int
+	numHalfedges int
 }
 
 // NewTriangleMesh takes partial mesh information and fills in the rest; the
 // partial information is generated in create.js or in fromDelaunator.
-func NewTriangleMesh(numRegions int, tris []int, halfEdges []int) *TriangleMesh {
+func NewTriangleMesh(numRegions int, tris, halfEdges []int) *TriangleMesh {
 	// Update internal data structures to match the input mesh.
 	tm := &TriangleMesh{
+		Triangles:    tris,
+		Halfedges:    halfEdges,
 		numRegions:   numRegions,
 		numSides:     len(tris),
 		numTriangles: len(tris) / 3,
-		Triangles:    tris,
-		Halfedges:    halfEdges,
+		numHalfedges: len(halfEdges),
 	}
 
 	// Construct an index for finding sides connected to a region

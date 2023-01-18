@@ -12,6 +12,9 @@ import (
 )
 
 type BaseObject struct {
+	mesh              *TriangleMesh   // Triangle mesh containing the sphere information
+	noise             *Noise          // Opensimplex noise initialized with above seed
+	rand              *rand.Rand      // Rand initialized with above seed
 	XYZ               []float64       // Point / region xyz coordinates
 	LatLon            [][2]float64    // Point / region latitude and longitude
 	Elevation         []float64       // Point / region elevation
@@ -42,14 +45,15 @@ type BaseObject struct {
 	orderTri          []int           // Triangles in uphill order of elevation.
 	sideFlow          []float64       // Flow intensity through sides
 	Seed              int64           // Seed for random number generators
-	rand              *rand.Rand      // Rand initialized with above seed
-	noise             *Noise          // Opensimplex noise initialized with above seed
-	mesh              *TriangleMesh   // Triangle mesh containing the sphere information
 }
 
 func newBaseObject(seed int64, sphere *SphereMesh) *BaseObject {
 	mesh := sphere.mesh
 	return &BaseObject{
+		Seed:              seed,
+		rand:              rand.New(rand.NewSource(seed)),
+		noise:             NewNoise(6, 2.0/3.0, seed),
+		mesh:              sphere.mesh,
 		XYZ:               sphere.xyz,
 		LatLon:            sphere.latLon,
 		Elevation:         make([]float64, mesh.numRegions),
@@ -77,10 +81,6 @@ func newBaseObject(seed int64, sphere *SphereMesh) *BaseObject {
 		RegionIsVolcano:   make(map[int]bool),
 		RegionIsWaterfall: make(map[int]bool),
 		RegionCompression: make(map[int]float64),
-		Seed:              seed,
-		rand:              rand.New(rand.NewSource(seed)),
-		noise:             NewNoise(6, 2.0/3.0, seed),
-		mesh:              sphere.mesh,
 	}
 }
 

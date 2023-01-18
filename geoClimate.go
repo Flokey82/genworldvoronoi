@@ -79,7 +79,7 @@ func (m *Geo) getTriTemperature(t int, maxElev float64) float64 {
 // getGlobalWindVector returns a vector for the global wind at the given latitude.
 // NOTE: This is based on the trade winds on... well, earth.
 // See: https://en.wikipedia.org/wiki/Trade_winds
-func getGlobalWindVector(lat float64) Vertex {
+func getGlobalWindVector(lat float64) [2]float64 {
 	// Based on latitude, we calculate the wind vector angle.
 	var degree float64
 	if latAbs := math.Abs(lat); latAbs >= 0 && latAbs <= 30 {
@@ -114,7 +114,7 @@ func getGlobalWindVector(lat float64) Vertex {
 		}
 	}
 	rad := degToRad(degree)
-	return Vertex{math.Cos(rad), math.Sin(rad)}
+	return [2]float64{math.Cos(rad), math.Sin(rad)}
 }
 
 // assignWindVectors constructs faux global wind cells reminiscent of a simplified earth model.
@@ -122,13 +122,13 @@ func getGlobalWindVector(lat float64) Vertex {
 // by the topography / elevation changes. Please note that the code for local winds is incomplete.
 func (m *Geo) assignWindVectors() {
 	// Based on latitude of each region, we calculate the wind vector.
-	regWindVec := make([]Vertex, m.mesh.numRegions)
+	regWindVec := make([][2]float64, m.mesh.numRegions)
 	for i := range regWindVec {
 		regWindVec[i] = getGlobalWindVector(m.LatLon[i][0])
 	}
 
 	// Local wind vectors.
-	regWindVecLocal := make([]Vertex, m.mesh.numRegions)
+	regWindVecLocal := make([][2]float64, m.mesh.numRegions)
 	_, maxElev := minMax(m.Elevation)
 
 	// Experimental: Local wind vectors based on temperature gradients.
@@ -179,7 +179,7 @@ func (m *Geo) assignWindVectors() {
 				v = v.Add(vectors.Normalize(vectors.NewVec2(ve[0], ve[1])).Mul(tempNb - tempReg))
 			}
 			v = vectors.Normalize(v)
-			regWindVecLocal[r] = Vertex{v.X, v.Y}
+			regWindVecLocal[r] = [2]float64{v.X, v.Y}
 		}
 	} else {
 		// Add wind deflection based on altitude changes.
@@ -244,7 +244,7 @@ func (m *Geo) assignWindVectors() {
 				}
 			}
 			v = vectors.Normalize(v)
-			regWindVecLocal[r] = Vertex{v.X, v.Y}
+			regWindVecLocal[r] = [2]float64{v.X, v.Y}
 		}
 	}
 	// Average wind vectors using neighbor vectors.
@@ -256,12 +256,12 @@ func (m *Geo) assignWindVectors() {
 
 // interpolateWindVecs interpolates the given wind vectors at their respective regions by
 // mixing them with the wind vectors of their neighbor regions.
-func (m *Geo) interpolateWindVecs(in []Vertex, steps int) []Vertex {
+func (m *Geo) interpolateWindVecs(in [][2]float64, steps int) [][2]float64 {
 	// Average wind vectors using neighbor vectors.
 	for i := 0; i < steps; i++ {
-		regWindVecInterpolated := make([]Vertex, m.mesh.numRegions)
+		regWindVecInterpolated := make([][2]float64, m.mesh.numRegions)
 		for r := range regWindVecInterpolated {
-			resVec := Vertex{
+			resVec := [2]float64{
 				in[r][0],
 				in[r][1],
 			}
