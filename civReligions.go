@@ -98,20 +98,21 @@ func (m *Civ) genOrganizedReligion(c *City) *Religion {
 	return m.placeReligionAt(c.ID, -1, ReligionGroupOrganized, c.Culture, parent)
 }
 
-// genOrganizedReligions generates organized religions.
-func (m *Civ) genOrganizedReligions() []*Religion {
+// PlaceNOrganizedReligions generates organized religions.
+func (m *Civ) PlaceNOrganizedReligions(n int) []*Religion {
 	var religions []*Religion
 	cities := make([]*City, len(m.Cities))
 	copy(cities, m.Cities)
 	sort.Slice(cities, func(i, j int) bool {
 		return cities[i].Score > cities[j].Score
 	})
-	if len(cities) > m.NumOrganizedReligions {
-		cities = cities[:m.NumOrganizedReligions]
+	if len(cities) > n {
+		cities = cities[:n]
 	}
 	for _, c := range cities {
 		religions = append(religions, m.genOrganizedReligion(c))
 	}
+	m.ExpandReligions()
 	return religions
 }
 
@@ -208,7 +209,7 @@ func (m *Civ) placeReligionAt(r int, founded int64, group string, culture *Cultu
 	return relg
 }
 
-func (m *Civ) expandReligions() {
+func (m *Civ) ExpandReligions() {
 	// The religious centers will be the seed points for the expansion.
 	var seeds []int
 	originToReligion := make(map[int]*Religion)

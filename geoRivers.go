@@ -5,6 +5,28 @@ import (
 	"time"
 )
 
+// assignWaterfalls finds regions that carry a river and are steep enough to be a waterfall.
+func (m *BaseObject) assignWaterfalls() {
+	steepness := m.GetSteepness()
+	wfRegs := make(map[int]bool)
+	for i, s := range steepness {
+		if m.Elevation[i] <= 0.0 {
+			continue
+		}
+		// 1.0 is the maximum steepness (90 degrees), so
+		// everything above 0.9 (81 degrees) is a waterfall.
+		if s > 0.9 && m.isRegBigRiver(i) {
+			wfRegs[i] = true
+		}
+		// TODO:
+		// - Also note that the downhill region is a waterfall?
+		// - We should differentiate somehow between the top and the bottom of the waterfall.
+		// - What if a waterfall is more than one region high?
+		// - Should we assign an ID to each waterfall?
+	}
+	m.RegionIsWaterfall = wfRegs
+}
+
 // getRivers returns the merged river segments whose flux exceeds the provided limit.
 // Each river is represented as a sequence of region indices.
 func (m *BaseObject) getRivers(limit float64) [][]int {

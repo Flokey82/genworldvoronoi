@@ -82,7 +82,7 @@ func (m *Civ) generateCivilization() {
 
 	// Place / expand folk religions.
 	start = time.Now()
-	m.expandReligions()
+	m.ExpandReligions()
 	log.Println("Done expanding religions in ", time.Since(start).String())
 
 	// Place cities and territories in regions.

@@ -30,6 +30,7 @@ type BaseObject struct {
 	LakeSize          map[int]int     // Lake ID to size mapping
 	RegionIsMountain  map[int]bool    // Point / region is a mountain
 	RegionIsVolcano   map[int]bool    // Point / region is a volcano
+	RegionIsWaterfall map[int]bool    // Point / region is a waterfall
 	RegionCompression map[int]float64 // Point / region compression factor
 	triMoisture       []float64       // Triangle moisture
 	triElevation      []float64       // Triangle elevation
@@ -74,6 +75,7 @@ func newBaseObject(seed int64, sphere *SphereMesh) *BaseObject {
 		LakeSize:          make(map[int]int),
 		RegionIsMountain:  make(map[int]bool),
 		RegionIsVolcano:   make(map[int]bool),
+		RegionIsWaterfall: make(map[int]bool),
 		RegionCompression: make(map[int]float64),
 		Seed:              seed,
 		rand:              rand.New(rand.NewSource(seed)),
@@ -763,6 +765,7 @@ func (m *BaseObject) interpolate(regions []int) (*interpolated, error) {
 	// Carry over mountains, volcanoes and compression.
 	regionIsMountain := make(map[int]bool)
 	regionIsVolcano := make(map[int]bool)
+	regionIsWaterfall := make(map[int]bool)
 	regionCompression := make(map[int]float64)
 	outRegs := make([]int, 0, 6)
 
@@ -772,6 +775,9 @@ func (m *BaseObject) interpolate(regions []int) (*interpolated, error) {
 		}
 		if m.RegionIsVolcano[r] {
 			regionIsVolcano[ipl.numRegions] = true
+		}
+		if m.RegionIsWaterfall[r] {
+			regionIsWaterfall[ipl.numRegions] = true
 		}
 		if m.RegionCompression[r] != 0 {
 			regionCompression[ipl.numRegions] = m.RegionCompression[r]
@@ -851,6 +857,7 @@ func (m *BaseObject) interpolate(regions []int) (*interpolated, error) {
 	ipl.mesh = mesh
 	ipl.RegionIsMountain = regionIsMountain
 	ipl.RegionIsVolcano = regionIsVolcano
+	ipl.RegionIsWaterfall = regionIsWaterfall
 	ipl.RegionCompression = regionCompression
 	ipl.triPool = make([]float64, mesh.numTriangles)
 	ipl.triElevation = make([]float64, mesh.numTriangles)

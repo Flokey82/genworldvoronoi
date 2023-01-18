@@ -76,6 +76,9 @@ func (m *Geo) GenerateRegPropertyDescription(p RegProperty) string {
 				str += " and might cause occasional flooding"
 			}
 		}
+		if p.HasWaterfall {
+			str += " and ends in a treacherous waterfall"
+		}
 		str += ". \n"
 	}
 	return str

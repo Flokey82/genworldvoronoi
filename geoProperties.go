@@ -16,6 +16,7 @@ type RegProperty struct {
 	DangerEarthquake    float64 // 0.0-1.0
 	DangerVolcano       float64 // 0.0-1.0
 	DangerFlood         float64 // 0.0-1.0
+	HasWaterfall        bool    // true if the region has a waterfall
 	IsValley            bool    // true if the region is a valley
 	OnIsland            bool    // true if the region is on an island
 }
@@ -93,6 +94,7 @@ func (m *Geo) getRegPropertyFunc() func(int) RegProperty {
 			DangerEarthquake:    earthquakeChance[id],
 			DangerVolcano:       volcanoEruptionChance[id],
 			DangerFlood:         floodChance[id],
+			HasWaterfall:        m.RegionIsWaterfall[id],
 			IsValley:            isValley,
 			OnIsland:            m.LandmassSize[m.Landmasses[id]] < 15, // TODO: This should use actual geographical area.
 		}

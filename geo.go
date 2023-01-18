@@ -79,6 +79,11 @@ func (m *Geo) generateGeology() {
 	m.assignWaterbodies()
 	log.Println("Done waterbodies in ", time.Since(start).String())
 
+	// Note waterfalls.
+	start = time.Now()
+	m.assignWaterfalls()
+	log.Println("Done waterfalls in ", time.Since(start).String())
+
 	// Place resources
 	start = time.Now()
 	m.placeResources()

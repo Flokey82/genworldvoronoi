@@ -381,7 +381,7 @@ func (m *Civ) tickCityDays(c *City, days int) {
 	// TODO: Maybe keep note of an inciting event, like a famine, war, etc.
 	if c.Religion == nil && m.rand.Intn(3000*356) < days && c.Population > 0 {
 		c.Religion = m.genOrganizedReligion(c)
-		m.expandReligions()
+		m.ExpandReligions()
 		m.History.AddEvent("Religion", fmt.Sprintf("A new religion was founded in %s", c.Name), c.Ref())
 	}
 }
