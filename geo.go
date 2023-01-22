@@ -16,6 +16,7 @@ type Geo struct {
 	PlateRegs            []int          // Plate seed points / regions
 	RegionToWindVec      [][2]float64   // Point / region wind vector
 	RegionToWindVecLocal [][2]float64   // Point / region wind vector (local)
+	RegionToOceanVec     [][2]float64   // Point / region ocean current vector
 	RegionToPlate        []int          // Point / region to plate mapping
 	NumPlates            int            // Number of generated plates
 	NumVolcanoes         int            // Number of generated volcanoes
@@ -37,6 +38,7 @@ func newGeo(seed int64, numPlates, numPoints int, jitter float64) (*Geo, error) 
 		Resources:            newResources(mesh.numRegions),
 		RegionToWindVec:      make([][2]float64, mesh.numRegions),
 		RegionToWindVecLocal: make([][2]float64, mesh.numRegions),
+		RegionToOceanVec:     make([][2]float64, mesh.numRegions),
 		NumPlates:            numPlates,
 		NumVolcanoes:         10, // TODO: Allow independent configuration.
 		NumPoints:            numPoints,
@@ -115,6 +117,11 @@ func (m *Geo) generateGeology() {
 	start = time.Now()
 	m.assignBiomeRegions()
 	log.Println("Done biome regions in ", time.Since(start).String())
+
+	// Assign ocean currents.
+	start = time.Now()
+	m.assignOceanCurrents()
+	log.Println("Done ocean currents in ", time.Since(start).String())
 }
 
 func (m *Geo) Tick() {

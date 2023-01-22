@@ -282,6 +282,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 			// Now draw the wind vector for the region.
 			// windVec := m.RegionToWindVec[i]
 			windVec := m.RegionToWindVecLocal[i]
+			// windVec := m.RegionToOceanVec[i]
 
 			// Calculate the coordinates of the center of the region.
 			x, y := latLonToPixels(rLat, rLon, zoom)

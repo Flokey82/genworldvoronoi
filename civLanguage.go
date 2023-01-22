@@ -172,7 +172,7 @@ var adjectivizationRules = []adjectivizationRule{{
 		if len(noun) < 9 {
 			return noun + "i"
 		}
-		return trimVowels(stringSlice(noun, 0, -4), 3)
+		return TrimVowels(stringSlice(noun, 0, -4), 3)
 	},
 }, {
 	name:        "land",
@@ -182,7 +182,7 @@ var adjectivizationRules = []adjectivizationRule{{
 		if len(noun) > 9 {
 			return stringSlice(noun, 0, -4)
 		}
-		root := trimVowels(stringSlice(noun, 0, -4), 0)
+		root := TrimVowels(stringSlice(noun, 0, -4), 0)
 		if len(root) < 3 {
 			return noun + "ic"
 		}
@@ -247,7 +247,7 @@ var adjectivizationRules = []adjectivizationRule{{
 	probability: 1,
 	condition:   regexp.MustCompile("os$"),
 	action: func(noun string) string {
-		root := trimVowels(stringSlice(noun, 0, -2), 0)
+		root := TrimVowels(stringSlice(noun, 0, -2), 0)
 		if len(root) < 4 {
 			return stringSlice(noun, 0, -1)
 		}
@@ -258,7 +258,7 @@ var adjectivizationRules = []adjectivizationRule{{
 	probability: 1,
 	condition:   regexp.MustCompile("es$"),
 	action: func(noun string) string {
-		root := trimVowels(stringSlice(noun, 0, -2), 0)
+		root := TrimVowels(stringSlice(noun, 0, -2), 0)
 		if len(root) > 7 {
 			return stringSlice(noun, 0, -1)
 		}
@@ -297,19 +297,19 @@ var adjectivizationRules = []adjectivizationRule{{
 	probability: 0.25,
 	condition:   regexp.MustCompile("^[a-zA-Z]{6}$"),
 	action: func(noun string) string {
-		return trimVowels(stringSlice(noun, 0, -1), 3) + "ish"
+		return TrimVowels(stringSlice(noun, 0, -1), 3) + "ish"
 	},
 }, {
 	name:        "an",
 	probability: 0.5,
 	condition:   regexp.MustCompile("^[a-zA-Z]{0-7}$"),
 	action: func(noun string) string {
-		return trimVowels(noun, 3) + "an"
+		return TrimVowels(noun, 3) + "an"
 	},
 }}
 
-// get adjective form from noun
-func getAdjective(noun string) string {
+// GetAdjective get adjective form from noun
+func GetAdjective(noun string) string {
 	for _, rule := range adjectivizationRules {
 		if P(rule.probability) && rule.condition.MatchString(noun) {
 			return rule.action(noun)
@@ -321,22 +321,23 @@ func getAdjective(noun string) string {
 // chars that serve as vowels
 const vowelRange = `aeiouyɑ'əøɛœæɶɒɨɪɔɐʊɤɯаоиеёэыуюяàèìòùỳẁȁȅȉȍȕáéíóúýẃőűâêîôûŷŵäëïöüÿẅãẽĩõũỹąęįǫųāēīōūȳăĕĭŏŭǎěǐǒǔȧėȯẏẇạẹịọụỵẉḛḭṵṳ`
 
-func isVowel(c rune) bool {
+// IsVowel returns true if the given rune is a vowel.
+func IsVowel(c rune) bool {
 	return strings.IndexRune(vowelRange, c) != -1
 }
 
-// remove vowels from the end of the string
-func trimVowels(str string, minLength int) string {
-	for len(str) > minLength && isVowel(rune(str[len(str)-1])) {
+// TrimVowels remove vowels from the end of the string.
+func TrimVowels(str string, minLength int) string {
+	for len(str) > minLength && IsVowel(rune(str[len(str)-1])) {
 		str = str[:len(str)-1]
 	}
 	return str
 }
 
-// getNounPlural returns the plural form of a noun.
+// GetNounPlural returns the plural form of a noun.
 // This takes in account "witch" and "fish" which are
 // irregular.
-func getNounPlural(noun string) string {
+func GetNounPlural(noun string) string {
 	if strings.HasSuffix(noun, "s") || strings.HasSuffix(noun, "x") || strings.HasSuffix(noun, "z") || strings.HasSuffix(noun, "ch") || strings.HasSuffix(noun, "sh") {
 		return noun + "es"
 	}

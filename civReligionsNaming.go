@@ -72,9 +72,9 @@ func (m *Civ) getReligionName(form, deity string, r int) (string, string) {
 		if base == "" {
 			return "TODO_PLACE"
 		}
-		name := trimVowels(strings.Split(base, " ")[0], 3)
+		name := TrimVowels(strings.Split(base, " ")[0], 3)
 		if adj != "" {
-			return getAdjective(name)
+			return GetAdjective(name)
 		}
 		return name
 	}
@@ -83,10 +83,10 @@ func (m *Civ) getReligionName(form, deity string, r int) (string, string) {
 	case MethodRandomType:
 		return random() + " " + rType(), ReligionExpGlobal
 	case MethodRandomIsm:
-		return trimVowels(random(), 3) + "ism", ReligionExpGlobal
+		return TrimVowels(random(), 3) + "ism", ReligionExpGlobal
 	case MethodSurpremeIsm:
 		if deity != "" {
-			return trimVowels(supreme(), 3) + "ism", ReligionExpGlobal
+			return TrimVowels(supreme(), 3) + "ism", ReligionExpGlobal
 		}
 	case MethodFaithOfSupreme:
 		if deity != "" {
@@ -134,13 +134,13 @@ func (m *Civ) getReligionName(form, deity string, r int) (string, string) {
 	case MethodPlaceIsm:
 		return place("") + "ism", ReligionExpState
 	case MethodCultureIsm:
-		return trimVowels(culture(), 3) + "ism", ReligionExpCulture
+		return TrimVowels(culture(), 3) + "ism", ReligionExpCulture
 	case MethodPlaceIanType:
 		return place("adj") + " " + rType(), ReligionExpState
 	case MethodCultureType:
 		return culture() + " " + rType(), ReligionExpCulture
 	}
-	return trimVowels(random(), 3) + "ism", ReligionExpGlobal
+	return TrimVowels(random(), 3) + "ism", ReligionExpGlobal
 }
 
 // getDeityName returns a deity name for the given culture.

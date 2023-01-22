@@ -38,6 +38,31 @@ func len2(a [2]float64) float64 {
 	return math.Sqrt(a[0]*a[0] + a[1]*a[1])
 }
 
+// normalize2 returns the normalized vector of the given vector.
+func normalize2(a [2]float64) [2]float64 {
+	l := 1.0 / len2(a)
+	return [2]float64{
+		a[0] * l,
+		a[1] * l,
+	}
+}
+
+// add2 returns the sum of two vectors.
+func add2(a, b [2]float64) [2]float64 {
+	return [2]float64{
+		a[0] + b[0],
+		a[1] + b[1],
+	}
+}
+
+// scale2 returns the scaled vector of the given vector.
+func scale2(v [2]float64, s float64) [2]float64 {
+	return [2]float64{
+		v[0] * s,
+		v[1] * s,
+	}
+}
+
 // normal2 returns the normalized vector of the given vector.
 func normal2(v [2]float64) [2]float64 {
 	l := 1.0 / len2(v)

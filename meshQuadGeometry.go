@@ -28,7 +28,7 @@ func (qg *QuadGeometry) setMap(mesh *TriangleMesh, m *Geo) {
 	idxs := qg.indexes
 
 	regXYZ := m.XYZ
-	triXYZ := m.tXYZ
+	triXYZ := m.triXYZ
 	xyz = append(regXYZ[:], triXYZ...)
 	// TODO: multiply all the r, t points by the elevation, taking V into account
 

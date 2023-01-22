@@ -726,8 +726,8 @@ func (m *Map) ExportOBJ(path string) error {
 
 	// Triangle vertices
 	if drawPlates || drawRivers {
-		for i := 0; i < len(m.tXYZ); i += 3 {
-			ve := convToVec3(m.tXYZ[i:]).Mul(1.03 + 0.01*m.triElevation[i/3])
+		for i := 0; i < len(m.triXYZ); i += 3 {
+			ve := convToVec3(m.triXYZ[i:]).Mul(1.03 + 0.01*m.triElevation[i/3])
 			w.WriteString(fmt.Sprintf("v %f %f %f \n", ve.X, ve.Y, ve.Z))
 		}
 		w.Flush()

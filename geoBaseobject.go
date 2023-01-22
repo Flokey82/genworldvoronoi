@@ -12,9 +12,10 @@ import (
 )
 
 type BaseObject struct {
-	mesh              *TriangleMesh   // Triangle mesh containing the sphere information
-	noise             *Noise          // Opensimplex noise initialized with above seed
+	Seed              int64           // Seed for random number generators
 	rand              *rand.Rand      // Rand initialized with above seed
+	noise             *Noise          // Opensimplex noise initialized with above seed
+	mesh              *TriangleMesh   // Triangle mesh containing the sphere information
 	XYZ               []float64       // Point / region xyz coordinates
 	LatLon            [][2]float64    // Point / region latitude and longitude
 	Elevation         []float64       // Point / region elevation
@@ -37,14 +38,13 @@ type BaseObject struct {
 	RegionCompression map[int]float64 // Point / region compression factor
 	triMoisture       []float64       // Triangle moisture
 	triElevation      []float64       // Triangle elevation
-	tXYZ              []float64       // Triangle xyz coordinates
+	triXYZ            []float64       // Triangle xyz coordinates
 	triPool           []float64       // Triangle water pool depth
 	triLatLon         [][2]float64    // Triangle latitude and longitude
 	triFlow           []float64       // Triangle flow intensity (rainfall)
 	triDownflowSide   []int           // Triangle mapping to side through which water flows downhill.
 	orderTri          []int           // Triangles in uphill order of elevation.
 	sideFlow          []float64       // Flow intensity through sides
-	Seed              int64           // Seed for random number generators
 }
 
 func newBaseObject(seed int64, sphere *SphereMesh) *BaseObject {
@@ -63,13 +63,6 @@ func newBaseObject(seed int64, sphere *SphereMesh) *BaseObject {
 		Rainfall:          make([]float64, mesh.numRegions),
 		Downhill:          make([]int, mesh.numRegions),
 		Drainage:          make([]int, mesh.numRegions),
-		triPool:           make([]float64, mesh.numTriangles),
-		triElevation:      make([]float64, mesh.numTriangles),
-		triMoisture:       make([]float64, mesh.numTriangles),
-		triDownflowSide:   make([]int, mesh.numTriangles),
-		orderTri:          make([]int, mesh.numTriangles),
-		triFlow:           make([]float64, mesh.numTriangles),
-		sideFlow:          make([]float64, mesh.numSides),
 		Waterbodies:       make([]int, mesh.numRegions),
 		WaterbodySize:     make(map[int]int),
 		BiomeRegions:      make([]int, mesh.numRegions),
@@ -81,6 +74,13 @@ func newBaseObject(seed int64, sphere *SphereMesh) *BaseObject {
 		RegionIsVolcano:   make(map[int]bool),
 		RegionIsWaterfall: make(map[int]bool),
 		RegionCompression: make(map[int]float64),
+		triPool:           make([]float64, mesh.numTriangles),
+		triElevation:      make([]float64, mesh.numTriangles),
+		triMoisture:       make([]float64, mesh.numTriangles),
+		triDownflowSide:   make([]int, mesh.numTriangles),
+		orderTri:          make([]int, mesh.numTriangles),
+		triFlow:           make([]float64, mesh.numTriangles),
+		sideFlow:          make([]float64, mesh.numSides),
 	}
 }
 
@@ -121,7 +121,7 @@ func (m *BaseObject) generateTriCenters() {
 
 	}
 	m.triLatLon = tLatLon
-	m.tXYZ = tXYZ
+	m.triXYZ = tXYZ
 }
 
 // assignTriValues averages out the values of the mesh points / regions and assigns them
@@ -544,7 +544,7 @@ func (m *BaseObject) regTriNormal(t int, nbs []int) vectors.Vec3 {
 
 	// Get the origin vector of the triangle center.
 	// We will rotate the points with this vector until the triangle is facing upwards.
-	center := convToVec3(m.tXYZ[t*3:]).Normalize()
+	center := convToVec3(m.triXYZ[t*3:]).Normalize()
 
 	// Get the axis to rotate the 'center' vector to the global up vector.
 	axis := center.Cross(vectors.Up)
