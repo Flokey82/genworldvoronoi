@@ -6,6 +6,7 @@ import (
 	"math/rand"
 
 	"github.com/Flokey82/genbiome"
+	"github.com/Flokey82/go_gens/genlanguage"
 )
 
 // GetCulture returns the culture of the given region (if any).
@@ -171,8 +172,8 @@ type Culture struct {
 	// Parent    *Culture
 	// Children  []*Culture
 	// Extinct   bool
-	Language *Language // Language of the culture
-	Religion *Religion // Religion of the culture
+	Language *genlanguage.Language // Language of the culture
+	Religion *Religion             // Religion of the culture
 
 	// TODO: DO NOT CACHE THIS!
 	Regions []int

@@ -4,6 +4,8 @@ import (
 	"container/heap"
 	"log"
 	"sort"
+
+	"github.com/Flokey82/go_gens/genlanguage"
 )
 
 func (m *Civ) regPlaceNEmpires(n int) {
@@ -136,7 +138,7 @@ type Empire struct {
 	Capital  *City   // Capital city
 	Cities   []*City // Cities within the territory
 	Culture  *Culture
-	Language *Language
+	Language *genlanguage.Language
 
 	// TODO: DO NOT CACHE THIS!
 	Regions []int // Regions that are part of the empire
@@ -154,7 +156,7 @@ func (m *Civ) GetEmpires() []*Empire {
 	var res []*Empire
 	for i := 0; i < m.NumEmpires; i++ {
 		capital := m.Cities[i]
-		var lang *Language
+		var lang *genlanguage.Language
 		if c := m.GetCulture(capital.ID); c != nil && c.Language != nil {
 			lang = c.Language
 		} else {

@@ -3,6 +3,8 @@ package genworldvoronoi
 import (
 	"math/rand"
 	"strings"
+
+	"github.com/Flokey82/go_gens/genlanguage"
 )
 
 var approaches []string
@@ -74,7 +76,7 @@ func (m *Civ) getReligionName(form, deity string, r int) (string, string) {
 		}
 		name := TrimVowels(strings.Split(base, " ")[0], 3)
 		if adj != "" {
-			return GetAdjective(name)
+			return genlanguage.GetAdjective(name)
 		}
 		return name
 	}

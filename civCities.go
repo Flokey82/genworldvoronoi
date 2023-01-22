@@ -9,6 +9,7 @@ import (
 
 	"github.com/Flokey82/genbiome"
 	"github.com/Flokey82/go_gens/gameconstants"
+	"github.com/Flokey82/go_gens/genlanguage"
 	"github.com/Flokey82/go_gens/utils"
 )
 
@@ -561,22 +562,22 @@ func (m *Civ) TickCity(c *City) {
 
 // City represents a city in the world.
 type City struct {
-	ID                int       // Region where the city is located
-	Name              string    // Name of the city
-	Type              TownType  // Type of city
-	Score             float64   // Score of the fitness function
-	Population        int       // Population of the city
-	MaxPopulation     int       // Maximum population of the city
-	Culture           *Culture  // Culture of the city region
-	Language          *Language // Language of the city
-	Religion          *Religion // Religion originating from the city
-	Founded           int64     // Year when the city was founded
-	EconomicPotential float64   // Economic potential of the city (DYNAMIC)
-	Trade             float64   // Trade value of the city (DYNAMIC)
-	Resources         float64   // Resources value of the city (PARTLY DYNAMIC)
-	Agriculture       float64   // Agriculture value of the city (STATIC)
-	Attractiveness    float64   // Attractiveness of the city (STATIC)
-	TradePartners     int       // Number of cities within trade range
+	ID                int                   // Region where the city is located
+	Name              string                // Name of the city
+	Type              TownType              // Type of city
+	Score             float64               // Score of the fitness function
+	Population        int                   // Population of the city
+	MaxPopulation     int                   // Maximum population of the city
+	Culture           *Culture              // Culture of the city region
+	Language          *genlanguage.Language // Language of the city
+	Religion          *Religion             // Religion originating from the city
+	Founded           int64                 // Year when the city was founded
+	EconomicPotential float64               // Economic potential of the city (DYNAMIC)
+	Trade             float64               // Trade value of the city (DYNAMIC)
+	Resources         float64               // Resources value of the city (PARTLY DYNAMIC)
+	Agriculture       float64               // Agriculture value of the city (STATIC)
+	Attractiveness    float64               // Attractiveness of the city (STATIC)
+	TradePartners     int                   // Number of cities within trade range
 }
 
 // Ref returns the object reference of the city.
