@@ -353,6 +353,14 @@ func roundToDecimals(v, d float64) float64 {
 	return math.Round(v*m) / m
 }
 
+func ra(array []string) string {
+	return array[rand.Intn(len(array))]
+}
+
+func rw(mp map[string]int) string {
+	return ra(weightedToArray(mp))
+}
+
 // weightedToArray converts a map of weighted values to an array.
 func weightedToArray(weighted map[string]int) []string {
 	var res []string

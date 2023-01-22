@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
+
+	"github.com/Flokey82/go_gens/genlanguage"
 )
 
 // GetReligion returns the religion of the given region (if any).
@@ -141,9 +143,13 @@ func (m *Civ) placeReligionAt(r int, founded int64, group string, culture *Cultu
 		if parent != nil && parent.DeityApproach != "" {
 			approach = parent.DeityApproach
 		} else {
-			approach = ra(approaches)
+			approach = ra(DeityMeaningApproaches)
 		}
-		relg.Deity, relg.DeityMeaning = getDeityName(culture, approach)
+		var lang *genlanguage.Language
+		if culture != nil {
+			lang = culture.Language
+		}
+		relg.Deity, relg.DeityMeaning = genlanguage.GetDeityName(lang, approach)
 		relg.DeityApproach = approach
 	}
 
