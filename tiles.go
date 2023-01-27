@@ -702,7 +702,7 @@ func (m *Map) GetGeoJSONCities(la1, lo1, la2, lo2 float64, zoom int) ([]byte, er
 		f.SetProperty("culture", fmt.Sprintf("%s (%s)", c.Culture.Name, c.Culture.Type))
 		if r := m.GetReligion(c.ID); r != nil {
 			f.SetProperty("religion", r.Name)
-			f.SetProperty("deity", r.GetDeityName())
+			f.SetProperty("deity", r.Deity.FullName())
 		}
 		f.SetProperty("population", c.Population)
 		f.SetProperty("popgrowth", c.PopulationGrowthRate())

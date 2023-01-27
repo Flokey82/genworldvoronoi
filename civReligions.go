@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"github.com/Flokey82/go_gens/genlanguage"
+	"github.com/Flokey82/go_gens/genreligion"
 )
 
 // GetReligion returns the religion of the given region (if any).
@@ -53,37 +54,28 @@ func (m *Civ) GetReligion(r int) *Religion {
 // would allow us to infer the relationships between deities and symbols and
 // if mundane events hold any significance for a particular religion.
 type Religion struct {
-	ID            int       // The region where the religion was founded
-	Name          string    // The name of the religion
-	Culture       *Culture  // The culture that the religion is based on
-	Parent        *Religion // The parent religion (if any)
-	Type          string    // The type of the religion
-	Form          string    // The form of the religion
-	Deity         string    // The main deity of the religion (if any)
-	DeityMeaning  string    // The meaning of the main deity of the religion (if any)
-	DeityApproach string    // The approach for the deity generation.
-	Expansion     string    // How the religion wants to expand
-	Expansionism  float64   // How much the religion wants to expand
-	Founded       int64     // Year when the religion was founded
-}
-
-func (r *Religion) GetDeityName() string {
-	if r.Deity == "" {
-		return ""
-	}
-	return r.Deity + ", The " + r.DeityMeaning
+	ID           int                // The region where the religion was founded
+	Name         string             // The name of the religion
+	Culture      *Culture           // The culture that the religion is based on
+	Parent       *Religion          // The parent religion (if any)
+	Type         string             // The type of the religion
+	Form         string             // The form of the religion
+	Deity        *genreligion.Deity // The deity of the religion (if any)
+	Expansion    string             // How the religion wants to expand
+	Expansionism float64            // How much the religion wants to expand
+	Founded      int64              // Year when the religion was founded
 }
 
 func (r *Religion) String() string {
-	if r.Deity == "" {
+	if r.Deity == nil {
 		return fmt.Sprintf("%s (%s, %s, %s)", r.Name, r.Type, r.Expansion, r.Form)
 	}
-	return fmt.Sprintf("%s (%s, %s, %s)\n=%s", r.Name, r.Type, r.Expansion, r.Form, r.GetDeityName())
+	return fmt.Sprintf("%s (%s, %s, %s)\n=%s", r.Name, r.Type, r.Expansion, r.Form, r.Deity.FullName())
 }
 
 // genFolkReligion generates a folk religion for the given culture.
 func (m *Civ) genFolkReligion(c *Culture) *Religion {
-	return m.placeReligionAt(c.ID, -1, ReligionGroupFolk, c, nil)
+	return m.placeReligionAt(c.ID, -1, genreligion.GroupFolk, c, nil)
 }
 
 // genOrganizedReligion generates an organized religion for the given city.
@@ -97,7 +89,7 @@ func (m *Civ) genOrganizedReligion(c *City) *Religion {
 			}
 		}
 	}
-	return m.placeReligionAt(c.ID, -1, ReligionGroupOrganized, c.Culture, parent)
+	return m.placeReligionAt(c.ID, -1, genreligion.GroupOrganized, c.Culture, parent)
 }
 
 // PlaceNOrganizedReligions generates organized religions.
@@ -126,7 +118,11 @@ func (m *Civ) placeReligionAt(r int, founded int64, group string, culture *Cultu
 	if founded == -1 {
 		founded = m.History.GetYear()
 	}
-	form := rw(forms[group])
+
+	rlgGen := genreligion.NewGenerator(int64(r))
+
+	// Pick the form of the religion.
+	form := rlgGen.RandFormFromGroup(group)
 
 	relg := &Religion{
 		ID:      r,
@@ -138,35 +134,42 @@ func (m *Civ) placeReligionAt(r int, founded int64, group string, culture *Cultu
 	}
 
 	// If appropriate, add a deity to the religion.
-	if form != ReligionFormNontheism && form != ReligionFormAnimism {
-		var approach string
-		if parent != nil && parent.DeityApproach != "" {
-			approach = parent.DeityApproach
-		} else {
-			approach = ra(DeityMeaningApproaches)
-		}
+	if form != genreligion.FormNontheism && form != genreligion.FormAnimism {
+		// Get the language of the culture.
 		var lang *genlanguage.Language
 		if culture != nil {
 			lang = culture.Language
 		}
-		relg.Deity, relg.DeityMeaning = genlanguage.GetDeityName(lang, approach)
-		relg.DeityApproach = approach
+
+		// If we have a parent religion with a deity, we use the same approach
+		// to generate the deity, otherwise we pick a random approach.
+		var approach string
+		if parent != nil && parent.Deity.Approach != "" {
+			approach = parent.Deity.Approach
+		} else {
+			approach = rlgGen.RandDeityGenMethod()
+		}
+
+		// Generate a deity.
+		relg.Deity = rlgGen.GetDeity(lang, approach)
 	}
 
 	// Select name, expansion, and expansionism.
-	if group == ReligionGroupOrganized {
+	if group == genreligion.GroupOrganized {
 		// TODO: If parent is not nil, maybe swich form to cult or heresy?
 		// Check if we have a state at this location
-		name, expansion := m.getReligionName(form, relg.GetDeityName(), r)
-		if expansion == ReligionExpState && m.RegionToCityState[r] == -1 {
+		name, expansion := m.getReligionName(rlgGen, culture, form, relg.Deity.FullName(), r)
+
+		// Make sure the expansion type is valid.
+		if (expansion == ReligionExpState && m.RegionToCityState[r] == -1) ||
+			(expansion == ReligionExpCulture && culture == nil) {
 			expansion = ReligionExpGlobal
 		}
-		if expansion == ReligionExpCulture && culture == nil {
-			expansion = ReligionExpGlobal
-		}
+
+		// Assign name, expansion, and expansionism.
 		relg.Name = name
 		relg.Expansion = expansion
-		relg.Expansionism = culture.Expansionism*rand.Float64()*1.5 + 0.5
+		relg.Expansionism = culture.Expansionism*rand.Float64()*1.5 + 0.5 // TODO: Move this to religion generator.
 		// if expansion == "state" {
 		// 	origin = m.RegionToCityState[c.ID]
 		// }
@@ -188,12 +191,10 @@ func (m *Civ) placeReligionAt(r int, founded int64, group string, culture *Cultu
 
 		// const origins = folk ? [folk.i] : getReligionsInRadius({x, y, r: 150 / count, max: 2});
 		// const expansionism = rand(3, 8);
-		// const baseColor = religions[culture]?.color || states[state]?.color || getRandomColor();
-		// const color = getMixedColor(baseColor, 0.3, 0);
-	} else if group == ReligionGroupFolk {
-		relg.Name = m.getFolkReligionName(culture, form)
+	} else if group == genreligion.GroupFolk {
+		relg.Name = m.getFolkReligionName(rlgGen, culture, form)
 		relg.Expansion = ReligionExpCulture
-		relg.Expansionism = culture.Expansionism * rand.Float64() * 1.5
+		relg.Expansionism = culture.Expansionism * rand.Float64() * 1.5 // TODO: Move this to religion generator.
 	}
 
 	// If there is a parent religion, add an event noting that this branch

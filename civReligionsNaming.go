@@ -4,27 +4,28 @@ import (
 	"strings"
 
 	"github.com/Flokey82/go_gens/genlanguage"
+	"github.com/Flokey82/go_gens/genreligion"
 )
 
-var DeityMeaningApproaches = genlanguage.DeityMeaningApproaches
+func (m *Civ) getFolkReligionName(rlgGen *genreligion.Generator, c *Culture, form string) string {
+	if c == nil {
+		return "MISSING_CULTURE"
+	}
 
-func (m *Civ) getFolkReligionName(c *Culture, form string) string {
-	return c.Name + " " + rw(types[form])
+	return c.Name + " " + rlgGen.RandTypeFromForm(form)
 }
 
 // getReligionName generates a name for the given form and deity at the given center.
 // This code is based on:
 // https://github.com/Azgaar/Fantasy-Map-Generator/blob/master/modules/religions-generator.js
-func (m *Civ) getReligionName(form, deity string, r int) (string, string) {
-	// Returns a random name from the culture at the given region.
-	random := func() string {
-		c := m.GetCulture(r)
-		return c.Language.MakeName()
+func (m *Civ) getReligionName(rlgGen *genreligion.Generator, c *Culture, form, deity string, r int) (string, string) {
+	if c == nil {
+		return "MISSING_CULTURE", "MISSING_CULTURE"
 	}
 
-	// Returns a random, weighted type for the religion form.
-	rType := func() string {
-		return rw(types[form])
+	// Returns a random name from the culture at the given region.
+	random := func() string {
+		return c.Language.MakeName()
 	}
 
 	// Splits the deity name into parts and returns the first part.
@@ -35,131 +36,85 @@ func (m *Civ) getReligionName(form, deity string, r int) (string, string) {
 
 	// Returns the name of the culture at the given region.
 	culture := func() string {
-		c := m.GetCulture(r)
 		return c.Name
 	}
 
-	// Returns the name of the cit or state at the given region.
-	place := func(adj string) string {
-		// Check if we have a city at the region.
-		var base string
+	// Returns the name of the city at the given region.
+	city := func() string {
 		for _, city := range m.Cities {
 			if city.ID == r {
-				base = city.Name
-				break
+				return city.Name
 			}
 		}
-		if base == "" {
-			// Check if we have a state at the region.
-			if stateId := m.RegionToCityState[r]; stateId != 0 {
-				for _, city := range m.Cities {
-					if city.ID == stateId {
-						base = city.Name
-						break
-					}
+		return ""
+	}
+
+	// Returns the name of the city state at the given region.
+	state := func() string {
+		if stateId := m.RegionToCityState[r]; stateId >= 0 {
+			for _, city := range m.Cities {
+				if city.ID == stateId {
+					return city.Name
 				}
 			}
 		}
+		return ""
+	}
+
+	// Returns the name of the city, -state, or culture at the given region.
+	place := func() string {
+		// Get the name of the city at the region.
+		base := city()
+
+		// If unsuccessful, Check if we have a state at the region.
 		if base == "" {
-			// Check if we have a culture at the region.
-			if cultureId := m.RegionToCulture[r]; cultureId != 0 {
-				base = m.Cultures[cultureId].Name
-			}
+			base = state()
 		}
+
+		// If unsuccessful, use the culture name.
+		if base == "" {
+			base = culture()
+		}
+
+		// If unsuccessful, return a placeholder.
 		if base == "" {
 			return "TODO_PLACE"
 		}
-		name := TrimVowels(strings.Split(base, " ")[0], 3)
-		if adj != "" {
-			return genlanguage.GetAdjective(name)
-		}
-		return name
+
+		// Trim the vowels from the name and return it.
+		return TrimVowels(strings.Split(base, " ")[0], 3)
 	}
 
-	switch rw(GenReligionMethods) {
-	case MethodRandomType:
-		return random() + " " + rType(), ReligionExpGlobal
-	case MethodRandomIsm:
-		return TrimVowels(random(), 3) + "ism", ReligionExpGlobal
-	case MethodSurpremeIsm:
+	// Attempt to generate a name for the religion.
+	switch rlgGen.RandGenMethod() {
+	case genreligion.MethodFaithOfSupreme:
 		if deity != "" {
-			return TrimVowels(supreme(), 3) + "ism", ReligionExpGlobal
+			return rlgGen.GenNameFaitOfSupreme(deity), ReligionExpGlobal
 		}
-	case MethodFaithOfSupreme:
+	case genreligion.MethodRandomType:
+		return rlgGen.GenNamedTypeOfForm(random(), form), ReligionExpGlobal
+	case genreligion.MethodPlaceIanType:
+		placeAdj := genlanguage.GetAdjective(place()) // Generate adjective for the place.
+		return rlgGen.GenNamedTypeOfForm(placeAdj+"ian", form), ReligionExpState
+	case genreligion.MethodCultureType:
+		return rlgGen.GenNamedTypeOfForm(culture(), form), ReligionExpCulture
+	case genreligion.MethodSurpremeIsm:
 		if deity != "" {
-			// Select a random name from the list.
-			// but ensure that the name is not a subset of the deity name
-			// and vice versa. This is to avoid names like "The Way of The Way".
-			var prefix string
-			for i := 0; i < 100; i++ {
-				prefix = ra([]string{
-					"Faith",
-					"Way",
-					"Path",
-					"Word",
-					"Truth",
-					"Law",
-					"Order",
-					"Light",
-					"Darkness",
-					"Gift",
-					"Grace",
-					"Witnesses",
-					"Servants",
-					"Messengers",
-					"Believers",
-					"Disciples",
-					"Followers",
-					"Children",
-					"Brothers",
-					"Sisters",
-					"Brothers and Sisters",
-					"Sons",
-					"Daughters",
-					"Sons and Daughters",
-					"Brides",
-					"Grooms",
-					"Brides and Grooms",
-				})
-				if !strings.Contains(strings.ToLower(deity), strings.ToLower(prefix)) &&
-					!strings.Contains(strings.ToLower(prefix), strings.ToLower(deity)) {
-					break
-				}
-			}
-			return prefix + " of " + supreme(), ReligionExpGlobal
+			return rlgGen.GenNamedIsm(supreme()), ReligionExpGlobal
 		}
-	case MethodPlaceIsm:
-		return place("") + "ism", ReligionExpState
-	case MethodCultureIsm:
-		return TrimVowels(culture(), 3) + "ism", ReligionExpCulture
-	case MethodPlaceIanType:
-		return place("adj") + " " + rType(), ReligionExpState
-	case MethodCultureType:
-		return culture() + " " + rType(), ReligionExpCulture
+	case genreligion.MethodRandomIsm:
+		return rlgGen.GenNamedIsm(random()), ReligionExpGlobal
+	case genreligion.MethodCultureIsm:
+		return rlgGen.GenNamedIsm(culture()), ReligionExpCulture
+	case genreligion.MethodPlaceIsm:
+		return place() + "ism", ReligionExpState
 	}
-	return TrimVowels(random(), 3) + "ism", ReligionExpGlobal
+	return rlgGen.GenNamedIsm(random()), ReligionExpGlobal
 }
 
 const (
-	MethodRandomType     = "Random + type"
-	MethodRandomIsm      = "Random + ism"
-	MethodSurpremeIsm    = "Supreme + ism"
-	MethodFaithOfSupreme = "Faith of + Supreme"
-	MethodPlaceIsm       = "Place + ism"
-	MethodCultureIsm     = "Culture + ism"
-	MethodPlaceIanType   = "Place + ian + type"
-	MethodCultureType    = "Culture + type"
+	// Expansion modes.
+	ReligionExpGlobal  = "global"
+	ReligionExpState   = "state"
+	ReligionExpCulture = "culture"
 )
-
-// genReligionMethods contains a map of religion name generation
-// methods and their relative chance to be selected.
-var GenReligionMethods = map[string]int{
-	MethodRandomType:     3,
-	MethodRandomIsm:      1,
-	MethodSurpremeIsm:    5,
-	MethodFaithOfSupreme: 5,
-	MethodPlaceIsm:       1,
-	MethodCultureIsm:     2,
-	MethodPlaceIanType:   6,
-	MethodCultureType:    4,
-}
