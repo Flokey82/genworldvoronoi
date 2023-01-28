@@ -40,9 +40,10 @@
   <script type="text/javascript">
 
     var displayMode = 0;
-    var displayModeMax = 19;
+    var displayModeMax = 20;
     var displayModeNames = [
       'Terrain',
+      'OceanPressure',
       'Moisture',
       'Rainfall',
       'Flux',
@@ -62,7 +63,14 @@
       'Species',
       'Elevation',
     ];
-    var drawWindVectors = false;
+    var drawVectorMode = 0;
+    var drawVectorModeMax = 4;
+    var drawVectorModeNames = [
+      'None',
+      'Wind',
+      'LocalWind',
+      'Currents',
+    ];
     var drawRivers = false;
     var drawLakes = false;
     var drawShadows = false;
@@ -85,7 +93,7 @@
 
     new L.Hash(map);
 
-    var tl = L.tileLayer('tiles/{z}/{x}/{y}?d={d}&wind={wind}&rivers={rivers}&lakes={lakes}&shadows={shadows}&aspectshadows={aspectshadows}', {
+    var tl = L.tileLayer('tiles/{z}/{x}/{y}?d={d}&vectors={vectors}&rivers={rivers}&lakes={lakes}&shadows={shadows}&aspectshadows={aspectshadows}', {
       attribution: '&copy;',
       maxZoom: 20,
       minZoom: 1,
@@ -93,8 +101,8 @@
       d: function () {
         return displayMode;
       },
-      wind: function () {
-        return drawWindVectors;
+      vectors: function () {
+        return drawVectorMode;
       },
       rivers: function () {
         return drawRivers;
@@ -245,21 +253,14 @@
 
     map.addControl(new borderControl());
 
-    // Add our custom control for toggling wind vectors.
-    var windControl = newCustomControl('W:' + drawWindVectors, 'Wind Vectors', function (link) {
-      // Toggle wind vector display.
-      drawWindVectors = !drawWindVectors;
-      link.innerText = 'W:' + drawWindVectors;
-
-      // Make bold if enabled.
-      if (drawWindVectors) {
-        link.style.fontWeight = 'bold';
-      } else {
-        link.style.fontWeight = 'normal';
-      }
+    // Add our custom control for cycling vectors.
+    var vectorControl = newCustomControl('W:' + drawVectorModeNames[drawVectorMode], 'Vectors', function (link) {
+      // Cycle vector display.
+      drawVectorMode = (drawVectorMode + 1) % drawVectorModeMax;
+      link.innerText = 'W:' + drawVectorModeNames[drawVectorMode];
       tl.redraw();
     });
-    map.addControl(new windControl());
+    map.addControl(new vectorControl());
 
     // Add our custom control for toggling rivers.
     var riverControl = newCustomControl('R:' + drawRivers, 'Rivers', function (link) {

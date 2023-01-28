@@ -125,10 +125,14 @@ func tileHandler(res http.ResponseWriter, req *http.Request) {
 		panic(err)
 	}
 
-	// get the url parameter 'wind'.
-	wind := req.URL.Query().Get("wind")
-	if wind == "" {
-		wind = "false"
+	// get the url parameter 'vectors'.
+	vectors := req.URL.Query().Get("vectors")
+	if vectors == "" {
+		vectors = "0"
+	}
+	vectorMode, err := strconv.Atoi(vectors)
+	if err != nil {
+		panic(err)
 	}
 
 	// get the url parameter 'rivers'.
@@ -171,7 +175,7 @@ func tileHandler(res http.ResponseWriter, req *http.Request) {
 	}
 
 	// Get the tile image.
-	img := worldmap.GetTile(tileX, tileY, tileZ, displayMode, wind == "true", rivers == "true", lakes == "true", shadows == "true", aspectshadows == "true")
+	img := worldmap.GetTile(tileX, tileY, tileZ, displayMode, vectorMode, rivers == "true", lakes == "true", shadows == "true", aspectshadows == "true")
 	writeImage(res, &img)
 }
 

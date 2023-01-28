@@ -18,36 +18,36 @@ import (
 )
 
 // GetTile returns the image of the tile at the given coordinates and zoom level.
-func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, drawLakes, drawShadows, aspectShading bool) image.Image {
+func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawLakes, drawShadows, aspectShading bool) image.Image {
 	var colorFunc func(int, float64) color.Color
 	switch displayMode {
-	case 13, 14, 15, 16, 17:
+	case 14, 15, 16, 17, 18:
 		colorGrad := colorgrad.Rainbow()
 		terrToColor := make(map[int]int)
 		var territory []int
 		var terrLen int
-		if displayMode == 13 {
+		if displayMode == 14 {
 			terr := m.Cities[:m.NumCityStates]
 			terrLen = len(terr)
 			for i, c := range terr {
 				terrToColor[c.ID] = i
 			}
 			territory = m.RegionToCityState
-		} else if displayMode == 14 {
+		} else if displayMode == 15 {
 			terr := m.Cities[:m.NumEmpires]
 			terrLen = len(terr)
 			for i, c := range terr {
 				terrToColor[c.ID] = i
 			}
 			territory = m.RegionToEmpire
-		} else if displayMode == 15 {
+		} else if displayMode == 16 {
 			terr := m.Cultures
 			terrLen = len(terr)
 			for i, c := range terr {
 				terrToColor[c.ID] = i
 			}
 			territory = m.RegionToCulture
-		} else if displayMode == 16 {
+		} else if displayMode == 17 {
 			terr := m.Religions
 			terrLen = len(terr)
 			for i, c := range terr {
@@ -88,7 +88,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 			valMois := m.Moisture[i] / maxMois
 			return getWhittakerModBiomeColor(rLat, valElev, valMois, math.Pow(val, 1/n))
 		}
-	case 18:
+	case 19:
 		// Get a blue to red elevation gradient.
 		// Calculate the min and max elevation.
 		_, max := minMax(m.Elevation)
@@ -119,28 +119,30 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 	default:
 		vals := m.Elevation
 		if displayMode == 1 {
-			vals = m.Moisture
+			vals = m.calcCurrentPressure(m.RegionToOceanVec)
 		} else if displayMode == 2 {
-			vals = m.Rainfall
+			vals = m.Moisture
 		} else if displayMode == 3 {
-			vals = m.Flux
+			vals = m.Rainfall
 		} else if displayMode == 4 {
-			vals = m.propagateCompression(m.RegionCompression)
+			vals = m.Flux
 		} else if displayMode == 5 {
-			vals = m.getEarthquakeChance()
+			vals = m.propagateCompression(m.RegionCompression)
 		} else if displayMode == 6 {
-			vals = m.getVolcanoEruptionChance()
+			vals = m.getEarthquakeChance()
 		} else if displayMode == 7 {
-			vals = m.getRockSlideAvalancheChance()
+			vals = m.getVolcanoEruptionChance()
 		} else if displayMode == 8 {
-			vals = m.getFloodChance()
+			vals = m.getRockSlideAvalancheChance()
 		} else if displayMode == 9 {
-			vals = m.GetErosionRate()
+			vals = m.getFloodChance()
 		} else if displayMode == 10 {
-			vals = m.GetErosionRate2()
+			vals = m.GetErosionRate()
 		} else if displayMode == 11 {
-			vals = m.GetSteepness()
+			vals = m.GetErosionRate2()
 		} else if displayMode == 12 {
+			vals = m.GetSteepness()
+		} else if displayMode == 13 {
 			vals = m.GetSlope()
 		}
 
@@ -265,7 +267,13 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 	}
 
 	// Draw all the wind vectors on top.
-	if drawWindVectors {
+	if vectorMode > 0 {
+		vects := m.RegionToWindVec
+		if vectorMode == 2 {
+			vects = m.RegionToWindVecLocal
+		} else if vectorMode == 3 {
+			vects = m.RegionToOceanVec
+		}
 		// Set the color and line width of the wind vectors.
 		gc.SetStrokeColor(color.NRGBA{0, 0, 0, 255})
 		gc.SetLineWidth(1)
@@ -281,8 +289,8 @@ func (m *Map) GetTile(x, y, zoom, displayMode int, drawWindVectors, drawRivers, 
 
 			// Now draw the wind vector for the region.
 			// windVec := m.RegionToWindVec[i]
-			windVec := m.RegionToWindVecLocal[i]
-			// windVec := m.RegionToOceanVec[i]
+			// windVec := m.RegionToWindVecLocal[i]
+			windVec := vects[i]
 
 			// Calculate the coordinates of the center of the region.
 			x, y := latLonToPixels(rLat, rLon, zoom)

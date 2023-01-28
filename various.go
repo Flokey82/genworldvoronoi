@@ -47,6 +47,11 @@ func normalize2(a [2]float64) [2]float64 {
 	}
 }
 
+// angle2 returns the angle between two vectors.
+func angle2(a, b [2]float64) float64 {
+	return math.Acos(dot2(a, b) / (len2(a) * len2(b)))
+}
+
 // add2 returns the sum of two vectors.
 func add2(a, b [2]float64) [2]float64 {
 	return [2]float64{
@@ -69,6 +74,29 @@ func normal2(v [2]float64) [2]float64 {
 	return [2]float64{
 		v[0] * l,
 		v[1] * l,
+	}
+}
+
+// rotate2 returns the rotated vector of the given vector.
+func rotate2(v [2]float64, angle float64) [2]float64 {
+	sin := math.Sin(angle)
+	cos := math.Cos(angle)
+	return [2]float64{
+		v[0]*cos - v[1]*sin,
+		v[0]*sin + v[1]*cos,
+	}
+}
+
+// cross2 returns the cross product of two vectors.
+func cross2(a, b [2]float64) float64 {
+	return a[0]*b[1] - a[1]*b[0]
+}
+
+// sub2 returns the difference of two vectors.
+func sub2(a, b [2]float64) [2]float64 {
+	return [2]float64{
+		a[0] - b[0],
+		a[1] - b[1],
 	}
 }
 
