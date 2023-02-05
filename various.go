@@ -21,6 +21,8 @@ func getCentroidOfTriangle(a, b, c []float64) vectors.Vec3 {
 	}.Normalize()
 }
 
+var zero2 = [2]float64{0, 0}
+
 // dist2 returns the eucledian distance between two points.
 func dist2(a, b [2]float64) float64 {
 	xDiff := a[0] - b[0]
@@ -130,6 +132,21 @@ func degToRad(deg float64) float64 {
 
 func radToDeg(rad float64) float64 {
 	return rad * 180 / math.Pi
+}
+
+// Adds a vector to a latitude and longitude in degrees.
+// The vector's x coordinate is modified by the cosine of the latitude to
+// account for the fact that the distance between degrees of longitude
+// decreases as the latitude increases.
+func addVecToLatLong(lat, lon float64, vec [2]float64) (float64, float64) {
+	return lat + vec[1], lon + vec[0]/math.Cos(degToRad(lat+vec[1]))
+}
+
+// I'm not sure if this is correct, but it seems to work.
+func vectorToLatLong(vec [2]float64) (float64, float64) {
+	lat := radToDeg(math.Asin(vec[0]))
+	lon := radToDeg(math.Atan2(vec[1], math.Sqrt(1-vec[0]*vec[0])))
+	return lat, lon
 }
 
 // calcVecFromLatLong calculates the vector between two lat/long pairs.

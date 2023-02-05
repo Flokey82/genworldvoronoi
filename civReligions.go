@@ -121,20 +121,17 @@ func (m *Civ) placeReligionAt(r int, founded int64, group string, culture *Cultu
 
 	rlgGen := genreligion.NewGenerator(int64(r))
 
-	// Pick the form of the religion.
-	form := rlgGen.RandFormFromGroup(group)
-
 	relg := &Religion{
 		ID:      r,
 		Culture: culture,
 		Type:    group,
-		Form:    form,
+		Form:    rlgGen.RandFormFromGroup(group), // Pick the form of the religion.
 		Founded: founded,
 		Parent:  parent,
 	}
 
 	// If appropriate, add a deity to the religion.
-	if form != genreligion.FormNontheism && form != genreligion.FormAnimism {
+	if relg.Form != genreligion.FormNontheism && relg.Form != genreligion.FormAnimism {
 		// Get the language of the culture.
 		var lang *genlanguage.Language
 		if culture != nil {
@@ -142,23 +139,19 @@ func (m *Civ) placeReligionAt(r int, founded int64, group string, culture *Cultu
 		}
 
 		// If we have a parent religion with a deity, we use the same approach
-		// to generate the deity, otherwise we pick a random approach.
-		var approach string
-		if parent != nil && parent.Deity.Approach != "" {
-			approach = parent.Deity.Approach
+		// to generate the deity, otherwise the generator will pick a random approach.
+		if parent != nil && parent.Deity != nil {
+			relg.Deity = rlgGen.GetDeity(lang, parent.Deity.Approach)
 		} else {
-			approach = rlgGen.RandDeityGenMethod()
+			relg.Deity = rlgGen.GetDeity(lang, "")
 		}
-
-		// Generate a deity.
-		relg.Deity = rlgGen.GetDeity(lang, approach)
 	}
 
 	// Select name, expansion, and expansionism.
 	if group == genreligion.GroupOrganized {
 		// TODO: If parent is not nil, maybe swich form to cult or heresy?
 		// Check if we have a state at this location
-		name, expansion := m.getReligionName(rlgGen, culture, form, relg.Deity.FullName(), r)
+		name, expansion := m.getReligionName(rlgGen, culture, relg.Deity, relg.Form, r)
 
 		// Make sure the expansion type is valid.
 		if (expansion == ReligionExpState && m.RegionToCityState[r] == -1) ||
@@ -170,13 +163,8 @@ func (m *Civ) placeReligionAt(r int, founded int64, group string, culture *Cultu
 		relg.Name = name
 		relg.Expansion = expansion
 		relg.Expansionism = culture.Expansionism*rand.Float64()*1.5 + 0.5 // TODO: Move this to religion generator.
-		// if expansion == "state" {
-		// 	origin = m.RegionToCityState[c.ID]
-		// }
-		// if expansion == "culture" {
-		// 	origin = culture.ID
-		// }
 
+		// This would look up geographically close religions and make this one a cult or heresy.
 		// if (!cells.burg[center] && cells.c[center].some(c => cells.burg[c]))
 		//  center = cells.c[center].find(c => cells.burg[c]);
 		// const [x, y] = cells.p[center];
@@ -192,7 +180,7 @@ func (m *Civ) placeReligionAt(r int, founded int64, group string, culture *Cultu
 		// const origins = folk ? [folk.i] : getReligionsInRadius({x, y, r: 150 / count, max: 2});
 		// const expansionism = rand(3, 8);
 	} else if group == genreligion.GroupFolk {
-		relg.Name = m.getFolkReligionName(rlgGen, culture, form)
+		relg.Name = m.getFolkReligionName(rlgGen, culture, relg.Form)
 		relg.Expansion = ReligionExpCulture
 		relg.Expansionism = culture.Expansionism * rand.Float64() * 1.5 // TODO: Move this to religion generator.
 	}
@@ -228,11 +216,8 @@ func (m *Civ) ExpandReligions() {
 	territoryWeightFunc := m.getTerritoryWeightFunc()
 	m.RegionToReligion = m.regPlaceNTerritoriesCustom(seeds, func(o, u, v int) float64 {
 		r := originToReligion[o]
-
-		if r.Expansion == ReligionExpCulture && m.RegionToCulture[v] != r.Culture.ID {
-			return -1
-		}
-		if r.Expansion == ReligionExpState && m.RegionToCityState[v] != m.RegionToCityState[o] {
+		if r.Expansion == ReligionExpCulture && m.RegionToCulture[v] != r.Culture.ID ||
+			r.Expansion == ReligionExpState && m.RegionToCityState[v] != m.RegionToCityState[o] {
 			return -1
 		}
 		return territoryWeightFunc(o, u, v) / r.Expansionism

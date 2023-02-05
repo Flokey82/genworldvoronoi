@@ -195,12 +195,17 @@ func (m *Geo) assignWindVectors() {
 				h = 0
 			}
 			// Add wind vector to neighbor lat/lon to get the "wind vector lat long" or something like that..
-			rwXYZ := convToVec3(latLonToCartesian(regLat+regWindVec[r][1], regLon+regWindVec[r][0])).Normalize()
+			// rLatWind := regLat + regWindVec[r][1]
+			// rLonWind := regLon + regWindVec[r][0]
+			// Not sure if this is correct... Adding a 2d vector to a lat/lon breaks my brain.
+			// TODO: Fix this once and for all.
+			rLatWind, rLonWind := addVecToLatLong(regLat, regLon, regWindVec[r])
+			rwXYZ := convToVec3(latLonToCartesian(rLatWind, rLonWind)).Normalize()
 			v := vectors.Normalize(vectors.Vec2{
 				X: regVec[0],
 				Y: regVec[1],
 			}) // v.Mul(h / maxElev)
-			vw := calcVecFromLatLong(regLat, regLon, regLat+regWindVec[r][1], regLon+regWindVec[r][0])
+			vw := calcVecFromLatLong(regLat, regLon, rLatWind, rLonWind)
 			v0 := vectors.Normalize(vectors.Vec2{
 				X: vw[0],
 				Y: vw[1],
@@ -506,49 +511,8 @@ func (m *Geo) assignRainfall(numSteps, transferMode, sortOrder int) {
 
 func (m *Geo) getWindSortOrder() ([]float64, []int) {
 	m.assignWindVectors()
-	useAlternativeWindSort := true
-
 	// TODO: Add bool parameter to switch between local winds and global winds.
-	// regWindVec := m.regWindVec
-	regWindVec := m.RegionToWindVecLocal
-	windOrderRegs := make([]int, m.mesh.numRegions)
-	regWindSort := make([]float64, m.mesh.numRegions)
-	// Sort all regions by latitude and longitude and their wind vector.
-	// This will give us a logical order in which we can push the moisture across the globe.
-	if useAlternativeWindSort {
-		for r := 0; r < m.mesh.numRegions; r++ {
-			// Get XYZ Position of r as vector3
-			regVec3 := convToVec3(m.XYZ[r*3 : r*3+3])
-			// Get XYZ Position of r_neighbor.
-			regToWindVec3 := convToVec3(latLonToCartesian(m.LatLon[r][0]+regWindVec[r][1], m.LatLon[r][1]+regWindVec[r][0])).Normalize()
-			// Calculate Vector between r and neighbor_r.
-			va := vectors.Sub3(regVec3, regToWindVec3).Normalize()
-			// Calculate dot product between va and vb.
-			// This will give us how much the current region lies within the wind direction of the
-			// current neighbor.
-			// See: https://www.scratchapixel.com/lessons/3d-basic-rendering/introduction-to-shading/shading-normals
-			dotV := vectors.Dot3(va, regToWindVec3)
-			regWindSort[r] = dotV
-			windOrderRegs[r] = r
-		}
-		sort.Sort(sort.Reverse(sort.Float64Slice(regWindSort)))
-		sort.Sort(sort.Reverse(sort.IntSlice(windOrderRegs)))
-	} else {
-		for r := 0; r < m.mesh.numRegions; r++ {
-			windOrderRegs[r] = r
-			// TODO: modify the sort order by ensuring longitude wraps around...??
-			lat := (m.LatLon[r][0]) * regWindVec[r][1] / math.Abs(regWindVec[r][1]) // radToDeg(r_windvec[r][1])
-			lon := (m.LatLon[r][1]) * regWindVec[r][0] / math.Abs(regWindVec[r][0]) // radToDeg(r_windvec[r][0])
-			regWindSort[r] = (lat + lon)
-		}
-
-		// Sort the indices in wind-order so we can ensure that we push the moisture
-		// in their logical sequence across the globe.
-		sort.Slice(windOrderRegs, func(a, b int) bool {
-			return regWindSort[windOrderRegs[a]] < regWindSort[windOrderRegs[b]]
-		})
-	}
-	return regWindSort, windOrderRegs
+	return m.getVectorSortOrder(m.RegionToWindVecLocal, false)
 }
 
 func (m *Geo) assignRainfallBasic() {

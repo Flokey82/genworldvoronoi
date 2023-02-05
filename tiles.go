@@ -290,7 +290,9 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 			// Now draw the wind vector for the region.
 			// windVec := m.RegionToWindVec[i]
 			// windVec := m.RegionToWindVecLocal[i]
-			windVec := vects[i]
+			// NOTE: I'm not 100% sure if this is correct, but it seems to work.
+			wLat, wLon := vectorToLatLong(normalize2(vects[i]))
+			windVec := normalize2([2]float64{wLat, wLon})
 
 			// Calculate the coordinates of the center of the region.
 			x, y := latLonToPixels(rLat, rLon, zoom)
@@ -298,7 +300,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 			y -= dy2
 
 			// Calculate the length of the wind vector.
-			length := math.Sqrt(windVec[0]*windVec[0] + windVec[1]*windVec[1])
+			length := len2(windVec)
 
 			// Calculate the angle of the wind vector.
 			angle := math.Atan2(windVec[1], windVec[0])

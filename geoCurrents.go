@@ -4,9 +4,61 @@ import (
 	"log"
 	"math"
 	"sort"
-
-	"github.com/Flokey82/go_gens/vectors"
 )
+
+func (m *Geo) genOceanCurrents2() {
+	regCurrentVec := make([][2]float64, m.mesh.numRegions)
+
+	// Seed the ocean currents.
+	m.seedOceanCurrents(regCurrentVec)
+
+	// Build the region to region neighbor vectors.
+	regToRegNeighborVec := m.getRegionToNeighborVec()
+
+	deflectCurrent := func(r int) [2]float64 {
+		if m.Elevation[r] > 0 || regCurrentVec[r] == zero2 {
+			return [2]float64{0, 0}
+		}
+
+		// Check if the current vector is pointing into the land.
+		// If so, we need to deflect it.
+		currentVec := regCurrentVec[r]
+		maxDotLand := math.Inf(-1)
+		maxDotOcean := math.Inf(-1)
+		maxRegOcean := -1
+		for _, neighbor := range m.GetRegNeighbors(r) {
+			dot := dot2(normalize2(regToRegNeighborVec[r][neighbor]), normalize2(currentVec))
+			if m.Elevation[neighbor] > 0 {
+				if dot > maxDotLand {
+					maxDotLand = dot
+				}
+			} else {
+				if dot > maxDotOcean || maxRegOcean < 0 {
+					maxDotOcean = dot
+					maxRegOcean = neighbor
+				}
+			}
+		}
+
+		// If the max dot product for land is greater than the max dot product
+		// for ocean, we need to deflect the current vector.
+		if maxDotLand >= 0 && maxRegOcean >= 0 {
+			return normalize2(regToRegNeighborVec[r][maxRegOcean])
+		}
+		return currentVec
+	}
+	newVec := make([][2]float64, m.mesh.numRegions)
+
+	// Loop once so we can see what it looks like.
+	for i := 0; i < 1; i++ {
+		// Deflect the current vectors.
+		for r := range regCurrentVec {
+			newVec[r] = deflectCurrent(r)
+		}
+		regCurrentVec, newVec = newVec, regCurrentVec
+	}
+	m.RegionToOceanVec = regCurrentVec
+}
 
 func (m *Geo) assignOceanCurrentsInflowOutflow() {
 	// Calculate the inflow and outflow of each ocean region, which can be used
@@ -18,34 +70,12 @@ func (m *Geo) assignOceanCurrentsInflowOutflow() {
 	regCurrentVec := make([][2]float64, m.mesh.numRegions)
 
 	// Build the region to region neighbor vectors.
-	regToRegNeighborVec := make([]map[int][2]float64, m.mesh.numRegions)
-	for reg := 0; reg < m.mesh.numRegions; reg++ {
-		regToRegNeighborVec[reg] = make(map[int][2]float64)
-		for _, neighbor := range m.GetRegNeighbors(reg) {
-			// TODO: This will cause artifacts around +/- 180 degrees.
-			regToRegNeighborVec[reg][neighbor] = normalize2(calcVecFromLatLong(m.LatLon[reg][0], m.LatLon[reg][1], m.LatLon[neighbor][0], m.LatLon[neighbor][1]))
-		}
-	}
+	regToRegNeighborVec := m.getRegionToNeighborVec()
 
 	// Loop a few times to establis an equilibrium.
 	for i := 0; i < 100; i++ {
 		// Set the primary ocean current vectors.
-		for reg := 0; reg < m.mesh.numRegions; reg++ {
-			// If the region is not an ocean region, set the vector to zero.
-			if m.Elevation[reg] > 0 {
-				regCurrentVec[reg] = [2]float64{0, 0}
-				continue
-			}
-			lat := math.Abs(m.LatLon[reg][0])
-			if lat <= 0.9 && lat >= 0.5 {
-				// Initialize the currents at the equator to flow from west to east.
-				regCurrentVec[reg] = [2]float64{-1.0, 0.0}
-			} else if lat >= 59.2 && lat <= 60.2 {
-				// Initialize the currents at the arctic / antarctic circles to flow
-				// from east to west.
-				regCurrentVec[reg] = [2]float64{1.0, 0.0}
-			}
-		}
+		m.seedOceanCurrents(regCurrentVec)
 
 		// Calculate the pressure in each ocean region.
 		regPressure := m.calcCurrentPressure(regCurrentVec)
@@ -150,14 +180,7 @@ func (m *Geo) assignOceanCurrents() {
 
 	// Let's calculate the ocean currents.
 	// Build the region to region neighbor vectors.
-	regToRegNeighborVec := make([]map[int][2]float64, m.mesh.numRegions)
-	for reg := 0; reg < m.mesh.numRegions; reg++ {
-		regToRegNeighborVec[reg] = make(map[int][2]float64)
-		for _, neighbor := range m.GetRegNeighbors(reg) {
-			// TODO: This will cause artifacts around +/- 180 degrees.
-			regToRegNeighborVec[reg][neighbor] = normalize2(calcVecFromLatLong(m.LatLon[reg][0], m.LatLon[reg][1], m.LatLon[neighbor][0], m.LatLon[neighbor][1]))
-		}
-	}
+	regToRegNeighborVec := m.getRegionToNeighborVec()
 
 	// Calculate the pressure in each ocean region.
 	regPressure := m.calcCurrentPressure(regCurrentVec)
@@ -165,8 +188,8 @@ func (m *Geo) assignOceanCurrents() {
 	// deflectAndSplit is a function that takes a region and
 	// returns a vector. It is used to calculate the ocean currents.
 	// If the region's current vector is pointing towards a land region,
-	// the vector is deflected and split into two vectors, impacting the
-	// the vectors of ocean regions in the vicinity.
+	// the vector is deflected towards the closes ocean region (or the region
+	// with the lowest pressure).
 	deflectAndSplit := func(reg int, useLowPressure bool) [2]float64 {
 		// If the region is not an ocean region, return the zero vector.
 		if m.Elevation[reg] > 0 {
@@ -227,7 +250,8 @@ func (m *Geo) assignOceanCurrents() {
 				// averaging the current vector and the vector to the closest ocean
 				// region.
 				if minPressureIdx != -1 && minPressure < p {
-					vec = add2(vec, scale2(regToRegNeighborVec[reg][oceanRegions[minPressureIdx]], p-minPressure))
+					oceanReg := oceanRegions[minPressureIdx]
+					vec = add2(vec, scale2(regToRegNeighborVec[reg][oceanReg], p-minPressure))
 				}
 			} else {
 				// Find the highest pressure ocean region.
@@ -244,13 +268,13 @@ func (m *Geo) assignOceanCurrents() {
 				// averaging the current vector and the vector to the closest ocean
 				// region.
 				if maxPressureIdx != -1 && maxPressure > p {
-					vec = add2(vec, scale2(regToRegNeighborVec[reg][oceanRegions[maxPressureIdx]], p-maxPressure))
+					oceanReg := oceanRegions[maxPressureIdx]
+					vec = add2(vec, scale2(regToRegNeighborVec[reg][oceanReg], p-maxPressure))
 				}
 			}
 			vec = normalize2(vec)
 		} else {
-			// Split the new vector into two vectors towards the two ocean regions
-			// with the highest dot product (or at least the lowest negative dot).
+			// Deflect the current vector towards the closest ocean region.
 			maxDot1 := -1.0
 			maxDot1Idx := -1
 			for i := range oceanRegions {
@@ -264,12 +288,14 @@ func (m *Geo) assignOceanCurrents() {
 			// pressure build up to better determine the strength of the currents
 			// and their actual influence on each other. We can normalize the
 			// vectors after each iteration.
-
-			// Split the new vector into two vectors.
 			if maxDot1Idx != -1 {
-				// Scale the new vector and normalize it.
-				added := normalize2(scale2(oceanRegionVec[maxDot1Idx], 0.5))
 				oceanReg := oceanRegions[maxDot1Idx]
+				// Scale the new vector and normalize it.
+				vecDot := oceanRegionVec[maxDot1Idx]
+				if vecDot == zero2 {
+					vecDot = normal2(vec)
+				}
+				added := scale2(regToRegNeighborVec[reg][oceanReg], 1.0)
 				regCurrentVec[oceanReg] = normal2(add2(regCurrentVec[oceanReg], added))
 
 				// Since we want the vector to snake along the coast, we need to
@@ -279,26 +305,7 @@ func (m *Geo) assignOceanCurrents() {
 				// Rotate the current vector towards the closest ocean region by
 				// averaging the current vector and the vector to the closest ocean
 				// region.
-				vec = add2(vec, oceanRegionVec[maxDot1Idx])
-			}
-
-			maxDot2 := -1.0
-			maxDot2Idx := -1
-			for i := range oceanRegions {
-				if i == maxDot1Idx {
-					continue
-				}
-				if oceanRegionDot[i] > maxDot2 {
-					maxDot2 = oceanRegionDot[i]
-					maxDot2Idx = i
-				}
-			}
-
-			if maxDot2Idx != -1 {
-				// Scale the new vector and normalize it.
-				added := normalize2(scale2(oceanRegionVec[maxDot2Idx], 0.5))
-				oceanReg := oceanRegions[maxDot2Idx]
-				regCurrentVec[oceanReg] = normal2(add2(regCurrentVec[oceanReg], added))
+				vec = normalize2(add2(vec, oceanRegionVec[maxDot1Idx]))
 			}
 
 			// Normalize the current vector.
@@ -309,28 +316,59 @@ func (m *Geo) assignOceanCurrents() {
 		return vec
 	}
 
+	// propagateCurrent propagates the current vector from the given region to
+	// all neighboring regions until the current vector is zero.
+	var propagateCurrent func(reg int)
+	propagateCurrent = func(reg int) {
+		useDot := true
+		if regCurrentVec[reg] == zero2 {
+			return
+		}
+		// Propagate the current vector to all neighboring regions.
+		for _, neighbor := range m.GetRegNeighbors(reg) {
+			// Skip elevation above sea level and regions with a current vector
+			// already set.
+			if m.Elevation[neighbor] > 0 || regCurrentVec[neighbor] != zero2 {
+				continue
+			}
+			// Set the current vector using the dot product to scale the vector
+			// towards the neighboring region.
+			if useDot {
+				dot := dot2(regCurrentVec[reg], regToRegNeighborVec[reg][neighbor])
+				regCurrentVec[neighbor] = add2(regCurrentVec[reg], scale2(regToRegNeighborVec[reg][neighbor], dot))
+			} else {
+				regCurrentVec[neighbor] = add2(regCurrentVec[reg], scale2(regToRegNeighborVec[reg][neighbor], 0.5))
+			}
+			regCurrentVec[neighbor] = normalize2(regCurrentVec[neighbor])
+
+			// Propagate the current vector to the neighboring region.
+			propagateCurrent(neighbor)
+		}
+	}
+
+	// Reinforce the primary currents.
+	m.seedOceanCurrents(regCurrentVec)
+	for r := 0; r < m.mesh.numRegions; r++ {
+		// Check if we deflected the current vector.
+		regCurrentVec[r] = deflectAndSplit(r, false)
+	}
+
 	// Now interpolate all set vectors with all other set vectors.
 	// This is done to make the ocean currents more realistic.
 	for i := 0; i < 100; i++ {
 		// Reinforce the primary currents.
-		for r := 0; r < m.mesh.numRegions; r++ {
-			// Skip elevation above sea level.
-			if m.Elevation[r] > 0 {
-				continue
-			}
-			lat := math.Abs(m.LatLon[r][0])
-			if lat <= 1.5 && lat >= 0.5 {
-				// Initialize the currents at the equator to flow from west to east.
-				regCurrentVec[r] = [2]float64{-1.0, 0.0}
-			} else if lat >= 59.2 && lat <= 61.2 {
-				// Initialize the currents at the arctic / antarctic circles to flow
-				// from east to west.
-				regCurrentVec[r] = [2]float64{1.0, 0.0}
-			}
-
-			// Check if we deflected the current vector.
-			regCurrentVec[r] = deflectAndSplit(r, false)
-		}
+		m.seedOceanCurrents(regCurrentVec)
+		/*
+			// Calculate the pressure in each ocean region.
+			regPressure = m.calcCurrentPressure(regCurrentVec)
+			// Reinforce the primary currents.
+			for r := 0; r < m.mesh.numRegions; r++ {
+				// Skip elevation above sea level.
+				if m.Elevation[r] > 0 {
+					continue
+				}
+				propagateCurrent(r)
+			}*/
 
 		// TODO: Loop through regions and resolve the pressure differentials.
 
@@ -359,20 +397,20 @@ func (m *Geo) assignOceanCurrents() {
 			var sumVec [2]float64
 			var numVec int
 			for _, nb := range m.GetRegNeighbors(r) {
-				if m.Elevation[nb] > 0 || regCurrentVec[nb] == [2]float64{0.0, 0.0} {
+				if m.Elevation[nb] > 0 || regCurrentVec[nb] == zero2 {
 					continue
 				}
 				sumVec = add2(sumVec, regCurrentVec[nb])
 				numVec++
 			}
 			if numVec > 0 {
-				if regCurrentVec[r] != [2]float64{0.0, 0.0} {
+				if regCurrentVec[r] != zero2 {
 					sumVec = add2(sumVec, regCurrentVec[r])
 					numVec++
 				}
 				regCurrentVec[r] = normalize2(sumVec)
 			}
-			if regCurrentVec[r] == [2]float64{0.0, 0.0} {
+			if regCurrentVec[r] == zero2 {
 				continue
 			}
 			regCurrentVec[r] = deflectAndSplit(r, true)
@@ -382,32 +420,10 @@ func (m *Geo) assignOceanCurrents() {
 	m.RegionToOceanVec = regCurrentVec
 }
 
-func (m *Geo) getCurrentSortOrder(regCurrentVec [][2]float64, reverse bool) []int {
-	currentOrderRegs := make([]int, m.mesh.numRegions)
-	regCurrentSort := make([]float64, m.mesh.numRegions)
-	for r := 0; r < m.mesh.numRegions; r++ {
-		// Get XYZ Position of r as vector3
-		regVec3 := convToVec3(m.XYZ[r*3 : r*3+3])
-		// Get XYZ Position of r_neighbor.
-		regToWindVec3 := convToVec3(latLonToCartesian(m.LatLon[r][0]+regCurrentVec[r][1], m.LatLon[r][1]+regCurrentVec[r][0])).Normalize()
-		// Calculate Vector between r and neighbor_r.
-		va := vectors.Sub3(regVec3, regToWindVec3).Normalize()
-		// Calculate dot product between va and vb.
-		// This will give us how much the current region lies within the current direction of the
-		// current neighbor.
-		// See: https://www.scratchapixel.com/lessons/3d-basic-rendering/introduction-to-shading/shading-normals
-		dotV := vectors.Dot3(va, regToWindVec3)
-		regCurrentSort[r] = dotV
-		currentOrderRegs[r] = r
-	}
-	if reverse {
-		sort.Sort(sort.Reverse(sort.Float64Slice(regCurrentSort)))
-		sort.Sort(sort.Reverse(sort.IntSlice(currentOrderRegs)))
-	} else {
-		sort.Sort(sort.Float64Slice(regCurrentSort))
-		sort.Sort(sort.IntSlice(currentOrderRegs))
-	}
-	return currentOrderRegs
+// getCurrentSortOrder returns the regions sorted by their position and downstream direction.
+func (m *Geo) getCurrentSortOrder(revVecs [][2]float64, reverse bool) []int {
+	_, orderedRegs := m.getVectorSortOrder(revVecs, reverse)
+	return orderedRegs
 }
 
 func (m *Geo) calcCurrentPressure(currentVecs [][2]float64) []float64 {
@@ -417,6 +433,8 @@ func (m *Geo) calcCurrentPressure(currentVecs [][2]float64) []float64 {
 	// The pressure is used to calculate the ocean currents.
 
 	// Build the region to region neighbor vectors.
+
+	// TODO: Use the function (but this leads to odd results?????)
 	regToRegNeighborVec := make([]map[int][2]float64, m.mesh.numRegions)
 	for reg := 0; reg < m.mesh.numRegions; reg++ {
 		regToRegNeighborVec[reg] = make(map[int][2]float64)
@@ -470,4 +488,46 @@ func (m *Geo) calcCurrentPressure(currentVecs [][2]float64) []float64 {
 		// The remaining pressure indicates unbalanced currents.
 	}
 	return pressure
+}
+
+func (m *Geo) seedOceanCurrents(currents [][2]float64) {
+	// Seed the ocean currents with the given vectors.
+	for reg := 0; reg < m.mesh.numRegions; reg++ {
+		// If the region is not an ocean region, set the vector to zero.
+		if m.Elevation[reg] > 0 {
+			currents[reg] = [2]float64{0, 0}
+			continue
+		}
+		lat := math.Abs(m.LatLon[reg][0])
+		if lat <= 2.2 && lat >= 0.5 {
+			// Initialize the currents at the equator to flow from west to east.
+			currents[reg] = [2]float64{-1.0, 0.0}
+		} else if lat >= 59.2 && lat <= 62.2 {
+			// Initialize the currents at the arctic / antarctic circles to flow
+			// from east to west.
+			currents[reg] = [2]float64{1.0, 0.0}
+		}
+	}
+}
+
+func (m *Geo) getRegionToNeighborVec() []map[int][2]float64 {
+	useFancyFunc := false
+	regToNeighborVec := make([]map[int][2]float64, m.mesh.numRegions)
+	for reg := 0; reg < m.mesh.numRegions; reg++ {
+		regToNeighborVec[reg] = make(map[int][2]float64)
+		rLat, rLon := m.LatLon[reg][0], m.LatLon[reg][1]
+		for _, neighbor := range m.GetRegNeighbors(reg) {
+			if useFancyFunc {
+				regToNeighborVec[reg][neighbor] = normalize2(calcVecFromLatLong(rLat, rLon, m.LatLon[neighbor][0], m.LatLon[neighbor][1]))
+				continue
+			}
+			// Calculate the vector between the current region and the neighbor from lat/long.
+			nbLat, nbLon := m.LatLon[neighbor][0], m.LatLon[neighbor][1]
+
+			vec := [2]float64{nbLon - rLon, nbLat - rLat}
+			regToNeighborVec[reg][neighbor] = normal2(vec)
+
+		}
+	}
+	return regToNeighborVec
 }

@@ -18,7 +18,7 @@ func (m *Civ) getFolkReligionName(rlgGen *genreligion.Generator, c *Culture, for
 // getReligionName generates a name for the given form and deity at the given center.
 // This code is based on:
 // https://github.com/Azgaar/Fantasy-Map-Generator/blob/master/modules/religions-generator.js
-func (m *Civ) getReligionName(rlgGen *genreligion.Generator, c *Culture, form, deity string, r int) (string, string) {
+func (m *Civ) getReligionName(rlgGen *genreligion.Generator, c *Culture, deity *genreligion.Deity, form string, r int) (string, string) {
 	if c == nil {
 		return "MISSING_CULTURE", "MISSING_CULTURE"
 	}
@@ -26,17 +26,6 @@ func (m *Civ) getReligionName(rlgGen *genreligion.Generator, c *Culture, form, d
 	// Returns a random name from the culture at the given region.
 	random := func() string {
 		return c.Language.MakeName()
-	}
-
-	// Splits the deity name into parts and returns the first part.
-	// Example: "Grognark, The Supreme Being" -> "Grognark"
-	supreme := func() string {
-		return strings.Split(deity, (", "))[0]
-	}
-
-	// Returns the name of the culture at the given region.
-	culture := func() string {
-		return c.Name
 	}
 
 	// Returns the name of the city at the given region.
@@ -73,7 +62,7 @@ func (m *Civ) getReligionName(rlgGen *genreligion.Generator, c *Culture, form, d
 
 		// If unsuccessful, use the culture name.
 		if base == "" {
-			base = culture()
+			base = c.Name
 		}
 
 		// If unsuccessful, return a placeholder.
@@ -88,8 +77,9 @@ func (m *Civ) getReligionName(rlgGen *genreligion.Generator, c *Culture, form, d
 	// Attempt to generate a name for the religion.
 	switch rlgGen.RandGenMethod() {
 	case genreligion.MethodFaithOfSupreme:
-		if deity != "" {
-			return rlgGen.GenNameFaitOfSupreme(deity), ReligionExpGlobal
+		if deity != nil {
+			// Example: "Grognark, The Supreme Being" -> "Faith of Grognark, The Supreme Being"
+			return rlgGen.GenNameFaitOfSupreme(deity.FullName()), ReligionExpGlobal
 		}
 	case genreligion.MethodRandomType:
 		return rlgGen.GenNamedTypeOfForm(random(), form), ReligionExpGlobal
@@ -97,15 +87,16 @@ func (m *Civ) getReligionName(rlgGen *genreligion.Generator, c *Culture, form, d
 		placeAdj := genlanguage.GetAdjective(place()) // Generate adjective for the place.
 		return rlgGen.GenNamedTypeOfForm(placeAdj+"ian", form), ReligionExpState
 	case genreligion.MethodCultureType:
-		return rlgGen.GenNamedTypeOfForm(culture(), form), ReligionExpCulture
+		return rlgGen.GenNamedTypeOfForm(c.Name, form), ReligionExpCulture
 	case genreligion.MethodSurpremeIsm:
-		if deity != "" {
-			return rlgGen.GenNamedIsm(supreme()), ReligionExpGlobal
+		if deity != nil {
+			// Example: "Grognark, The Supreme Being" -> "Grognarkism"
+			return rlgGen.GenNamedIsm(deity.Name), ReligionExpGlobal
 		}
 	case genreligion.MethodRandomIsm:
 		return rlgGen.GenNamedIsm(random()), ReligionExpGlobal
 	case genreligion.MethodCultureIsm:
-		return rlgGen.GenNamedIsm(culture()), ReligionExpCulture
+		return rlgGen.GenNamedIsm(c.Name), ReligionExpCulture
 	case genreligion.MethodPlaceIsm:
 		return place() + "ism", ReligionExpState
 	}

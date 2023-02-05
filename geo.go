@@ -2,6 +2,8 @@ package genworldvoronoi
 
 import (
 	"log"
+	"math"
+	"sort"
 	"time"
 
 	"github.com/Flokey82/go_gens/vectors"
@@ -159,4 +161,31 @@ func (m *Geo) GetCustomContour(f func(idxA, idxB int) bool) [][]int {
 	}
 
 	return mergeIndexSegments(edges)
+}
+
+// getVectorSortOrder returns a list of regions sorted by their vector order.
+// This allows us to sort regions "up wind" or "down wind", for example.
+func (m *Geo) getVectorSortOrder(vecs [][2]float64, reverse bool) ([]float64, []int) {
+	orderedRegs := make([]int, m.mesh.numRegions) // sorted regions
+	regSort := make([]float64, m.mesh.numRegions) // numeric sort order
+	for r := 0; r < m.mesh.numRegions; r++ {
+		orderedRegs[r] = r
+
+		lat := (m.LatLon[r][0]) * vecs[r][1] / math.Abs(vecs[r][1])
+		lon := (m.LatLon[r][1]) * vecs[r][0] / math.Abs(vecs[r][0])
+		regSort[r] = (lat + lon)
+	}
+
+	// Sort the indices in vector-order so we can ensure that we push the moisture
+	// in their logical sequence across the globe.
+	if reverse {
+		sort.Slice(orderedRegs, func(a, b int) bool {
+			return regSort[orderedRegs[a]] > regSort[orderedRegs[b]]
+		})
+	} else {
+		sort.Slice(orderedRegs, func(a, b int) bool {
+			return regSort[orderedRegs[a]] < regSort[orderedRegs[b]]
+		})
+	}
+	return regSort, orderedRegs
 }
