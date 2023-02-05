@@ -182,7 +182,7 @@ type Culture struct {
 
 func (c *Culture) Log() {
 	log.Printf("The Folk of %s (%s): %d regions", c.Name, c.Type.String(), len(c.Regions))
-	log.Printf("Followers of %s (%s)", c.Religion.Name, c.Religion.Type)
+	log.Printf("Followers of %s (%s)", c.Religion.Name, c.Religion.Group)
 	c.Stats.Log()
 }
 

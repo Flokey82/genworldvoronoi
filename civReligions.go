@@ -54,28 +54,27 @@ func (m *Civ) GetReligion(r int) *Religion {
 // would allow us to infer the relationships between deities and symbols and
 // if mundane events hold any significance for a particular religion.
 type Religion struct {
-	ID           int                // The region where the religion was founded
-	Name         string             // The name of the religion
-	Culture      *Culture           // The culture that the religion is based on
-	Parent       *Religion          // The parent religion (if any)
-	Type         string             // The type of the religion
-	Form         string             // The form of the religion
-	Deity        *genreligion.Deity // The deity of the religion (if any)
-	Expansion    string             // How the religion wants to expand
-	Expansionism float64            // How much the religion wants to expand
-	Founded      int64              // Year when the religion was founded
+	ID                          int                // The region where the religion was founded
+	Name                        string             // The name of the religion
+	Culture                     *Culture           // The culture that the religion is based on
+	Parent                      *Religion          // The parent religion (if any)
+	*genreligion.Classification                    // The religion classification
+	Deity                       *genreligion.Deity // The deity of the religion (if any)
+	Expansion                   string             // How the religion wants to expand
+	Expansionism                float64            // How much the religion wants to expand
+	Founded                     int64              // Year when the religion was founded
 }
 
 func (r *Religion) String() string {
 	if r.Deity == nil {
-		return fmt.Sprintf("%s (%s, %s, %s)", r.Name, r.Type, r.Expansion, r.Form)
+		return fmt.Sprintf("%s (%s, %s, %s)", r.Name, r.Group, r.Expansion, r.Form)
 	}
-	return fmt.Sprintf("%s (%s, %s, %s)\n=%s", r.Name, r.Type, r.Expansion, r.Form, r.Deity.FullName())
+	return fmt.Sprintf("%s (%s, %s, %s)\n=%s", r.Name, r.Group, r.Expansion, r.Form, r.Deity.FullName())
 }
 
 // genFolkReligion generates a folk religion for the given culture.
 func (m *Civ) genFolkReligion(c *Culture) *Religion {
-	return m.placeReligionAt(c.ID, -1, genreligion.GroupFolk, c, nil)
+	return m.placeReligionAt(c.ID, -1, genreligion.GroupFolk, c, c.Language, nil)
 }
 
 // genOrganizedReligion generates an organized religion for the given city.
@@ -89,7 +88,7 @@ func (m *Civ) genOrganizedReligion(c *City) *Religion {
 			}
 		}
 	}
-	return m.placeReligionAt(c.ID, -1, genreligion.GroupOrganized, c.Culture, parent)
+	return m.placeReligionAt(c.ID, -1, genreligion.GroupOrganized, c.Culture, c.Language, parent)
 }
 
 // PlaceNOrganizedReligions generates organized religions.
@@ -113,34 +112,33 @@ func (m *Civ) PlaceNOrganizedReligions(n int) []*Religion {
 // placeReligionAt places a religion of the given group at the given region.
 // This code is based on:
 // https://github.com/Azgaar/Fantasy-Map-Generator/blob/master/modules/religions-generator.js
-func (m *Civ) placeReligionAt(r int, founded int64, group string, culture *Culture, parent *Religion) *Religion {
+func (m *Civ) placeReligionAt(r int, founded int64, group string, culture *Culture, lang *genlanguage.Language, parent *Religion) *Religion {
 	// If founded is -1, we take the current year.
 	if founded == -1 {
 		founded = m.History.GetYear()
 	}
 
-	rlgGen := genreligion.NewGenerator(int64(r))
-
 	relg := &Religion{
 		ID:      r,
 		Culture: culture,
-		Type:    group,
-		Form:    rlgGen.RandFormFromGroup(group), // Pick the form of the religion.
 		Founded: founded,
 		Parent:  parent,
 	}
 
-	// If appropriate, add a deity to the religion.
-	if relg.Form != genreligion.FormNontheism && relg.Form != genreligion.FormAnimism {
-		// Get the language of the culture.
-		var lang *genlanguage.Language
-		if culture != nil {
-			lang = culture.Language
-		}
+	rlgGen := genreligion.NewGenerator(int64(r))
+	if parent != nil {
+		// Inherit some characteristics from parent.
+		// TODO: If parent is not nil, maybe swich form to cult or heresy?
+		relg.Classification = rlgGen.NewClassification(group, parent.Form, "")
+	} else {
+		relg.Classification = rlgGen.NewClassification(group, "", "")
+	}
 
-		// If we have a parent religion with a deity, we use the same approach
-		// to generate the deity, otherwise the generator will pick a random approach.
-		if parent != nil && parent.Deity != nil {
+	// If appropriate, add a deity to the religion.
+	if relg.HasDeity() {
+		if parent != nil && parent.HasDeity() {
+			// If we have a parent religion with a deity, we use the same approach
+			// to generate the deity, otherwise the generator will pick a random approach.
 			relg.Deity = rlgGen.GetDeity(lang, parent.Deity.Approach)
 		} else {
 			relg.Deity = rlgGen.GetDeity(lang, "")
@@ -149,9 +147,7 @@ func (m *Civ) placeReligionAt(r int, founded int64, group string, culture *Cultu
 
 	// Select name, expansion, and expansionism.
 	if group == genreligion.GroupOrganized {
-		// TODO: If parent is not nil, maybe swich form to cult or heresy?
-		// Check if we have a state at this location
-		name, expansion := m.getReligionName(rlgGen, culture, relg.Deity, relg.Form, r)
+		name, expansion := m.getOrganizedReligionName(rlgGen, culture, lang, relg.Deity, relg.Classification, r)
 
 		// Make sure the expansion type is valid.
 		if (expansion == ReligionExpState && m.RegionToCityState[r] == -1) ||
@@ -180,7 +176,7 @@ func (m *Civ) placeReligionAt(r int, founded int64, group string, culture *Cultu
 		// const origins = folk ? [folk.i] : getReligionsInRadius({x, y, r: 150 / count, max: 2});
 		// const expansionism = rand(3, 8);
 	} else if group == genreligion.GroupFolk {
-		relg.Name = m.getFolkReligionName(rlgGen, culture, relg.Form)
+		relg.Name = culture.Name + " " + relg.Type // TODO: Improve variety of folk religion names.
 		relg.Expansion = ReligionExpCulture
 		relg.Expansionism = culture.Expansionism * rand.Float64() * 1.5 // TODO: Move this to religion generator.
 	}
