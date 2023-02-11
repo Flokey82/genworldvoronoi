@@ -26,6 +26,11 @@
       width: auto;
     }
 
+    div.text-labels.grey {
+      color: #ccc;
+      opacity: 0.5;
+    }
+
     div.text-labels span {
       white-space: nowrap;
     }
@@ -153,16 +158,16 @@
           layer.bindPopup(
             '<span style="font-size:8px;">' +
             '<b>' + prop.name + '</b> (' + prop.type + ')<br/>' +
+            (prop.citystate ? 'Citystate: ' + prop.citystate + '<br/>' : '') +
+            (prop.empire ? 'Empire: ' + prop.empire + '<br/>' : '') +
             '<p><b>' + prop.flavortext + '</b></p>' +
             '<p>' +
             'Population: ' + prop.population + ' / ' + prop.maxpop +
             ' (max ' + prop.maxpoplimit + ' growth ' + prop.popgrowth.toFixed(3) + ')<br/>' +
             'Settled: ' + prop.settled + 'yrs ago<br/>' +
             'Culture: ' + prop.culture + '<br/>' +
-            (prop.religion ? 'Religion: ' + prop.religion + '<br/>':'') +
-            (prop.deity ? 'Deity: ' + prop.deity + '<br/>':'') +
-            (prop.empire ? 'Empire: ' + prop.empire + '<br/>':'') +
-            (prop.citystate ? 'Citystate: ' + prop.citystate + '<br/>':'') +
+            (prop.religion ? 'Religion: ' + prop.religion + '<br/>' : '') +
+            (prop.deity ? 'Deity: ' + prop.deity + '<br/>' : '') +
             'Biome: ' + prop.biome + '<br/>' +
             'Coords: ' + prop.coordinates + '<br/>' +
             'Attractiveness: ' + prop.attractiveness.toFixed(3) + '<br/>' +
@@ -183,10 +188,11 @@
             '</p></span>');
         },
         pointToLayer: function (feature, latlng) {
+          var prop = feature.properties;
           return L.marker(latlng, {
             icon: L.divIcon({
-              className: 'text-labels',   // Set class for CSS styling
-              html: '<span>&#x2022;' + feature.properties.name + '</span>'
+              className: 'text-labels' + (prop.population > 0 ? '' : ' grey'),   // Set class for CSS styling
+              html: '<span>&#x2022;' + feature.properties.name + (prop.population > 0 ? '' : ' (ruins)') + '</span>'
             }),
             zIndexOffset: 1000     // Make appear above other map features
           })

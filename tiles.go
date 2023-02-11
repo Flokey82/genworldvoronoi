@@ -765,7 +765,7 @@ func (m *Map) GetGeoJSONCities(la1, lo1, la2, lo2 float64, zoom int) ([]byte, er
 			numEvents = 10
 		}
 		for _, event := range hist[len(hist)-numEvents:] {
-			msgs = append(msgs, event.String())
+			msgs = append(msgs, fmt.Sprintf("%d: %s", event.Year, event.String()))
 		}
 		f.SetProperty("history", msgs)
 
