@@ -1,6 +1,70 @@
 package genworldvoronoi
 
-import "math"
+import (
+	"math"
+	"math/rand"
+)
+
+type disaster struct {
+	Name           string
+	PopulationLoss float64
+}
+
+// TODO: Move non-geographical disasters to a separate file or move this
+// code to a more genericly named file.
+var (
+	disNone       = disaster{"None", 0}
+	disStorm      = disaster{"Storm", 0.01}
+	disFire       = disaster{"Fire", 0.02}
+	disRockslide  = disaster{"Rockslide", 0.03}
+	disCaveIn     = disaster{"Cave In", 0.05}
+	disWildfire   = disaster{"Wildfire", 0.07}
+	disDrought    = disaster{"Drought", 0.1}
+	disFamine     = disaster{"Famine", 0.15}
+	disDisease    = disaster{"Disease", 0.25}
+	disEarthquake = disaster{"Earthquake", 0.3}
+	disFlood      = disaster{"Flood", 0.35}
+	disVolcano    = disaster{"Volcanic Eruption", 0.6}
+	disPlague     = disaster{"Plague", 0.8}
+)
+
+var disasters = []disaster{
+	disStorm,
+	disFire,
+	disRockslide,
+	disCaveIn,
+	disWildfire,
+	disDrought,
+	disFamine,
+	disDisease,
+	disEarthquake,
+	disFlood,
+	disVolcano,
+	disPlague,
+}
+
+func randDisaster() disaster {
+	// Pick a random disaster given their respective probabilities.
+	// TODO: Replace this with region specific disasters and disasters
+	// that are likely based on local industry, population density, etc.
+	r := rand.Float64() * sumDisasterProbability
+	for _, d := range disasters {
+		r -= 1 - d.PopulationLoss
+		if r <= 0 {
+			return d
+		}
+	}
+	return disNone
+}
+
+var sumDisasterProbability float64
+
+func init() {
+	// The probabilities are the inverse of the population loss.
+	for _, d := range disasters {
+		sumDisasterProbability += 1 - d.PopulationLoss
+	}
+}
 
 // GeoDisasterChance is the chance of a disaster in a region based on the
 // geographical properties of the region.

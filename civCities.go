@@ -206,50 +206,6 @@ func (m *Civ) getAttractivenessFunc() func(int) float64 {
 	}
 }
 
-type disaster struct {
-	Name           string
-	PopulationLoss float64
-}
-
-var (
-	disStorm      = disaster{"Storm", 0.01}
-	disFire       = disaster{"Fire", 0.02}
-	disRockslide  = disaster{"Rockslide", 0.03}
-	disCaveIn     = disaster{"Cave In", 0.05}
-	disWildfire   = disaster{"Wildfire", 0.07}
-	disDrought    = disaster{"Drought", 0.1}
-	disFamine     = disaster{"Famine", 0.15}
-	disDisease    = disaster{"Disease", 0.25}
-	disEarthquake = disaster{"Earthquake", 0.3}
-	disFlood      = disaster{"Flood", 0.35}
-	disVolcano    = disaster{"Volcanic Eruption", 0.6}
-	disPlague     = disaster{"Plague", 0.8}
-)
-
-var disasters = []disaster{
-	disStorm,
-	disFire,
-	disRockslide,
-	disCaveIn,
-	disWildfire,
-	disDrought,
-	disFamine,
-	disDisease,
-	disEarthquake,
-	disFlood,
-	disVolcano,
-	disPlague,
-}
-
-var sumDisasterProbability float64
-
-func init() {
-	// The probabilities are the inverse of the population loss.
-	for _, d := range disasters {
-		sumDisasterProbability += 1 - d.PopulationLoss
-	}
-}
-
 func (m *Civ) tickCityDays(c *City, days int) {
 	// Check if the city is abandoned.
 	if c.Population <= 0 {
@@ -277,18 +233,10 @@ func (m *Civ) tickCityDays(c *City, days int) {
 	// Check if a random disaster strikes.
 	if m.rand.Intn(100*356) < days {
 		// Pick a random disaster given their respective probabilities.
-		r := rand.Float64() * sumDisasterProbability
-		sumProb := 0.0
-		var dis disaster
-		for _, d := range disasters {
-			sumProb += 1 - d.PopulationLoss
-			if r < sumProb {
-				dis = d
-				break
-			}
-		}
-
-		if dis.Name == "" {
+		// TODO: Replace this with region specific disasters and disasters
+		// that are likely based on local industry, population density, etc.
+		dis := randDisaster()
+		if dis == disNone {
 			log.Fatalf("No disaster was chosen")
 		}
 
