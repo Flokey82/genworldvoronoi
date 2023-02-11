@@ -1,6 +1,8 @@
 package genworldvoronoi
 
 import (
+	"fmt"
+
 	"github.com/Flokey82/go_gens/genlanguage"
 )
 
@@ -21,3 +23,13 @@ var TrimVowels = genlanguage.TrimVowels
 // This takes in account "witch" and "fish" which are
 // irregular.
 var GetNounPlural = genlanguage.GetNounPlural
+
+func numPeopleStr(num int) string {
+	if num == 0 {
+		return "no one"
+	}
+	if num == 1 {
+		return "1 person"
+	}
+	return fmt.Sprintf("%d people", num)
+}

@@ -246,7 +246,7 @@ func (m *Civ) tickCityDays(c *City, days int) {
 		year := m.Geo.Calendar.GetYear()
 
 		// Add an event to the calendar.
-		m.AddEvent(dis.Name, fmt.Sprintf("%d people died", dead), c.Ref())
+		m.AddEvent(dis.Name, fmt.Sprintf("%s died", numPeopleStr(dead)), c.Ref())
 
 		// Reduce the population.
 		c.Population -= dead
@@ -256,7 +256,7 @@ func (m *Civ) tickCityDays(c *City, days int) {
 		}
 
 		// Log the disaster, what type, how many people died and where.
-		log.Printf("Year %d: %s, %d people died in %s", year, dis.Name, dead, c.Name)
+		log.Printf("Year %d: %s, %s died in %s", year, dis.Name, numPeopleStr(dead), c.Name)
 
 		// Since there was a disaster, depending on the number of people that
 		// died, some people might leave the city.
@@ -351,7 +351,7 @@ func (m *Civ) relocateFromCity(c *City, population int) {
 	c.Population -= population
 
 	// Add an event to the calendar.
-	m.AddEvent("Migration", fmt.Sprintf("%d people left", population), c.Ref())
+	m.AddEvent("Migration", fmt.Sprintf("%s left", numPeopleStr(population)), c.Ref())
 
 	// Calculate the analog of distance between regions by taking the surface
 	// of a sphere with radius 1 and dividing it by the number of regions.
@@ -410,9 +410,9 @@ func (m *Civ) relocateFromCity(c *City, population int) {
 					city.MaxPopulation = city.Population
 				}
 				// TODO: Update the economic potential of the city.
-				m.AddEvent("Migration", fmt.Sprintf("%d people arrived", population), city.Ref())
+				m.AddEvent("Migration", fmt.Sprintf("%s arrived", numPeopleStr(survived)), city.Ref())
 			}
-			log.Printf("%d people moved from %s to %s, %d died on the way", numMigrants, c.Name, city.Name, dead)
+			log.Printf("%s moved from %s to %s, %d died on the way", numPeopleStr(numMigrants), c.Name, city.Name, dead)
 
 			// Subtract the number of people that moved from the total
 			// population that is migrating.
@@ -474,7 +474,7 @@ func (m *Civ) relocateFromCity(c *City, population int) {
 			city.Attractiveness = bestScore
 
 			// TODO: Set the economic potential and attractiveness of the new city.
-			log.Printf("%d people moved from %s and founded %s, %d died on the way", population, c.Name, city.Name, dead)
+			log.Printf("%s moved from %s and founded %s, %d died on the way", numPeopleStr(population), c.Name, city.Name, dead)
 		}
 	}
 }
