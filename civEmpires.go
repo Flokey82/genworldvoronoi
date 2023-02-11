@@ -127,8 +127,8 @@ func (m *Civ) expandEmpires() {
 		// are within the current territory.
 		for _, c := range m.Cities {
 			if m.RegionToEmpire[c.ID] == e.ID {
-				// TODO: Name cities based on local culture?
-				c.Name = e.Language.MakeCityName()
+				// TODO: If we just conquered this city, there might be a chance
+				// we rename it using the primary language of the empire.
 				e.Cities = append(e.Cities, c)
 			}
 		}
