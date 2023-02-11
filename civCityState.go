@@ -104,14 +104,10 @@ func (m *Civ) expandCityStates() {
 	// m.rRelaxTerritories(m.r_city, 5)
 
 	// Update the city states with the new regions.
-
 	for _, c := range m.CityStates {
-		// Reset the cities and regions.
-		c.Cities = nil
-		c.Regions = nil
-
 		// Loop through all cities and gather all that
 		// are within the current city state.
+		c.Cities = nil
 		for _, ct := range m.Cities {
 			if m.RegionToCityState[ct.ID] == c.ID {
 				c.Cities = append(c.Cities, ct)
@@ -120,6 +116,7 @@ func (m *Civ) expandCityStates() {
 
 		// Collect all regions that are part of the
 		// current territory.
+		c.Regions = nil
 		for r, terr := range m.RegionToCityState {
 			if terr == c.ID {
 				c.Regions = append(c.Regions, r)

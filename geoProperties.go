@@ -12,23 +12,17 @@ type RegProperty struct {
 	DistanceToFaultline float64 // graph distance to the nearest faultline
 	Temperature         float64 // in °C
 	Rainfall            float64 // in dm
-	DangerRockslide     float64 // 0.0-1.0
-	DangerEarthquake    float64 // 0.0-1.0
-	DangerVolcano       float64 // 0.0-1.0
-	DangerFlood         float64 // 0.0-1.0
-	HasWaterfall        bool    // true if the region has a waterfall
-	IsValley            bool    // true if the region is a valley
-	OnIsland            bool    // true if the region is on an island
+	Danger              GeoDisasterChance
+	HasWaterfall        bool // true if the region has a waterfall
+	IsValley            bool // true if the region is a valley
+	OnIsland            bool // true if the region is on an island
 }
 
 // getRegPropertyFunc returns a function that returns the properties of a region.
 // NOTE: This is probably a very greedy function.
 func (m *Geo) getRegPropertyFunc() func(int) RegProperty {
 	// TODO: Add chance of tropical storms, wildfires, etc.
-	earthquakeChance := m.getEarthquakeChance()
-	floodChance := m.getFloodChance()
-	volcanoEruptionChance := m.getVolcanoEruptionChance()
-	rockSlideAvalancheChance := m.getRockSlideAvalancheChance()
+	disasterFunc := m.getGeoDisasterFunc()
 	steepness := m.GetSteepness()
 	inlandValleyFunc := m.getFitnessInlandValleys()
 	biomeFunc := m.getRegWhittakerModBiomeFunc()
@@ -90,10 +84,7 @@ func (m *Geo) getRegPropertyFunc() func(int) RegProperty {
 			DistanceToFaultline: distFaultline[id],
 			Temperature:         m.getRegTemperature(id, maxElev),
 			Rainfall:            m.Rainfall[id],
-			DangerRockslide:     rockSlideAvalancheChance[id],
-			DangerEarthquake:    earthquakeChance[id],
-			DangerVolcano:       volcanoEruptionChance[id],
-			DangerFlood:         floodChance[id],
+			Danger:              disasterFunc(id),
 			HasWaterfall:        m.RegionIsWaterfall[id],
 			IsValley:            isValley,
 			OnIsland:            m.LandmassSize[m.Landmasses[id]] < 15, // TODO: This should use actual geographical area.

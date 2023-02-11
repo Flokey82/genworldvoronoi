@@ -101,9 +101,11 @@ func (m *Civ) ExpandCultures() {
 
 	// TODO: There are small islands that do not have a culture...
 	// We should (or could) fix that.
+
+	// Update the cultures with the new regions.
 	for _, c := range m.Cultures {
-		c.Regions = nil
 		// Collect all regions that are part of the current culture.
+		c.Regions = nil
 		for r, cu := range m.RegionToCulture {
 			if cu == c.ID {
 				c.Regions = append(c.Regions, r)
@@ -111,7 +113,10 @@ func (m *Civ) ExpandCultures() {
 		}
 		c.Stats = m.getStats(c.Regions)
 	}
+	m.genCultureSpecialties()
+}
 
+func (m *Civ) genCultureSpecialties() {
 	// Now re-evaluate the specialities of each culture, based on the
 	// resources they have access to.
 

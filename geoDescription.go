@@ -18,13 +18,13 @@ func (m *Geo) GenerateRegPropertyDescription(p RegProperty) string {
 
 	// Add info on the potential dangers of the region.
 	if p.DistanceToVolcano < 3 {
-		if p.DangerVolcano > 0.2 {
+		if p.Danger.Volcano > 0.2 {
 			if p.DistanceToVolcano < 1 {
 				str += " It's location on a volcano"
 			} else {
 				str += " The proximity to a volcano"
 			}
-			if p.DangerVolcano > 0.5 {
+			if p.Danger.Volcano > 0.5 {
 				str += " results in a constant danger of destruction by a volcanic eruption"
 			} else {
 				str += " poses a looming threat of a possible volcanic eruption"
@@ -39,13 +39,13 @@ func (m *Geo) GenerateRegPropertyDescription(p RegProperty) string {
 			str += ". "
 		}
 	} else if p.DistanceToMountain < 3 {
-		if p.DangerRockslide > 0.2 {
+		if p.Danger.RockSlide > 0.2 {
 			if p.DistanceToMountain < 1 {
 				str += " The exposed location on a mountain"
 			} else {
 				str += " The proximity to a mountain"
 			}
-			if p.DangerRockslide > 0.5 {
+			if p.Danger.RockSlide > 0.5 {
 				str += " poses a constant danger of a deadly rockslide"
 			} else {
 				str += " results in occasional rockslides that threaten anyone nearby"
@@ -53,13 +53,13 @@ func (m *Geo) GenerateRegPropertyDescription(p RegProperty) string {
 			str += ". "
 		}
 	} else if p.DistanceToFaultline < 3 {
-		if p.DangerEarthquake > 0.2 {
+		if p.Danger.Earthquake > 0.2 {
 			if p.DistanceToFaultline < 1 {
 				str += " The exposed location on a faultline"
 			} else {
 				str += " The proximity to a faultline"
 			}
-			if p.DangerEarthquake > 0.5 {
+			if p.Danger.Earthquake > 0.5 {
 				str += " results in a constant danger of a deadly earthquake"
 			} else {
 				str += " poses a looming threat of a possible earthquake"
@@ -69,8 +69,8 @@ func (m *Geo) GenerateRegPropertyDescription(p RegProperty) string {
 	}
 	if p.DistanceToRiver < 1 {
 		str += " The nearby river provides access to fresh water"
-		if p.DangerFlood > 0.2 {
-			if p.DangerFlood > 0.5 {
+		if p.Danger.Flood > 0.2 {
+			if p.Danger.Flood > 0.5 {
 				str += " and is infamous for frequent floods"
 			} else {
 				str += " and might cause occasional flooding"

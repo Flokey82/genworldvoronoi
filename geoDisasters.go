@@ -2,6 +2,34 @@ package genworldvoronoi
 
 import "math"
 
+// GeoDisasterChance is the chance of a disaster in a region based on the
+// geographical properties of the region.
+type GeoDisasterChance struct {
+	Earthquake float64 // 0.0-1.0
+	Flood      float64 // 0.0-1.0
+	Volcano    float64 // 0.0-1.0
+	RockSlide  float64 // 0.0-1.0
+}
+
+func (m *Geo) getGeoDisasterFunc() func(int) GeoDisasterChance {
+	// Get the chance function for each disaster.
+	earthquakeChance := m.getEarthquakeChance()
+	floodChance := m.getFloodChance()
+	volcanoEruptionChance := m.getVolcanoEruptionChance()
+	rockSlideAvalancheChance := m.getRockSlideAvalancheChance()
+	return func(reg int) GeoDisasterChance {
+		// Get the chance of a disaster in this region.
+		// NOTE: This is a very simple way of combining the chances.
+		// TODO: Add chance of tropical storms, wildfires, etc.
+		return GeoDisasterChance{
+			Earthquake: earthquakeChance[reg],
+			Flood:      floodChance[reg],
+			Volcano:    volcanoEruptionChance[reg],
+			RockSlide:  rockSlideAvalancheChance[reg],
+		}
+	}
+}
+
 func (m *Geo) getEarthquakeChance() []float64 {
 	// Get distance field from fault lines using the plate compression.
 	compression := m.propagateCompression(m.RegionCompression)
@@ -69,6 +97,9 @@ func (m *Geo) getDownhillDisaster(origins map[int]bool, steepnessLimit float64) 
 }
 
 func (m *Civ) getDisasterFunc() func(r int) []disaster {
+	// TODO: Use the proper fitness functions above to determine the chance
+	// of a disaster?
+
 	// distRegion := math.Sqrt(4 * math.Pi / float64(m.mesh.numRegions))
 	// biomeFunc := m.getRegWhittakerModBiomeFunc()
 	_, maxElev := minMax(m.Elevation)
