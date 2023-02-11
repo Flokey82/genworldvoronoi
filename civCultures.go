@@ -3,7 +3,7 @@ package genworldvoronoi
 import (
 	"log"
 	"math"
-	"math/rand"
+	"sort"
 
 	"github.com/Flokey82/genbiome"
 	"github.com/Flokey82/go_gens/genlanguage"
@@ -12,7 +12,7 @@ import (
 // GetCulture returns the culture of the given region (if any).
 func (m *Civ) GetCulture(r int) *Culture {
 	// NOTE: This sucks. This should be done better.
-	if m.RegionToCulture[r] <= 0 {
+	if m.RegionToCulture[r] < 0 {
 		return nil
 	}
 	for _, c := range m.Cultures {
@@ -110,6 +110,135 @@ func (m *Civ) ExpandCultures() {
 			}
 		}
 		c.Stats = m.getStats(c.Regions)
+	}
+
+	// Now re-evaluate the specialities of each culture, based on the
+	// resources they have access to.
+
+	// NOTE: Someone smarter should come up with the rules for this...
+	// and maybe this should also be more generalized so it can be
+	// evaluated for all other things that occupy multiple regions like
+	// religions, monestaries, city-states, etc. !!!!!!!!!!
+
+	// We calculate the ratio of resources to number of regions, then
+	// we assign the specialties based on the highest ratio for each
+	// resource per culture.
+	// For all resource groups and types, then sort the cultures
+	// by the ratio of the resource to the number of regions.
+	// The top 3 cultures will get the specialty for that resource?
+
+	// Specialities should give some advantage or bonus for the culture.
+	// For example, a culture with the seafaring specialty should get
+	// a bonus to naval combat, or a bonus to trade with coastal regions,
+	// giving them access to exotic goods.
+	// A culture with the survival specialty should get a bonus to
+	// survival skills, or a bonus to exploration.
+
+	log.Println("re-evaluating culture specialties... (just a placeholder for now)")
+
+	// Copy the cultures to a slice.
+	cultureCopy := make([]*Culture, len(m.Cultures))
+	copy(cultureCopy, m.Cultures)
+
+	specialtyMap := make(map[*Culture][]string)
+
+	for _, c := range m.Cultures {
+		// Add the default speciality/-ies based on the culture type.
+		// TODO: Depending on the culture, there should be several options
+		// to select from, also based on the statistics of the regions the
+		// culture has access to. (randomized?)
+		// For example, naval cultures should only get the seafaring
+		// specialty if they have access to a wide coastal regions.
+		// Highland cultures should be able to get different survival
+		// skills based on the climate of the highlands.
+		switch c.Type {
+		case CultureTypeWildland:
+			specialtyMap[c] = append(specialtyMap[c], "survival")
+		case CultureTypeGeneric:
+			specialtyMap[c] = append(specialtyMap[c], "generic")
+		case CultureTypeRiver:
+			// Other possible specialities or bonuses:
+			// - hydro power
+			// - trading via rivers (?)
+			specialtyMap[c] = append(specialtyMap[c], "river navigation")
+		case CultureTypeLake:
+			specialtyMap[c] = append(specialtyMap[c], "fishery")
+		case CultureTypeNaval:
+			// Other possible specialities or bonuses:
+			// - trade via sea
+			specialtyMap[c] = append(specialtyMap[c], "seafaring")
+		case CultureTypeNomadic:
+			// Other possible specialities or bonuses:
+			// - survival
+			// - domestication / cattle breeding?
+			specialtyMap[c] = append(specialtyMap[c], "nomadic")
+		case CultureTypeHunting:
+			// Other possible specialities or bonuses:
+			// - riding
+			specialtyMap[c] = append(specialtyMap[c], "hunting")
+		case CultureTypeHighland:
+			// Other possible specialities or bonuses:
+			// - lower penalty for crossing mountains
+			// - mining (?)
+			specialtyMap[c] = append(specialtyMap[c], "climbing")
+		}
+	}
+
+	// Metals.
+	for res := 0; res < ResMaxMetals; res++ {
+		sort.Slice(cultureCopy, func(i, j int) bool {
+			return float64(cultureCopy[i].Stats.ResMetal[res])/float64(len(cultureCopy[i].Regions)) > float64(cultureCopy[j].Stats.ResMetal[res])/float64(len(cultureCopy[j].Regions))
+		})
+		for i, c := range cultureCopy {
+			if i >= 3 {
+				break
+			}
+			specialtyMap[c] = append(specialtyMap[c], metalToString(res))
+		}
+	}
+
+	// Gems.
+	for res := 0; res < ResMaxGems; res++ {
+		sort.Slice(cultureCopy, func(i, j int) bool {
+			return float64(cultureCopy[i].Stats.ResGems[res])/float64(len(cultureCopy[i].Regions)) > float64(cultureCopy[j].Stats.ResGems[res])/float64(len(cultureCopy[j].Regions))
+		})
+		for i, c := range cultureCopy {
+			if i >= 3 {
+				break
+			}
+			specialtyMap[c] = append(specialtyMap[c], gemToString(res))
+		}
+	}
+
+	// Stones.
+	for res := 0; res < ResMaxStones; res++ {
+		sort.Slice(cultureCopy, func(i, j int) bool {
+			return float64(cultureCopy[i].Stats.ResStones[res])/float64(len(cultureCopy[i].Regions)) > float64(cultureCopy[j].Stats.ResStones[res])/float64(len(cultureCopy[j].Regions))
+		})
+		for i, c := range cultureCopy {
+			if i >= 3 {
+				break
+			}
+			specialtyMap[c] = append(specialtyMap[c], stoneToString(res))
+		}
+	}
+
+	// Woods.
+	for res := 0; res < ResMaxWoods; res++ {
+		sort.Slice(cultureCopy, func(i, j int) bool {
+			return float64(cultureCopy[i].Stats.ResWood[res])/float64(len(cultureCopy[i].Regions)) > float64(cultureCopy[j].Stats.ResWood[res])/float64(len(cultureCopy[j].Regions))
+		})
+		for i, c := range cultureCopy {
+			if i >= 3 {
+				break
+			}
+			specialtyMap[c] = append(specialtyMap[c], woodToString(res))
+		}
+	}
+
+	// Log for each culture their specialties.
+	for _, c := range m.Cultures {
+		log.Println(c.Name, "specialties:", specialtyMap[c])
 	}
 }
 
@@ -229,289 +358,6 @@ func (m *Civ) PlaceCultureAt(r int) *Culture {
 	// we process to the ones that are close to the new culture.
 	m.ExpandCultures()
 	return c
-}
-
-type CultureType int
-
-// Culture types.
-const (
-	CultureTypeWildland CultureType = iota
-	CultureTypeGeneric
-	CultureTypeRiver
-	CultureTypeLake
-	CultureTypeNaval
-	CultureTypeNomadic
-	CultureTypeHunting
-	CultureTypeHighland
-)
-
-// String returns the string representation of a given culture type.
-func (c CultureType) String() string {
-	switch c {
-	case CultureTypeWildland:
-		return "Wildland"
-	case CultureTypeGeneric:
-		return "Generic"
-	case CultureTypeRiver:
-		return "River"
-	case CultureTypeLake:
-		return "Lake"
-	case CultureTypeNaval:
-		return "Naval"
-	case CultureTypeNomadic:
-		return "Nomadic"
-	case CultureTypeHunting:
-		return "Hunting"
-	case CultureTypeHighland:
-		return "Highland"
-	default:
-		return "Unknown"
-	}
-}
-
-// Expansionism returns the expansionism of a given culture type.
-func (t CultureType) Expansionism() float64 {
-	// TODO: This is a random attractiveness value of the capital.
-	// https://azgaar.wordpress.com/2017/11/21/settlements/
-	// I introduced two custom parameters — disbalance and power.
-	// Each capital has unique attractiveness power, which is randomly
-	// assigned to it based on a disbalance value. Disbalance is the same
-	// for all capitals, it only controls the randomness of power
-	// definition. Calculating a distance to the closest capital we
-	// multiply this value by capital’s power. If capital located not on
-	// the same island, we double the distance as it should not be easy
-	// for city to get an overseas possessions. As all capitals have
-	// different “powers”, the regions vary in area. For some reasons
-	// user may want regions having almost the same area, so the disbalance
-	// value could be changed.
-	powerInputValue := 1.0
-	base := 1.0 // Generic
-	switch t {
-	case CultureTypeLake:
-		base = 0.8
-	case CultureTypeNaval:
-		base = 1.5
-	case CultureTypeRiver:
-		base = 0.9
-	case CultureTypeNomadic:
-		base = 1.5
-	case CultureTypeHunting:
-		base = 0.7
-	case CultureTypeHighland:
-		base = 1.2
-	}
-	return roundToDecimals(((rand.Float64()*powerInputValue)/2+1)*base, 1)
-}
-
-// Martialism returns the martialism of a given culture type.
-func (t CultureType) Martialism() float64 {
-	powerInputValue := 1.0
-	base := 1.0 // Generic
-	switch t {
-	case CultureTypeLake:
-		base = 0.8
-	case CultureTypeNaval:
-		base = 1.5
-	case CultureTypeRiver:
-		base = 0.9
-	case CultureTypeNomadic:
-		base = 1.4
-	case CultureTypeHunting:
-		base = 1.4
-	case CultureTypeHighland:
-		base = 1.1
-	}
-	return roundToDecimals(((rand.Float64()*powerInputValue)/2+1)*base, 1)
-}
-
-// CellTypeCost returns the cost of crossing / navigating a given cell type for a given culture.
-func (t CultureType) CellTypeCost(cellType int) float64 {
-	// TODO: Make use of this
-
-	// Land near coast / coastline / coastal land strip / "beach"?.
-	if cellType == 1 {
-		if t == CultureTypeNaval || t == CultureTypeLake {
-			// Naval cultures or lake cultures have an easier time navigating
-			// coastal areas or shores of lakes.
-			return 1.0
-		}
-		if t == CultureTypeNomadic {
-			// Nomadic cultures have a harder time navigating coastal areas or
-			// shores of lakes.
-			return 1.6
-		}
-		// All other cultures have a small penalty for coastal areas.
-		return 1.2
-	}
-
-	// Land slightly further inland.
-	if cellType == 2 {
-		if t == CultureTypeNaval || t == CultureTypeNomadic {
-			// Small penalty for land with distance 2 to ocean for navals and nomads.
-			return 1.3
-		}
-		// All other cultures do not have appreciable penalty.
-		return 1.0
-	}
-
-	// Not water near coast (deep ocean/coastal land).
-	if cellType != -1 {
-		if t == CultureTypeNaval || t == CultureTypeLake {
-			// Penalty for mainland for naval and lake cultures
-			return 2.0
-		}
-	}
-	return 1.0
-}
-
-// BiomeCost returns the cost for traversion / expanding into a given biome.
-func (t CultureType) BiomeCost(biome int) float64 {
-	if t == CultureTypeHunting {
-		// Non-native biome penalty for hunters.
-		return 5.0
-	}
-	if t == CultureTypeNomadic && (biome == genbiome.AzgaarBiomeTropicalSeasonalForest ||
-		biome == genbiome.AzgaarBiomeTemperateDeciduousForest ||
-		biome == genbiome.AzgaarBiomeTropicalRainforest ||
-		biome == genbiome.AzgaarBiomeTemperateRainforest ||
-		biome == genbiome.AzgaarBiomeTaiga) {
-		// Forest biome penalty for nomads.
-		return 10.0
-	}
-	// General non-native biome penalty.
-	return 2.0
-}
-
-// getRegHaven returns the closest neighbor region that is a water cell, which
-// can be used as a haven, and returns the number of water neighbors, indicating
-// the harbor size.
-//
-// If no haven is found, -1 is returned.
-func (m *Civ) getRegHaven(i int) (int, int) {
-	// get all neighbors that are below or at sea level.
-	var water []int
-	for _, nb := range m.GetRegNeighbors(i) {
-		if m.Elevation[nb] <= 0.0 {
-			water = append(water, nb)
-		}
-	}
-
-	// No water neighbors, return -1.
-	if len(water) == 0 {
-		return -1, 0
-	}
-
-	// Get distances of i to each water neighbor.
-	// get the closest water neighbor.
-	iLatLon := m.LatLon[i]
-	closest := -1
-	var minDist float64
-	for _, nb := range water {
-		nbLatLon := m.LatLon[nb]
-		dist := haversine(iLatLon[0], iLatLon[1], nbLatLon[0], nbLatLon[1])
-		if closest == -1 || dist < minDist {
-			minDist = dist
-			closest = nb
-		}
-	}
-	// store the closest water neighbor as the haven.
-	// store the number of water neighbors as the harbor.
-	return closest, len(water)
-}
-
-// getRegCellTypes maps the region to its cell type.
-//
-// NOTE: Currently this depends on the region graph, which will break
-// things once we increas or decrease the number of regions on the map as
-// the distance between regions will change with the region density.
-//
-// Value meanings:
-//
-// -2: deep ocean or large lake
-// -1: region is a water cell next to a land cell (lake shore/coastal water)
-// +1: region is a land cell next to a water cell (lake shore/coastal land)
-// +2: region is a land cell next to a coastal land cell
-// >2: region is inland
-func (m *Civ) getRegCellTypes() []int {
-	var oceanRegs, landRegs []int
-	for r, elev := range m.Elevation {
-		if elev <= 0.0 {
-			oceanRegs = append(oceanRegs, r)
-		} else {
-			landRegs = append(landRegs, r)
-		}
-	}
-	regDistanceOcean := m.assignDistanceField(oceanRegs, make(map[int]bool))
-	regDistanceLand := m.assignDistanceField(landRegs, make(map[int]bool))
-
-	cellType := make([]int, m.mesh.numRegions)
-	for i := range cellType {
-		// Is it water?
-		if m.Elevation[i] <= 0.0 {
-			// Figure out if it has a land neighbor.
-			// If so, it is -1 (water near coast)
-			if regDistanceLand[i] <= 1 {
-				cellType[i] = -1
-			} else {
-				// If not, it is -2 (water far from coast)
-				cellType[i] = -2
-			}
-		} else {
-			// Figure out if it has a water neighbor.
-			// If so, it is 1 (land near coast)
-			if regDistanceOcean[i] <= 1 {
-				cellType[i] = 1
-			} else {
-				// If not, it is >=2 (land far from coast)
-				cellType[i] = int(regDistanceOcean[i])
-			}
-		}
-	}
-	return cellType
-}
-
-// Landmark feature types.
-const (
-	FeatureTypeOcean     = "ocean"
-	FeatureTypeSea       = "sea"
-	FeatureTypeLake      = "lake"
-	FeatureTypeGulf      = "gulf"
-	FeatureTypeIsle      = "isle"
-	FeatureTypeContinent = "continent"
-)
-
-// getRegionFeatureTypeFunc returns a function that returns the feature type of
-// a given region.
-func (m *Civ) getRegionFeatureTypeFunc() func(int) string {
-	return func(i int) string {
-		if i < 0 {
-			return ""
-		}
-		if waterbodyID := m.Waterbodies[i]; waterbodyID >= 0 {
-			switch wbSize := m.WaterbodySize[waterbodyID]; {
-			case wbSize > m.mesh.numRegions/25:
-				return FeatureTypeOcean
-			case wbSize > m.mesh.numRegions/100:
-				return FeatureTypeSea
-			case wbSize > m.mesh.numRegions/500:
-				return FeatureTypeGulf
-			default:
-				return FeatureTypeLake
-			}
-		}
-		if landmassID := m.Landmasses[i]; landmassID >= 0 {
-			if m.LandmassSize[landmassID] < m.mesh.numRegions/100 {
-				return FeatureTypeIsle
-			}
-			return FeatureTypeContinent
-		}
-		return ""
-	}
-}
-
-// getAzgaarRegionBiome returns the biome for a given region as per Azgaar's map generator.
-func (m *Civ) getAzgaarRegionBiome(r int, elev, maxElev float64) int {
-	return genbiome.GetAzgaarBiome(int(20.0*m.Moisture[r]), int(m.getRegTemperature(r, maxElev)), int(elev*100))
 }
 
 // getRegionCutureTypeFunc returns a function that returns the culture type suitable for a given region.

@@ -11,14 +11,16 @@ import (
 type Civ struct {
 	*Geo
 	*History
-	RegionToEmpire    []int       // (political) Point / region mapping to territory / empire
-	RegionToCityState []int       // (political) Point / region mapping to city / city state
-	Cities            []*City     // (political) City seed points / regions
-	RegionToCulture   []int       // (cultural) Point / region mapping to culture
-	Cultures          []*Culture  // (cultural) Culture seed points / regions
-	RegionToReligion  []int       // (cultural) Point / region mapping to religion
-	Religions         []*Religion // (cultural) Religion seed points / regions
-	Settled           []int64     // (cultural) Time of settlement per region
+	Empires           []*Empire    // (political) Empires
+	RegionToEmpire    []int        // (political) Point / region mapping to territory / empire
+	CityStates        []*CityState // (political) City states
+	RegionToCityState []int        // (political) Point / region mapping to city / city state
+	Cities            []*City      // (political) City seed points / regions
+	RegionToCulture   []int        // (cultural) Point / region mapping to culture
+	Cultures          []*Culture   // (cultural) Culture seed points / regions
+	RegionToReligion  []int        // (cultural) Point / region mapping to religion
+	Religions         []*Religion  // (cultural) Religion seed points / regions
+	Settled           []int64      // (cultural) Time of settlement per region
 	// SettledBySpecies []int // (cultural) Which species settled the region first
 	NumCities             int // Number of generated cities (regions)
 	NumCityStates         int // Number of generated city states
@@ -58,6 +60,7 @@ func NewCiv(geo *Geo) *Civ {
 
 func (m *Civ) generateCivilization() {
 	enableCityAging := false
+	enableOrganizedReligions := false
 
 	// TODO: The generation should happen somewhat like this...
 	// 0. Calculate time of settlement per region through flood fill.
@@ -113,7 +116,6 @@ func (m *Civ) generateCivilization() {
 	// m.rPlaceNCities(30, TownTypeTrading)
 	// log.Println("Done trade cities in ", time.Since(start).String())
 
-	//m.GetEmpires()
 	_, maxSettled := minMax64(m.Settled)
 	m.Geo.Calendar.SetYear(maxSettled)
 
@@ -166,13 +168,18 @@ func (m *Civ) generateCivilization() {
 			m.Geo.Calendar.TickYear()
 		}
 		log.Println("Done aging cities in ", time.Since(start).String())
+
+		// TODO: We should also introduce some kind of "aging" of city states or empires
+		// to generate some history.
 	}
 
 	// Organized religions.
-	// m.genOrganizedReligions()
-	// for _, r := range m.Religions {
-	//	log.Println(r.String())
-	// }
+	if enableOrganizedReligions {
+		m.PlaceNOrganizedReligions(m.NumOrganizedReligions)
+		for _, r := range m.Religions {
+			log.Println(r.String())
+		}
+	}
 }
 
 func (m *Civ) Tick() {
@@ -204,6 +211,9 @@ func (m *Civ) Tick() {
 	// NOTE: In theory we can partially de-duplicate code relating
 	// to city states and empires, since they function similarly.
 	// We can also de-duplicate cultures and religions.
+
+	// TODO: We should also introduce some kind of "aging" or "ticking" of
+	// city states or empires...
 }
 
 // getRegName attempts to generate a name for the given region.

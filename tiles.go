@@ -27,14 +27,14 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 		var territory []int
 		var terrLen int
 		if displayMode == 14 {
-			terr := m.Cities[:m.NumCityStates]
+			terr := m.CityStates
 			terrLen = len(terr)
 			for i, c := range terr {
 				terrToColor[c.ID] = i
 			}
 			territory = m.RegionToCityState
 		} else if displayMode == 15 {
-			terr := m.Cities[:m.NumEmpires]
+			terr := m.Empires
 			terrLen = len(terr)
 			for i, c := range terr {
 				terrToColor[c.ID] = i
@@ -713,6 +713,12 @@ func (m *Map) GetGeoJSONCities(la1, lo1, la2, lo2 float64, zoom int) ([]byte, er
 		if r := m.GetReligion(c.ID); r != nil {
 			f.SetProperty("religion", r.Name)
 			f.SetProperty("deity", r.Deity.FullName())
+		}
+		if e := m.GetEmpire(c.ID); e != nil {
+			f.SetProperty("empire", e.Name)
+		}
+		if cs := m.GetCityState(c.ID); cs != nil {
+			f.SetProperty("citystate", cs.Capital.Name)
 		}
 		f.SetProperty("population", c.Population)
 		f.SetProperty("popgrowth", c.PopulationGrowthRate())

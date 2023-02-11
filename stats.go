@@ -12,6 +12,7 @@ type Stats struct {
 	ResMetal   [ResMaxMetals]int
 	ResGems    [ResMaxGems]int
 	ResStones  [ResMaxStones]int
+	ResWood    [ResMaxWoods]int
 	TotalArea  float64
 	Biomes     map[int]int
 	Desert     int
@@ -58,6 +59,11 @@ func (m *Geo) getStats(rr []int) *Stats {
 				st.ResStones[i]++
 			}
 		}
+		for i := 0; i < ResMaxWoods; i++ {
+			if m.Wood[r]&(1<<i) != 0 {
+				st.ResWood[i]++
+			}
+		}
 		b := biomeFunc(r)
 		st.Biomes[b]++
 
@@ -84,13 +90,16 @@ func (m *Geo) getStats(rr []int) *Stats {
 func (s *Stats) Log() {
 	log.Printf("Total Area: %.2f km2", s.TotalArea*gameconstants.EarthSurface/gameconstants.SphereSurface)
 	for i := 0; i < ResMaxMetals; i++ {
-		log.Printf("Metal %s: %d", metalToString(i), s.ResMetal[i])
+		log.Printf("Metal %s: %d (%.6f%%)", metalToString(i), s.ResMetal[i], float64(s.ResMetal[i])/float64(s.NumRegions))
 	}
 	for i := 0; i < ResMaxGems; i++ {
-		log.Printf("Gem %s: %d", gemToString(i), s.ResGems[i])
+		log.Printf("Gem %s: %d (%.6f%%)", gemToString(i), s.ResGems[i], float64(s.ResGems[i])/float64(s.NumRegions))
 	}
 	for i := 0; i < ResMaxStones; i++ {
-		log.Printf("Stone %s: %d", stoneToString(i), s.ResStones[i])
+		log.Printf("Stone %s: %d (%.6f%%)", stoneToString(i), s.ResStones[i], float64(s.ResStones[i])/float64(s.NumRegions))
+	}
+	for i := 0; i < ResMaxWoods; i++ {
+		log.Printf("Wood %s: %d (%.6f%%)", woodToString(i), s.ResWood[i], float64(s.ResWood[i])/float64(s.NumRegions))
 	}
 	log.Printf("Desert: %.2f%%", 100*float64(s.Desert)/float64(s.NumRegions))
 	log.Printf("RainForest: %.2f%%", 100*float64(s.RainForest)/float64(s.NumRegions))

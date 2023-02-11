@@ -2,11 +2,24 @@ package genworldvoronoi
 
 import (
 	"container/heap"
+	"fmt"
 	"log"
 	"sort"
 
 	"github.com/Flokey82/go_gens/genlanguage"
 )
+
+func (m *Civ) GetEmpire(id int) *Empire {
+	if m.RegionToEmpire[id] < 0 {
+		return nil
+	}
+	for _, e := range m.Empires {
+		if e.ID == m.RegionToEmpire[id] {
+			return e
+		}
+	}
+	return nil
+}
 
 func (m *Civ) regPlaceNEmpires(n int) {
 	// NOTE: This is not very thought through.
@@ -31,7 +44,14 @@ func (m *Civ) regPlaceNEmpires(n int) {
 
 	// Truncate the list of cities to the number of empires we want to create.
 	sortCities = sortCities[:numEmpires]
+	// Start off with the city states with the highest expansionism score.
+	for _, c := range sortCities {
+		m.placeEmpireAt(c.ID, c)
+	}
+	m.expandEmpires()
+}
 
+func (m *Civ) expandEmpires() {
 	var queue ascPriorityQueue
 	heap.Init(&queue)
 
@@ -41,15 +61,12 @@ func (m *Civ) regPlaceNEmpires(n int) {
 	for i, c := range m.Cities {
 		cityIDToIndex[c.ID] = i
 		cityIDToCity[c.ID] = c
-		if i < numEmpires {
-			terr[i] = c.ID
-		}
 	}
 
 	// Start off with the city states with the highest expansionism score.
-	for _, c := range sortCities {
+	for _, c := range m.Empires {
 		terr[cityIDToIndex[c.ID]] = c.ID
-		cityScore := m.getCityScoreForMartial(c)
+		cityScore := m.getCityScoreForMartial(c.Capital)
 		for _, r := range m.getTerritoryNeighbors(c.ID, m.RegionToCityState) {
 			newdist := m.getCityScoreForMartial(cityIDToCity[r])
 			if newdist > cityScore {
@@ -62,7 +79,7 @@ func (m *Civ) regPlaceNEmpires(n int) {
 			})
 		}
 
-		log.Printf("City %s has score %f", c.Name, c.Score)
+		log.Printf("City %s has score %f", c.Name, c.Capital.Score)
 	}
 
 	// Extend territories until the queue is empty.
@@ -93,8 +110,8 @@ func (m *Civ) regPlaceNEmpires(n int) {
 	// For this we will have to copy the city states and
 	// set new territories.
 
-	copy(m.RegionToEmpire, m.RegionToCityState)
-	for i, t := range m.RegionToEmpire {
+	m.RegionToEmpire = initRegionSlice(m.mesh.numRegions)
+	for i, t := range m.RegionToCityState {
 		cIdx, ok := cityIDToIndex[t]
 		if !ok {
 			continue
@@ -102,6 +119,29 @@ func (m *Civ) regPlaceNEmpires(n int) {
 		if tn := terr[cIdx]; tn >= 0 {
 			m.RegionToEmpire[i] = tn
 		}
+	}
+
+	// Now update the empire territories.
+	for _, e := range m.Empires {
+		// Loop through all cities and gather all that
+		// are within the current territory.
+		for _, c := range m.Cities {
+			if m.RegionToEmpire[c.ID] == e.ID {
+				// TODO: Name cities based on local culture?
+				c.Name = e.Language.MakeCityName()
+				e.Cities = append(e.Cities, c)
+			}
+		}
+
+		// Collect all regions that are part of the
+		// current territory.
+		for r, terr := range m.RegionToEmpire {
+			if terr == e.ID {
+				e.Regions = append(e.Regions, r)
+			}
+		}
+		e.Stats = m.getStats(e.Regions)
+		e.Log()
 	}
 }
 
@@ -145,52 +185,36 @@ type Empire struct {
 	*Stats
 }
 
+func (e *Empire) String() string {
+	return fmt.Sprintf("Empire %s", e.Name)
+}
+
 func (e *Empire) Log() {
 	log.Printf("The Empire of %s: %d cities, %d regions, capital: %s", e.Name, len(e.Cities), len(e.Regions), e.Capital.Name)
 	log.Printf("Emperor: %s", e.Emperor)
 	e.Stats.Log()
 }
 
+func (m *Civ) placeEmpireAt(r int, c *City) *Empire {
+	var lang *genlanguage.Language
+	if c := m.GetCulture(c.ID); c != nil && c.Language != nil {
+		lang = c.Language
+	} else {
+		lang = GenLanguage(m.Seed + int64(r))
+	}
+	e := &Empire{
+		ID:       r,
+		Name:     lang.MakeName(),
+		Emperor:  lang.MakeFirstName() + " " + lang.MakeLastName(),
+		Capital:  c,
+		Culture:  c.Culture,
+		Language: lang,
+	}
+	m.Empires = append(m.Empires, e)
+	return e
+}
+
 func (m *Civ) GetEmpires() []*Empire {
 	// TODO: Deduplicate with GetCityStates.
-	var res []*Empire
-	for i := 0; i < m.NumEmpires; i++ {
-		capital := m.Cities[i]
-		var lang *genlanguage.Language
-		if c := m.GetCulture(capital.ID); c != nil && c.Language != nil {
-			lang = c.Language
-		} else {
-			lang = GenLanguage(m.Seed + int64(i))
-		}
-		e := &Empire{
-			ID:       capital.ID,
-			Name:     lang.MakeName(),
-			Emperor:  lang.MakeFirstName() + " " + lang.MakeLastName(),
-			Capital:  capital,
-			Culture:  capital.Culture,
-			Language: lang,
-		}
-
-		// Loop through all cities and gather all that
-		// are within the current territory.
-		for _, c := range m.Cities {
-			if m.RegionToEmpire[c.ID] == e.ID {
-				// TODO: Name cities based on local culture?
-				c.Name = e.Language.MakeCityName()
-				e.Cities = append(e.Cities, c)
-			}
-		}
-
-		// Collect all regions that are part of the
-		// current territory.
-		for r, terr := range m.RegionToEmpire {
-			if terr == e.ID {
-				e.Regions = append(e.Regions, r)
-			}
-		}
-		e.Stats = m.getStats(e.Regions)
-		e.Log()
-		res = append(res, e)
-	}
-	return res
+	return m.Empires
 }

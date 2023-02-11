@@ -323,30 +323,6 @@ func (m *BaseObject) GetRegArea(r int) float64 {
 	return area
 }
 
-func (m *BaseObject) isRegBelowOrAtSeaLevelOrPool(r int) bool {
-	return m.Elevation[r] <= 0 || m.Waterpool[r] > 0
-}
-
-func (m *BaseObject) isRegLakeOrWaterBody(r int) bool {
-	return m.isRegWaterBody(r) || m.isRegLake(r)
-}
-
-func (m *BaseObject) isRegWaterBody(r int) bool {
-	return m.Waterbodies[r] >= 0
-}
-
-func (m *BaseObject) isRegLake(r int) bool {
-	return m.Drainage[r] >= 0 || m.Waterpool[r] > 0
-}
-
-func (m *BaseObject) isRegRiver(r int) bool {
-	return m.Flux[r] > m.Rainfall[r]
-}
-
-func (m *BaseObject) isRegBigRiver(r int) bool {
-	return m.Flux[r] > m.Rainfall[r]*2
-}
-
 // GetSlope returns the region slope by averaging the slopes of the triangles
 // around a given region.
 //

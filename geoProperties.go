@@ -100,3 +100,162 @@ func (m *Geo) getRegPropertyFunc() func(int) RegProperty {
 		}
 	}
 }
+
+// Landmark feature types.
+const (
+	FeatureTypeOcean     = "ocean"
+	FeatureTypeSea       = "sea"
+	FeatureTypeLake      = "lake"
+	FeatureTypeGulf      = "gulf"
+	FeatureTypeIsle      = "isle"
+	FeatureTypeContinent = "continent"
+)
+
+// getRegionFeatureTypeFunc returns a function that returns the feature type of
+// a given region.
+func (m *Geo) getRegionFeatureTypeFunc() func(int) string {
+	return func(i int) string {
+		if i < 0 {
+			return ""
+		}
+		if waterbodyID := m.Waterbodies[i]; waterbodyID >= 0 {
+			switch wbSize := m.WaterbodySize[waterbodyID]; {
+			case wbSize > m.mesh.numRegions/25:
+				return FeatureTypeOcean
+			case wbSize > m.mesh.numRegions/100:
+				return FeatureTypeSea
+			case wbSize > m.mesh.numRegions/500:
+				return FeatureTypeGulf
+			default:
+				return FeatureTypeLake
+			}
+		}
+		if landmassID := m.Landmasses[i]; landmassID >= 0 {
+			if m.LandmassSize[landmassID] < m.mesh.numRegions/100 {
+				return FeatureTypeIsle
+			}
+			return FeatureTypeContinent
+		}
+		return ""
+	}
+}
+
+// getRegHaven returns the closest neighbor region that is a water cell, which
+// can be used as a haven, and returns the number of water neighbors, indicating
+// the harbor size.
+//
+// If no haven is found, -1 is returned.
+func (m *Geo) getRegHaven(reg int) (int, int) {
+	// get all neighbors that are below or at sea level.
+	var water []int
+	for _, nb := range m.GetRegNeighbors(reg) {
+		if m.Elevation[nb] <= 0.0 {
+			water = append(water, nb)
+		}
+	}
+
+	// No water neighbors, return -1.
+	if len(water) == 0 {
+		return -1, 0
+	}
+
+	// Get distances of i to each water neighbor.
+	// get the closest water neighbor.
+	rLatLon := m.LatLon[reg]
+	closest := -1
+	var minDist float64
+	for _, nb := range water {
+		nbLatLon := m.LatLon[nb]
+		dist := haversine(rLatLon[0], rLatLon[1], nbLatLon[0], nbLatLon[1])
+		if closest == -1 || dist < minDist {
+			minDist = dist
+			closest = nb
+		}
+	}
+	// store the closest water neighbor as the haven.
+	// store the number of water neighbors as the harbor.
+	return closest, len(water)
+}
+
+// CellType is the type of a cell indicating the distance to the shore.
+const (
+	CellTypeDeepWaters   = -2
+	CellTypeCoastalWater = -1
+	CellTypeCoastalLand  = 1
+	CellTypeInland       = 2
+)
+
+// getRegCellTypes maps the region to its cell type.
+//
+// NOTE: Currently this depends on the region graph, which will break
+// things once we increas or decrease the number of regions on the map as
+// the distance between regions will change with the region density.
+//
+// Value meanings:
+//
+// -2: deep ocean or large lake
+// -1: region is a water cell next to a land cell (lake shore/coastal water)
+// +1: region is a land cell next to a water cell (lake shore/coastal land)
+// +2: region is a land cell next to a coastal land cell
+// >2: region is inland
+func (m *Geo) getRegCellTypes() []int {
+	var oceanRegs, landRegs []int
+	for r, elev := range m.Elevation {
+		if elev <= 0.0 {
+			oceanRegs = append(oceanRegs, r)
+		} else {
+			landRegs = append(landRegs, r)
+		}
+	}
+	regDistanceOcean := m.assignDistanceField(oceanRegs, make(map[int]bool))
+	regDistanceLand := m.assignDistanceField(landRegs, make(map[int]bool))
+
+	cellType := make([]int, m.mesh.numRegions)
+	for i := range cellType {
+		// Is it water?
+		if m.Elevation[i] <= 0.0 {
+			// Figure out if it has a land neighbor.
+			// If so, it is -1 (water near coast)
+			if regDistanceLand[i] <= 1 {
+				cellType[i] = CellTypeCoastalWater
+			} else {
+				// If not, it is -2 (water far from coast)
+				cellType[i] = CellTypeDeepWaters
+			}
+		} else {
+			// Figure out if it has a water neighbor.
+			// If so, it is 1 (land near coast)
+			if regDistanceOcean[i] <= 1 {
+				cellType[i] = CellTypeCoastalLand
+			} else {
+				// If not, it is >=2 (land far from coast)
+				cellType[i] = int(regDistanceOcean[i])
+			}
+		}
+	}
+	return cellType
+}
+
+func (m *BaseObject) isRegBelowOrAtSeaLevelOrPool(r int) bool {
+	return m.Elevation[r] <= 0 || m.Waterpool[r] > 0
+}
+
+func (m *BaseObject) isRegLakeOrWaterBody(r int) bool {
+	return m.isRegWaterBody(r) || m.isRegLake(r)
+}
+
+func (m *BaseObject) isRegWaterBody(r int) bool {
+	return m.Waterbodies[r] >= 0
+}
+
+func (m *BaseObject) isRegLake(r int) bool {
+	return m.Drainage[r] >= 0 || m.Waterpool[r] > 0
+}
+
+func (m *BaseObject) isRegRiver(r int) bool {
+	return m.Flux[r] > m.Rainfall[r]
+}
+
+func (m *BaseObject) isRegBigRiver(r int) bool {
+	return m.Flux[r] > m.Rainfall[r]*2
+}

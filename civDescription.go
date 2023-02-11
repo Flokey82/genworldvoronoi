@@ -6,7 +6,6 @@ import (
 
 func (m *Civ) generateCitiesFlavorText() {
 	rpFunc := m.getRegPropertyFunc()
-
 	for _, c := range m.Cities {
 		flvTxt := m.generateCityFlavorText(c, rpFunc(c.ID))
 		log.Println(c.Name, flvTxt)

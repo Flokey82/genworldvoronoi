@@ -12,6 +12,11 @@ import (
 	"github.com/Flokey82/go_gens/vectors"
 )
 
+// getAzgaarRegionBiome returns the biome for a given region as per Azgaar's map generator.
+func (m *Geo) getAzgaarRegionBiome(r int, elev, maxElev float64) int {
+	return genbiome.GetAzgaarBiome(int(20.0*m.Moisture[r]), int(m.getRegTemperature(r, maxElev)), int(elev*100))
+}
+
 // getRegWhittakerModBiomeFunc returns a function that returns the Whittaker biome
 // for a given region.
 func (m *Geo) getRegWhittakerModBiomeFunc() func(r int) int {

@@ -169,11 +169,10 @@ func (m *Geo) getVectorSortOrder(vecs [][2]float64, reverse bool) ([]float64, []
 	orderedRegs := make([]int, m.mesh.numRegions) // sorted regions
 	regSort := make([]float64, m.mesh.numRegions) // numeric sort order
 	for r := 0; r < m.mesh.numRegions; r++ {
-		orderedRegs[r] = r
-
 		lat := (m.LatLon[r][0]) * vecs[r][1] / math.Abs(vecs[r][1])
 		lon := (m.LatLon[r][1]) * vecs[r][0] / math.Abs(vecs[r][0])
 		regSort[r] = (lat + lon)
+		orderedRegs[r] = r
 	}
 
 	// Sort the indices in vector-order so we can ensure that we push the moisture
