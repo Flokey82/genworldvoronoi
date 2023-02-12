@@ -11,6 +11,8 @@ import (
 type Civ struct {
 	*Geo
 	*History
+	nextPersonID      int
+	People            []*Person    // People in the world
 	Empires           []*Empire    // (political) Empires
 	RegionToEmpire    []int        // (political) Point / region mapping to territory / empire
 	CityStates        []*CityState // (political) City states

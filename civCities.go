@@ -13,6 +13,16 @@ import (
 	"github.com/Flokey82/go_gens/utils"
 )
 
+// GetCity returns the city at the given region / with the given ID.
+func (m *Civ) GetCity(r int) *City {
+	for _, c := range m.Cities {
+		if c.ID == r {
+			return c
+		}
+	}
+	return nil
+}
+
 func (m *Civ) getExistingCities() []*City {
 	var cities []*City
 	for _, c := range m.Cities {
