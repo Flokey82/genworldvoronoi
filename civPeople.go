@@ -13,24 +13,27 @@ import (
 )
 
 func (m *Civ) tickPeople() {
-	// TODO: Run some cleanup of dead people.
 	for _, p := range m.People {
 		// Check if we are still alive / alive yet.
-		if p.Death.IsSet() || !p.Birth.IsSet() || p.Birth.Year > int(m.History.GetYear()) {
-			continue
+		// TODO: Run some cleanup of dead people.
+		if m.doesPersonExist(p) {
+			m.tickPerson(p)
 		}
-		m.tickPerson(p)
 	}
 
-	// TODO: Pair up single people.
-	// This should be done per location.
+	// Pair up single people (This should be done per location).
+	m.matchMaker(m.People)
+}
+
+func (m *Civ) doesPersonExist(p *Person) bool {
+	return !p.Death.IsSet() && p.Birth.IsSet() && p.Birth.Year < int(m.History.GetYear())
 }
 
 func (m *Civ) matchMaker(people []*Person) {
-	// Get eligible singles (not dead, not married, and TODO: already alive).
+	// Get eligible singles (not dead, not married, and already alive).
 	var single []*Person
 	for _, p := range people {
-		if p.isEligibleSingle() && !p.Death.IsSet() {
+		if m.doesPersonExist(p) && p.isEligibleSingle() {
 			single = append(single, p)
 		}
 	}
@@ -51,7 +54,7 @@ func (m *Civ) matchMaker(people []*Person) {
 			}
 
 			// TODO: Allow same sex couples (which can adopt children/orphans).
-			if i == j || p.Gender == pc.Gender || isRelated(p, pc) {
+			if i == j || p.Gender() == pc.Gender() || isRelated(p, pc) {
 				continue
 			}
 
@@ -64,7 +67,8 @@ func (m *Civ) matchMaker(people []*Person) {
 
 			// Update family name.
 			// TODO: This is not optimal... There should be a better way to do this.
-			if p.Gender == GenderFemale {
+			// The culture should determine any changes to the name.
+			if p.Gender() == GenderFemale {
 				p.LastName = pc.LastName
 			} else {
 				pc.LastName = p.LastName
@@ -81,11 +85,11 @@ func (m *Civ) updatePersonLocation(p *Person, r int) {
 	// people who work in or visit the city.
 	p.Region = r
 	p.City = m.GetCity(r)
-	// TODO: Add person to city population.
+	// TODO: Add person to city population?
 }
 
 const (
-	ageOfAdulthood     = 16
+	ageOfAdulthood     = 18
 	ageEndChildbearing = 45
 )
 
@@ -98,8 +102,8 @@ func (m *Civ) tickPerson(p *Person) {
 		}
 	}
 
-	if p.Gender == GenderFemale && p.Age >= ageOfAdulthood && p.Age < ageEndChildbearing {
-		if p.PregnancyCounter > 0 {
+	if p.Gender() == GenderFemale && p.isOfChildbearingAge() {
+		if p.Prengancy != nil {
 			// Person is pregnant.
 			m.advancePersonPregnancy(p)
 		} else if p.Spouse != nil {
@@ -111,12 +115,13 @@ func (m *Civ) tickPerson(p *Person) {
 		}
 	}
 
-	// Check if person is dead.
+	// Check if person dies of natural causes.
 	if gameconstants.DiesAtAge(p.Age) {
 		// If the person just gave birth, we note that the person
 		// died during childbirth.
 		p.Death.Year = int(m.History.GetYear())
 		p.Death.Day = m.History.GetDayOfYear()
+		p.Death.Region = p.Region
 
 		// Remove as spouse (if any).
 		if p.Spouse != nil {
@@ -125,12 +130,14 @@ func (m *Civ) tickPerson(p *Person) {
 	}
 }
 
+// LifeEvent represents a date and place in the world.
 type LifeEvent struct {
 	Year   int
 	Day    int
 	Region int
 }
 
+// IsSet returns true if the life event is set.
 func (l LifeEvent) IsSet() bool {
 	return l.Year != 0 || l.Day != 0 || l.Region != 0
 }
@@ -147,11 +154,9 @@ func (l LifeEvent) IsSet() bool {
 type Person struct {
 	ID      int            // ID of the person
 	Region  int            // Location of the person
-	City    *City          // City of the person
 	Genes   genetics.Genes // Genes.
-	Gender  Gender         // Gender.
-	Age     int            // Age of the person.
-	Culture *Culture
+	City    *City          // City of the person
+	Culture *Culture       // Culture of the person
 
 	// Todo: Allow different naming conventions.
 	FirstName string
@@ -160,6 +165,7 @@ type Person struct {
 
 	// Birth, death...
 	// TODO: Add death cause.
+	Age   int // Age of the person.
 	Birth LifeEvent
 	Death LifeEvent
 
@@ -173,18 +179,6 @@ type Person struct {
 	Father   *Person
 	Spouse   *Person   // TODO: keep track of spouses that might have perished?
 	Children []*Person // TODO: Split into known and unknown children.
-}
-
-// isElegibleSingle returns true if the person is old enough and single.
-func (p *Person) isEligibleSingle() bool {
-	return p.Age > ageOfAdulthood && p.Spouse == nil // Old enough and single.
-}
-
-// canBePregnant returns true if the person is old enough and not pregnant.
-func (p *Person) canBePregnant() bool {
-	// Female, has a spouse (implies old enough), and is currently not pregnant.
-	// TODO: Set randomized upper age limit.
-	return p.Gender == GenderFemale && p.Spouse != nil && p.Prengancy == nil
 }
 
 // Name returns the name of the person.
@@ -206,6 +200,27 @@ func (p *Person) String() string {
 	return fmt.Sprintf("%s \n%s", p.Name(), geneticshuman.String(p.Genes))
 }
 
+// Gender returns the gender of the person.
+func (p *Person) Gender() geneticshuman.Gender {
+	return geneticshuman.GetGender(&p.Genes)
+}
+
+func (p *Person) isOfChildbearingAge() bool {
+	return p.Age >= ageOfAdulthood && p.Age < ageEndChildbearing
+}
+
+// isElegibleSingle returns true if the person is old enough to look for a partner and single.
+func (p *Person) isEligibleSingle() bool {
+	return p.Age > ageOfAdulthood && p.Spouse == nil // Old enough and single.
+}
+
+// canBePregnant returns true if the person is old enough and not pregnant.
+func (p *Person) canBePregnant() bool {
+	// Female, has a spouse (implies old enough), and is currently not pregnant.
+	// TODO: Set randomized upper age limit.
+	return p.Gender() == GenderFemale && p.Spouse != nil && p.Prengancy == nil
+}
+
 const pregnancyDays = 280 // for humans
 
 func (m *Civ) newPersonPregnancy(mother, father *Person) *Person {
@@ -222,15 +237,15 @@ func (m *Civ) newPersonPregnancy(mother, father *Person) *Person {
 		fGenes = genetics.NewRandom()
 	}
 
-	gender := randGender()
-	genes := genetics.Mix(mGenes, fGenes, 1)
-
 	// We need to set the name after birth, because the parents might not know the gender of the baby
 	// until birth. (If there's magic, only wealthy people would be able to determine the gender before)
+	genes := genetics.Mix(mGenes, fGenes, 1)
+
+	// Fix genes wrt. gender (the genetic mix doesn't limit gender varaition)
+	geneticshuman.SetGender(&genes, randGender())
 	p := &Person{
 		ID:     m.getNextPersonID(),
-		Gender: gender,
-		Genes:  fixGenes(gender, genes), // Fix genes wrt. gender (the genetic mix doesn't limit gender varaition)
+		Genes:  genes,
 		Mother: mother,
 		Father: father,
 		Birth: LifeEvent{
@@ -244,10 +259,6 @@ func (m *Civ) newPersonPregnancy(mother, father *Person) *Person {
 }
 
 func (m *Civ) advancePersonPregnancy(p *Person) {
-	if p.PregnancyCounter == 0 {
-		return
-	}
-
 	// Reduce pregnancy counter.
 	p.PregnancyCounter--
 	if p.PregnancyCounter > 0 {
@@ -289,10 +300,9 @@ func (m *Civ) advancePersonPregnancy(p *Person) {
 }
 
 func (m *Civ) newRandomPersonAt(r int) *Person {
-	// Random gender.
-	gender := randGender()
-	// Random genes.
+	// Random genes / gender.
 	genes := genetics.NewRandom()
+	geneticshuman.SetGender(&genes, randGender())
 
 	// Get the culture at the region.
 	culture := m.GetCulture(r)
@@ -303,8 +313,7 @@ func (m *Civ) newRandomPersonAt(r int) *Person {
 	p := &Person{
 		ID:        m.getNextPersonID(),
 		Culture:   culture,
-		Gender:    gender,
-		Genes:     fixGenes(gender, genes),
+		Genes:     genes,
 		FirstName: lang.MakeFirstName(),
 		LastName:  lang.MakeLastName(),
 		Birth: LifeEvent{
@@ -327,43 +336,17 @@ func (m *Civ) getNextPersonID() int {
 	return m.nextPersonID
 }
 
-// Gender represents a gender.
-type Gender int
-
-const (
-	GenderFemale Gender = iota
-	GenderMale
+var (
+	GenderFemale = geneticshuman.GenderFemale
+	GenderMale   = geneticshuman.GenderMale
 )
 
 // randGender returns a random gender.
-func randGender() Gender {
-	return Gender(rand.Intn(2))
-}
-
-// String returns the string representation of the gender.
-func (g Gender) String() string {
-	switch g {
-	case GenderFemale:
-		return "F"
-	case GenderMale:
-		return "M"
-	default:
-		return "X"
+func randGender() geneticshuman.Gender {
+	if rand.Intn(2) == 0 {
+		return GenderFemale
 	}
-}
-
-// fixGenes makes sure that the gender is set properly in the genes.
-// NOTE: This needs to be done due to the genetics package being a bit weird.
-func fixGenes(gender Gender, genes genetics.Genes) genetics.Genes {
-	switch gender {
-	case GenderFemale:
-		geneticshuman.SetGender(&genes, geneticshuman.GenderFemale)
-	case GenderMale:
-		geneticshuman.SetGender(&genes, geneticshuman.GenderMale)
-	default:
-		geneticshuman.SetGender(&genes, 0)
-	}
-	return genes
+	return GenderMale
 }
 
 // isRelated returns true if a and b are related (up to first degree).
