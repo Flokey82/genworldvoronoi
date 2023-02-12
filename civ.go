@@ -138,6 +138,7 @@ func (m *Civ) generateCivilization() {
 	if enableCityAging {
 		// HACK: Age city populations.
 		start = time.Now()
+		gDisFunc := m.Geo.getGeoDisasterFunc()
 		// TODO: Instead we should spawn the cities from the capitals.
 		// Also, the theoretical population should be based on the
 		// economic potential of the region, the type of settlement,
@@ -147,7 +148,7 @@ func (m *Civ) generateCivilization() {
 		for year := 0; year < int(maxSettled); year++ {
 			// Age cities for a year.
 			for _, c := range m.getExistingCities() {
-				m.tickCityDays(c, 365)
+				m.tickCityDays(c, gDisFunc, 365)
 			}
 
 			// Update attractiveness, agricultural potential, and resource potential

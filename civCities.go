@@ -206,7 +206,33 @@ func (m *Civ) getAttractivenessFunc() func(int) float64 {
 	}
 }
 
-func (m *Civ) tickCityDays(c *City, days int) {
+func (m *Civ) getCityDisasters(c *City, gDisFunc func(int) GeoDisasterChance) []disaster {
+	// Get the disasters that may occur in this city, depending on the
+	// type and size of the city.
+	var ds []disaster
+	if c.Population == 0 {
+		// No disasters for deserted cities.
+		return ds
+	}
+
+	// TODO: If there is a coal mine, coal mine fires should be possible.
+	switch c.Type {
+	case TownTypeQuarry, TownTypeMining, TownTypeMiningGems:
+		ds = append(ds, disRockslide, disCaveIn)
+	case TownTypeDesertOasis:
+		ds = append(ds, disSandstorm)
+	}
+	ds = append(ds, disDrought, disFamine)
+	if c.Population > 1000 {
+		ds = append(ds, disDisease)
+	}
+	if c.Population > 10000 {
+		ds = append(ds, disPlague)
+	}
+	return append(ds, gDisFunc(c.ID).getDisasters()...)
+}
+
+func (m *Civ) tickCityDays(c *City, gDisFunc func(int) GeoDisasterChance, days int) {
 	// Check if the city is abandoned.
 	if c.Population <= 0 {
 		if c.Population < 0 {
@@ -235,7 +261,8 @@ func (m *Civ) tickCityDays(c *City, days int) {
 		// Pick a random disaster given their respective probabilities.
 		// TODO: Replace this with region specific disasters and disasters
 		// that are likely based on local industry, population density, etc.
-		dis := randDisaster()
+		cityDisasters := m.getCityDisasters(c, gDisFunc)
+		dis := randDisaster(cityDisasters)
 		if dis == disNone {
 			log.Fatalf("No disaster was chosen")
 		}
@@ -479,7 +506,7 @@ func (m *Civ) relocateFromCity(c *City, population int) {
 	}
 }
 
-func (m *Civ) TickCity(c *City) {
+func (m *Civ) TickCity(c *City, gDisFunc func(int) GeoDisasterChance) {
 	m.resetRand()
 
 	// TODO: Recalculate the economic power of the city.
@@ -499,7 +526,7 @@ func (m *Civ) TickCity(c *City) {
 	// So the probability of growth is 0.19% * 1 day / 365 days.
 	// TODO: The growth rate should also be based on the relative wealth
 	// of the city and the current population. Fix this!
-	m.tickCityDays(c, 1)
+	m.tickCityDays(c, gDisFunc, 1)
 
 	// TODO: If the "sustainability" of the city is lower than needed to
 	// sustain the population, the population will decrease.
