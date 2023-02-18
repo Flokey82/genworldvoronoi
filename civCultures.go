@@ -9,6 +9,17 @@ import (
 	"github.com/Flokey82/go_gens/genlanguage"
 )
 
+func (m *Civ) getCultureFunc() func(int) *Culture {
+	// Build a map of culture IDs to cultures.
+	cultureMap := make(map[int]*Culture)
+	for _, c := range m.Cultures {
+		cultureMap[c.ID] = c
+	}
+	return func(r int) *Culture {
+		return cultureMap[m.RegionToCulture[r]]
+	}
+}
+
 // GetCulture returns the culture of the given region (if any).
 func (m *Civ) GetCulture(r int) *Culture {
 	// NOTE: This sucks. This should be done better.

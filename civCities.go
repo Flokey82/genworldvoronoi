@@ -1,16 +1,8 @@
 package genworldvoronoi
 
 import (
-	"fmt"
 	"log"
 	"math"
-	"math/rand"
-	"sort"
-
-	"github.com/Flokey82/genbiome"
-	"github.com/Flokey82/go_gens/gameconstants"
-	"github.com/Flokey82/go_gens/genlanguage"
-	"github.com/Flokey82/go_gens/utils"
 )
 
 // GetCity returns the city at the given region / with the given ID.
@@ -31,6 +23,62 @@ func (m *Civ) getExistingCities() []*City {
 		}
 	}
 	return cities
+}
+
+func (m *Civ) ageCities() {
+	// HACK: Age city populations.
+	// TODO: Instead we should spawn the cities from the capitals.
+	// Also, the theoretical population should be based on the
+	// economic potential of the region, the type of settlement,
+	// and the time of settlement.
+	cultureFunc := m.getCultureFunc()
+	gDisFunc := m.Geo.getGeoDisasterFunc()
+
+	// Get the year when the last region was settled.
+	_, maxSettled := minMax64(m.Settled)
+
+	// Reset the year to 0.
+	m.Geo.Calendar.SetYear(0)
+	knownCities := len(m.Cities)
+	for year := int64(0); year < maxSettled; year++ {
+		// Age cities that exist at this given year.
+		for _, c := range m.getExistingCities() {
+			// if c.Founded == year {
+			//	// If the city was just founded this year, we generate
+			//	// a random population.
+			//	m.addNToCity(c, c.Population, cultureFunc)
+			// }
+
+			// Age the city.
+			m.tickCityDays(c, gDisFunc, cultureFunc, 365)
+		}
+
+		// Update attractiveness, agricultural potential, and resource potential
+		// for new cities.
+		if len(m.Cities) > knownCities {
+			// TODO: Only update new regions until we have climate change?
+			m.calculateCitiesStats(m.Cities[knownCities:])
+			knownCities = len(m.Cities)
+		}
+
+		// Recalculate economic potential.
+		m.calculateEconomicPotential()
+
+		// var totalPeople int
+		// for _, c := range m.getExistingCities() {
+		// 	totalPeople += len(c.People)
+		// }
+		// log.Printf("Total people: %d", totalPeople)
+
+		// Advance year.
+		m.Geo.Calendar.TickYear()
+		log.Printf("Aged cities to %d/%d\n", year, maxSettled)
+
+		// Age population.
+		// TODO: Would it make more sense to age the population
+		// per city? Or per region?
+		// m.People = m.tickPeople(m.People, 356, cultureFunc)
+	}
 }
 
 func (m *Civ) calculateEconomicPotential() {
@@ -161,6 +209,13 @@ func (m *Civ) calculateEconomicPotential() {
 	}
 }
 
+func (m *Civ) calculateCitiesStats(cities []*City) {
+	// Calculate the stats of all cities.
+	m.calculateAttractiveness(cities)
+	m.calculateAgriculturalPotential(cities)
+	m.calculateResourcePotential(cities)
+}
+
 func (m *Civ) calculateAttractiveness(cities []*City) {
 	// Calculate the attractiveness of the supplied cities.
 	attrFunc := m.getAttractivenessFunc()
@@ -214,476 +269,6 @@ func (m *Civ) getAttractivenessFunc() func(int) float64 {
 		// The attractiveness is the average of the fitness functions.
 		return (climateFitnessFunc(regionID) + arableLandFitnessFunc(regionID) + proximityToWaterFitnessFunc(regionID)) / 3
 	}
-}
-
-func (m *Civ) getCityDisasters(c *City, gDisFunc func(int) GeoDisasterChance) []disaster {
-	// Get the disasters that may occur in this city, depending on the
-	// type and size of the city.
-	var ds []disaster
-	if c.Population == 0 {
-		// No disasters for deserted cities.
-		return ds
-	}
-
-	// TODO: If there is a coal mine, coal mine fires should be possible.
-	switch c.Type {
-	case TownTypeQuarry, TownTypeMining, TownTypeMiningGems:
-		ds = append(ds, disRockslide, disCaveIn)
-	case TownTypeDesertOasis:
-		ds = append(ds, disSandstorm)
-	}
-	ds = append(ds, disDrought, disFamine)
-	if c.Population > 1000 {
-		ds = append(ds, disDisease)
-	}
-	if c.Population > 10000 {
-		ds = append(ds, disPlague)
-	}
-	return append(ds, gDisFunc(c.ID).getDisasters()...)
-}
-
-func (m *Civ) tickCityDays(c *City, gDisFunc func(int) GeoDisasterChance, days int) {
-	// Check if the city is abandoned.
-	if c.Population <= 0 {
-		if c.Population < 0 {
-			c.Population = 0
-		}
-		return
-	}
-
-	// Enable / disable migration of population when a disaster strikes.
-	enableDisasterMigration := true
-
-	// There is a chance of some form of disaster.
-	// For example, a mining town should have a chance of a cave in,
-	// or a farming town should have a chance of a drought.
-	// Towns close to volcanoes should have a chance of a volcanic
-	// eruption while fault lines should have a chance of an earthquake.
-	// If towns are heavily affected, they might be destroyed or abandoned.
-	// Also the life expectancy might be low in early history.
-	// Wars might also have a negative effect on the population.
-
-	// TODO: With increasing population, the city is be more prone to famine
-	// or disease.
-
-	// Check if a random disaster strikes.
-	if m.rand.Intn(100*356) < days {
-		// Pick a random disaster given their respective probabilities.
-		// TODO: Replace this with region specific disasters and disasters
-		// that are likely based on local industry, population density, etc.
-		cityDisasters := m.getCityDisasters(c, gDisFunc)
-		dis := randDisaster(cityDisasters)
-		if dis == disNone {
-			log.Fatalf("No disaster was chosen")
-		}
-
-		// Calculate the population loss.
-		popLoss := dis.PopulationLoss * (2 + rand.Float64()) / 3
-		dead := int(math.Ceil(float64(c.Population) * popLoss))
-		year := m.Geo.Calendar.GetYear()
-
-		// Add an event to the calendar.
-		m.AddEvent(dis.Name, fmt.Sprintf("%s died", numPeopleStr(dead)), c.Ref())
-
-		// Reduce the population.
-		c.Population -= dead
-		if c.Population <= 0 {
-			c.Population = 0
-			return
-		}
-
-		// Log the disaster, what type, how many people died and where.
-		log.Printf("Year %d: %s, %s died in %s", year, dis.Name, numPeopleStr(dead), c.Name)
-
-		// Since there was a disaster, depending on the number of people that
-		// died, some people might leave the city.
-		//
-		// If there is sickness, war, famine, drought, etc, the population might
-		// migrate to other cities that are more prosperous or a new settlement
-		// might be founded nearby.
-		//
-		// The bigger the population loss, the more likely it is that people
-		// will leave the city.
-		if enableDisasterMigration && rand.Float64() < popLoss {
-			// Up to 'popLoss' of the population might leave the city.
-			leave := int(float64(c.Population) * (popLoss * rand.Float64()))
-			m.relocateFromCity(c, leave)
-		}
-	}
-
-	// In the middle ages, the average population growth was 0.16%-ish per year.
-	// See: https://en.wikipedia.org/wiki/Medieval_demography
-	//
-	// TODO: The population growth should be dependent on the economic power
-	// and if there is famine, war, drought, sickness, etc.
-	// TODO: Also take in account what size of population the city can sustain.
-	factor := float64(c.Population) * c.PopulationGrowthRate() * float64(days) / 365
-	if factor >= 1 {
-		c.Population += int(math.Ceil(factor))
-	} else if m.rand.Float64() < factor {
-		c.Population++
-	}
-
-	// Calculate the limit of the population based on attractiveness and
-	// economic potential.
-	maxPop := c.MaxPopulationLimit()
-	if c.Population > maxPop {
-		log.Println("City population limit reached:", c.Name, c.Population, maxPop)
-		log.Printf("Attractiveness: %.2f, Economic Potential: %.2f, Agriculture: %.2f", c.Attractiveness, c.EconomicPotential, c.Agriculture)
-		// The excess population can migrate to other cities or
-		// a new settlement might be founded nearby.
-		// Since we don't want to constantly migrate people, we just
-		// move a larger portion of entire population, so that we drop
-		// way below the limit, giving us a chance to grow again for
-		// a while.
-		excessPopulation := c.Population - maxPop
-
-		// Move 10% of the population or 1.2 times the excess population,
-		// whichever is larger.
-		excessPopulation = utils.Max(excessPopulation*12/10, c.Population/10)
-
-		// Make sure we don't move more than the entire population.
-		excessPopulation = utils.Min(excessPopulation, c.Population)
-
-		m.relocateFromCity(c, excessPopulation)
-	}
-
-	// TODO: If a city reaches a certain size it might transition from an
-	// agricultural town to a city with a more diverse economy. A mining town
-	// might, if there is enough resources, transition to an industrial city.
-
-	// TODO: Update the economic potential of the city if the population
-	// has changed.
-	// m.calculateEconomicPotential()
-
-	// Update the peak population.
-	// TODO: Maybe store the year when the peak population was reached?
-	if c.Population > c.MaxPopulation {
-		c.MaxPopulation = c.Population
-	}
-
-	// If there is no religion originating from the city, then there is a
-	// chance that a new religion might be founded.
-	// TODO: Maybe keep note of an inciting event, like a famine, war, etc.
-	if c.Religion == nil && m.rand.Intn(3000*356) < days && c.Population > 0 {
-		c.Religion = m.genOrganizedReligion(c)
-		m.ExpandReligions()
-		m.History.AddEvent("Religion", fmt.Sprintf("A new religion was founded in %s", c.Name), c.Ref())
-	}
-}
-
-// relocateFromCity moves a portion of the population from the city to
-// another city or a new settlement.
-// TODO: Distribute more evenly if a large group of people are moving.
-func (m *Civ) relocateFromCity(c *City, population int) {
-	// If no one is migrating, then there is nothing to do.
-	if population <= 0 {
-		return
-	}
-
-	// Move out the migrating population.
-	if c.Population < population {
-		population = c.Population
-	}
-	c.Population -= population
-
-	// Add an event to the calendar.
-	m.AddEvent("Migration", fmt.Sprintf("%s left", numPeopleStr(population)), c.Ref())
-
-	// Calculate the analog of distance between regions by taking the surface
-	// of a sphere with radius 1 and dividing it by the number of regions.
-	// The square root will work as a somewhat sensible approximation of
-	// distance.
-	distRegion := math.Sqrt(4 * math.Pi / float64(m.mesh.numRegions))
-
-	// Per distRegion, the chance of death is 2%.
-	const chanceDeath = 0.02
-	calcChanceDeath := func(dist float64) float64 {
-		return 1 - math.Pow(1-chanceDeath, dist/distRegion)
-	}
-
-	cities := m.getExistingCities()
-
-	// Sort the cities by increasing distance from the city.
-	sort.Slice(cities, func(i, j int) bool {
-		return m.GetDistance(c.ID, cities[i].ID) < m.GetDistance(c.ID, cities[j].ID)
-	})
-
-	// Check if any of the n closest cities have enough space.
-	numClosestCities := 10
-
-	// The closest city is the city itself, so skip it.
-	for _, city := range cities[1:utils.Min(len(cities), numClosestCities+1)] {
-		maxPop := city.MaxPopulationLimit()
-		popCapacity := maxPop - city.Population
-
-		// If there is capacity, a portion of the population might move there.
-		if popCapacity > 0 {
-			// Now pick a fraction of the population that will move to the city,
-			// with the largest fraction going to the closest city.
-			numMigrants := utils.Min(population, popCapacity/2)
-
-			// Make sure we don't increase the population by more than 20%,
-			// except if the city is abandoned.
-			if city.Population > 0 {
-				numMigrants = utils.Min(numMigrants, city.Population/5)
-			}
-
-			// Depending on the distance, some of the population might
-			// die on the way.
-			dist := m.GetDistance(c.ID, city.ID)
-			dead := int(math.Ceil(calcChanceDeath(dist) * float64(numMigrants)))
-			survived := numMigrants - dead
-
-			// If any survived, move them to the city.
-			if survived > 0 {
-				// If the city is abandoned, set the economic potential to 1 temporarily.
-				if city.Population == 0 {
-					city.EconomicPotential = 1
-				}
-				// Move the population to the closest city.
-				city.Population += survived
-				if city.Population > city.MaxPopulation {
-					city.MaxPopulation = city.Population
-				}
-				// TODO: Update the economic potential of the city.
-				m.AddEvent("Migration", fmt.Sprintf("%s arrived", numPeopleStr(survived)), city.Ref())
-			}
-			log.Printf("%s moved from %s to %s, %d died on the way", numPeopleStr(numMigrants), c.Name, city.Name, dead)
-
-			// Subtract the number of people that moved from the total
-			// population that is migrating.
-			population -= numMigrants
-			if population <= 0 {
-				return
-			}
-		}
-	}
-
-	// Make sure we don't place a new settlement in a region that is already
-	// occupied.
-	occupied := make(map[int]bool)
-	for _, city := range m.Cities {
-		occupied[city.ID] = true
-	}
-
-	// Since the closest city doesn't have enough space, we need to
-	// create a new settlement.
-	attFunc := m.getAttractivenessFunc()
-
-	// Find the best suitable neighbor region.
-	bestReg := -1
-	bestScore := 0.0
-	maxDepth := 10
-	seenRegions := make(map[int]bool)
-	var traverseNeighbors func(id int, depth int)
-	traverseNeighbors = func(id int, depth int) {
-		if depth >= maxDepth {
-			return
-		}
-		for _, nb := range m.GetRegNeighbors(id) {
-			if seenRegions[nb] {
-				continue
-			}
-			seenRegions[nb] = true
-			attr := attFunc(nb)
-			if attr > bestScore && !occupied[nb] && nb != c.ID {
-				bestScore = attr
-				bestReg = nb
-			}
-			traverseNeighbors(nb, depth+1)
-		}
-	}
-	traverseNeighbors(c.ID, 0)
-
-	// If we found a suitable region, create a new city there.
-	if bestReg != -1 {
-		// Depending on the distance, some of the population might die on the way.
-		dist := m.GetDistance(c.ID, bestReg)
-		dead := int(math.Ceil(calcChanceDeath(dist) * float64(population)))
-		survived := population - dead
-
-		// Check if any survived and founded a new city.
-		if survived > 0 {
-			city := m.placeCityAt(bestReg, m.getRegCityType(bestReg), survived, bestScore)
-			city.Founded = m.History.GetYear() + 1 // The city is founded next year.
-			city.EconomicPotential = 1             // Set the economic potential to 1 temporarily.
-			city.Attractiveness = bestScore
-
-			// TODO: Set the economic potential and attractiveness of the new city.
-			log.Printf("%s moved from %s and founded %s, %d died on the way", numPeopleStr(population), c.Name, city.Name, dead)
-		}
-	}
-}
-
-func (m *Civ) TickCity(c *City, gDisFunc func(int) GeoDisasterChance) {
-	m.resetRand()
-
-	// TODO: Recalculate the economic power of the city.
-	// This depends on the population, the local resources in the region,
-	// distance to other cities, etc.
-	// The population determines the radius in which we can find resources.
-	// If the resources are contested, the economic value of the resources
-	// will be lower.
-	// I think it would make sense to calculate the economic power per region
-	// for the entire map first.
-
-	// TODO: Move this to a separate function since we need to tick
-	// population growth, production, consumption, etc. independently.
-
-	// Grow city population.
-	// There is a 0.19% growth rate per year.
-	// So the probability of growth is 0.19% * 1 day / 365 days.
-	// TODO: The growth rate should also be based on the relative wealth
-	// of the city and the current population. Fix this!
-	m.tickCityDays(c, gDisFunc, 1)
-
-	// TODO: If the "sustainability" of the city is lower than needed to
-	// sustain the population, the population will decrease.
-	// This can be caused by war, disease, disaster, etc...
-	// Some people might migrate to other cities that have a higher
-	// sustainability.
-}
-
-// City represents a city in the world.
-type City struct {
-	ID                int                   // Region where the city is located
-	Name              string                // Name of the city
-	Type              TownType              // Type of city
-	Score             float64               // Score of the fitness function
-	Population        int                   // Population of the city
-	MaxPopulation     int                   // Maximum population of the city
-	Culture           *Culture              // Culture of the city region
-	Language          *genlanguage.Language // Language of the city
-	Religion          *Religion             // Religion originating from the city
-	Founded           int64                 // Year when the city was founded
-	EconomicPotential float64               // Economic potential of the city (DYNAMIC)
-	Trade             float64               // Trade value of the city (DYNAMIC)
-	Resources         float64               // Resources value of the city (PARTLY DYNAMIC)
-	Agriculture       float64               // Agriculture value of the city (STATIC)
-	Attractiveness    float64               // Attractiveness of the city (STATIC)
-	TradePartners     int                   // Number of cities within trade range
-}
-
-// Ref returns the object reference of the city.
-func (c *City) Ref() ObjectReference {
-	return ObjectReference{
-		ID:   c.ID,
-		Type: ObjectTypeCity,
-	}
-}
-
-func (c *City) radius() float64 {
-	// In kilometers.
-	if c.Population <= 0 {
-		return 0
-	}
-	return 100 * math.Sqrt(float64(c.Population)/math.Pi) / gameconstants.EarthCircumference
-}
-
-// String returns a string representation of the city.
-func (c *City) String() string {
-	return fmt.Sprintf("%s (%d)", c.Name, c.Population)
-}
-
-// MaxPopulationLimit returns the maximum population sustainable by the city.
-func (c *City) MaxPopulationLimit() int {
-	return int(2000 * math.Pow((c.EconomicPotential+c.Attractiveness), 2))
-}
-
-// PopulationGrowthRate returns the population growth rate per year.
-func (c *City) PopulationGrowthRate() float64 {
-	return 0.3 * (c.EconomicPotential + c.Attractiveness) / (2 * 100)
-}
-
-// PlaceNCities places n cities with the highest fitness scores.
-func (m *Civ) PlaceNCities(n int, cType TownType) {
-	// The fitness function, returning a score from 0.0 to 1.0 for a given region.
-	// Select the fitness function based on the city type.
-	scoreFunc := cType.GetFitnessFunction(m)
-
-	// The distance seed point function, returning seed points/regions that we
-	// want to be far away from.
-	// For now we just maximize the distance to cities of the same type.
-	distSeedFunc := cType.GetDistanceSeedFunc(m)
-
-	// Place n cities of the given type.
-	for i := 0; i < n; i++ {
-		c := m.PlaceCity(cType, scoreFunc, distSeedFunc)
-		log.Printf("placing %s city %d: %s", cType, i, c.String())
-	}
-}
-
-// PlaceCity places another city at the region with the highest fitness score.
-func (m *Civ) PlaceCity(cType TownType, scoreFunc func(int) float64, distSeedFunc func() []int) *City {
-	// Pick the region with the highest fitness score.
-	occupied := make(map[int]bool)
-	for _, c := range m.Cities {
-		occupied[c.ID] = true
-	}
-
-	var newcity int
-	lastMax := math.Inf(-1)
-	for i, val := range m.CalcCityScore(scoreFunc, distSeedFunc) {
-		if val > lastMax && !occupied[i] {
-			newcity = i
-			lastMax = val
-		}
-	}
-	if newcity == -1 {
-		panic("no suitable location found")
-	}
-	// Get base population from city type.
-	// TODO: Calculate population based on suitability for habitation.
-	basePop := cType.FoundingPopulation()
-	basePop += 2 * m.rand.Intn(basePop) / (len(m.Cities) + 1)
-	return m.placeCityAt(newcity, cType, basePop, lastMax)
-}
-
-func (m *Civ) placeCityAt(r int, cType TownType, pop int, score float64) *City {
-	// TODO: Trigger event for city founding.
-	// TODO: Allow optionally specifying a founding year.
-	// TODO: Set agricultural potential and resources based on the region.
-	c := &City{
-		ID:            r,
-		Score:         score,
-		Population:    pop,
-		MaxPopulation: pop,
-		Type:          cType,
-		Culture:       m.GetCulture(r),
-		Founded:       m.Settled[r] + m.rand.Int63n(100),
-	}
-
-	// If there is no known culture, generate a new one.
-	if c.Culture == nil {
-		c.Culture = m.PlaceCultureAt(r) // TODO: Grow this culture.
-	}
-
-	// Use the local language to generate a new city name.
-	c.Language = c.Culture.Language
-	c.Name = c.Language.MakeCityName()
-	m.Cities = append(m.Cities, c)
-	return c
-}
-
-// getRegCityType returns the optimal type of city for a given region.
-func (m *Civ) getRegCityType(r int) TownType {
-	// If we have a lot of metals, gems, etc. we have a mining town.
-	if m.Metals[r] > 0 || m.Gems[r] > 0 {
-		return TownTypeMining
-	}
-
-	// If we have stone, we have a quarry.
-	if m.Stones[r] > 0 {
-		return TownTypeQuarry
-	}
-
-	// TODO: Cache this somehow.
-	if m.getFitnessArableLand()(r) > 0.5 {
-		return TownTypeFarming
-	}
-	// TODO: Add more types of cities.
-	return TownTypeDefault
 }
 
 // CalcCityScore calculates the fitness value for settlements for all regions.
@@ -770,53 +355,6 @@ func (m *Civ) getFitnessCityDefault() func(int) float64 {
 	}
 }
 
-// TownType represents the type of a city.
-type TownType string
-
-// The different types of cities.
-const (
-	TownTypeDefault     TownType = "town"
-	TownTypeTrading     TownType = "trading"
-	TownTypeMining      TownType = "mining"
-	TownTypeMiningGems  TownType = "mining (gems)"
-	TownTypeQuarry      TownType = "quarry"
-	TownTypeFarming     TownType = "agricultural"
-	TownTypeDesertOasis TownType = "desert oasis"
-)
-
-// FoundingPopulation returns the starting population of a city type.
-func (t TownType) FoundingPopulation() int {
-	switch t {
-	case TownTypeDefault:
-		return 100
-	case TownTypeTrading:
-		return 80
-	case TownTypeQuarry, TownTypeMining, TownTypeMiningGems:
-		return 20
-	case TownTypeFarming:
-		return 20
-	case TownTypeDesertOasis:
-		return 20
-	default:
-		log.Fatalf("unknown city type: %s", t)
-	}
-	return 0
-}
-
-// GetDistanceSeedFunc returns the distance seed function for a city type.
-func (t TownType) GetDistanceSeedFunc(m *Civ) func() []int {
-	// For now we just maximize the distance to cities of the same type.
-	return func() []int {
-		var cities []int
-		for _, c := range m.Cities {
-			if c.Type == t {
-				cities = append(cities, c.ID)
-			}
-		}
-		return cities
-	}
-}
-
 func (m *Civ) getFitnessProximityToCities(except ...TownType) func(int) float64 {
 	var cities []int
 	exceptMap := make(map[TownType]bool)
@@ -839,80 +377,4 @@ func (m *Civ) getFitnessProximityToCities(except ...TownType) func(int) float64 
 		}
 		return 1 - float64(distCities[r])/maxDist
 	}
-}
-
-// GetFitnessFunction returns the fitness function for a city type.
-func (t TownType) GetFitnessFunction(m *Civ) func(int) float64 {
-	// TODO: Create different fitness functions for different types of settlement.
-	//   - Capital
-	//   - Cities / Settlements
-	//     ) Proximity to capital!
-	//   - Agricultural
-	//   - Mining
-	//   - ...
-	switch t {
-	case TownTypeDefault:
-		fa := m.getFitnessClimate()
-		fb := m.getFitnessCityDefault()
-		return func(r int) float64 {
-			return fa(r) * fb(r)
-		}
-	case TownTypeTrading:
-		return m.getFitnessTradingTowns()
-	case TownTypeQuarry:
-		fa := m.getFitnessSteepMountains()
-		fb := m.getFitnessClimate()
-		fc := m.getFitnessProximityToWater()
-		fd := m.getFitnessProximityToCities(TownTypeMining, TownTypeMiningGems, TownTypeQuarry)
-		return func(r int) float64 {
-			if m.Stones[r] == 0 {
-				return -1.0
-			}
-			return fd(r) * (fa(r)*fb(r) + fc(r)) / 2
-		}
-	case TownTypeMining:
-		fa := m.getFitnessSteepMountains()
-		fb := m.getFitnessClimate()
-		fc := m.getFitnessProximityToWater()
-		fd := m.getFitnessProximityToCities(TownTypeMining, TownTypeMiningGems, TownTypeQuarry)
-		return func(r int) float64 {
-			if m.Metals[r] == 0 {
-				return -1.0
-			}
-			return fd(r) * (fa(r)*fb(r) + fc(r)) / 2
-		}
-	case TownTypeMiningGems:
-		fa := m.getFitnessSteepMountains()
-		fb := m.getFitnessClimate()
-		fc := m.getFitnessProximityToWater()
-		fd := m.getFitnessProximityToCities(TownTypeMining, TownTypeMiningGems, TownTypeQuarry)
-		return func(r int) float64 {
-			if m.Gems[r] == 0 {
-				return -1.0
-			}
-			return fd(r) * (fa(r)*fb(r) + fc(r)) / 2
-		}
-	case TownTypeFarming:
-		return m.getFitnessArableLand()
-	case TownTypeDesertOasis:
-		// TODO: Improve this fitness function.
-		// Right now the oasis are placed at the very edges of
-		// deserts, as there is the "best" climate.
-		// However, we want them to be trade hubs for desert
-		// crossings... so we'll need to place them in the middle
-		// of deserts instead.
-		fa := m.getFitnessClimate()
-		bf := m.getRegWhittakerModBiomeFunc()
-		return func(r int) float64 {
-			biome := bf(r)
-			if biome == genbiome.WhittakerModBiomeColdDesert ||
-				biome == genbiome.WhittakerModBiomeSubtropicalDesert {
-				return fa(r)
-			}
-			return 0
-		}
-	default:
-		log.Fatalf("unknown city type: %s", t)
-	}
-	return nil
 }
