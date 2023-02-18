@@ -60,62 +60,41 @@ func (m *Civ) placePopulationAt(r, n int, cf func(int) *Culture) []*Person {
 	return localPop
 }
 
-func (m *Civ) killNPeopleAt(r, n int) {
-	peopleAt := make([]*Person, 0, n)
-	for _, p := range m.People {
-		if p.Region == r {
-			peopleAt = append(peopleAt, p)
-		}
-	}
-	m.killNPeople(peopleAt, n)
-}
-
-func (m *Civ) killNPeople(people []*Person, n int) {
-	var killed int
-	var p *Person
-	for _, i := range rand.Perm(len(people)) {
-		if killed >= n {
-			break
-		}
-		p = people[i]
-		if !p.isDead() {
-			m.killPerson(p)
-			killed++
-		}
-	}
-}
-
-func (m *Civ) killNPeople2(people []*Person, n int) []*Person {
+func (m *Civ) killNPeople(people []*Person, n int) []*Person {
 	var killed int
 	alive := make([]*Person, 0, len(people))
 	for _, i := range rand.Perm(len(people)) {
 		p := people[i]
-		if killed >= n {
-			alive = append(alive, p)
-			continue
-		}
 		if !p.isDead() {
-			m.killPerson(p)
-			killed++
+			if killed >= n {
+				alive = append(alive, p)
+			} else {
+				m.killPerson(p)
+				killed++
+			}
 		}
 	}
 	return alive
 }
 
-func (m *Civ) migrateNPeopleFromTo(rFrom, rTo, n int) {
+func (m *Civ) migrateNPeopleFromTo(pFrom []*Person, rTo, n int) (pFromAfter, pToMigrate []*Person) {
+	pFromAfter = make([]*Person, 0, len(pFrom))
+	pToMigrate = make([]*Person, 0, n)
 	var migrated int
-	var p *Person
 	for _, i := range rand.Perm(len(m.People)) {
-		if migrated >= n {
-			break
-		}
-		p = m.People[i]
-		// TODO: Also migrate spouses and children.
-		if p.Region == rFrom && !p.isDead() {
-			p.Region = rTo
-			migrated++
+		p := m.People[i]
+		if !p.isDead() {
+			if migrated >= n {
+				pFromAfter = append(pFromAfter, p)
+			} else {
+				// TODO: Also migrate spouses and children.
+				migrated++
+				pToMigrate = append(pToMigrate, p)
+				p.Region = rTo
+			}
 		}
 	}
+	return
 }
 
 func (m *Civ) LogPopulationStats(people []*Person) {

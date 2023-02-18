@@ -220,7 +220,7 @@ func (m *Civ) newRandomPersonAt(r int, culture *Culture) *Person {
 		Birth: LifeEvent{
 			Year:   int(m.History.GetYear()) - ageOfAdulthood + rand.Intn(2*ageOfAdulthood),
 			Day:    rand.Intn(365),
-			Region: -1, // TODO: Pick a birth region that makes sense.
+			Region: r, // TODO: Pick a birth region that makes sense.
 		},
 	}
 
@@ -287,9 +287,6 @@ func (p *Person) newPersonPregnancy(id int, father *Person) *Person {
 		Genes:  genes,
 		Mother: p,
 		Father: father,
-		Birth: LifeEvent{
-			Region: -1, // Unset until birth.
-		},
 	}
 
 	p.PregnancyCounter = pregnancyDays
@@ -350,6 +347,7 @@ func (m *Civ) advancePersonPregnancy(p *Person, nDays int, cf func(int) *Culture
 	child.LastName = p.LastName
 
 	// Set birth date.
+	child.Birth.Region = p.Region
 	child.Birth.Year = int(m.History.GetYear())
 	child.Birth.Day = m.History.GetDayOfYear() - wasBornNDaysAgo
 	if child.Birth.Day < 0 {
@@ -358,7 +356,13 @@ func (m *Civ) advancePersonPregnancy(p *Person, nDays int, cf func(int) *Culture
 		// Age the baby for the number of days it was born ago.
 		m.tickPerson(child, wasBornNDaysAgo, cf)
 	}
-	child.Birth.Region = p.Region
+
+	// Set city.
+	child.City = p.City
+	if child.City != nil {
+		child.City.People = append(child.City.People, child)
+		child.Culture = child.City.Culture
+	}
 
 	// Set culture.
 	// NOTE: Should this be the culture of the mother or father?
@@ -367,10 +371,8 @@ func (m *Civ) advancePersonPregnancy(p *Person, nDays int, cf func(int) *Culture
 	//
 	// I think it'd be great to randomly determine which culture the child
 	// should have. This would ba an interesting source of conflict and story.
-	child.Culture = cf(p.Region)
-	child.City = p.City
-	if child.City != nil {
-		child.City.People = append(child.City.People, child)
+	if child.Culture == nil {
+		child.Culture = cf(p.Region)
 	}
 
 	// Update location.

@@ -179,8 +179,8 @@ func (m *Civ) calculateEconomicPotential() {
 	}
 
 	// DEBUG: Count the number of cities in range.
+	// Loop through all cities and check if we can trade with them.
 	for i, c := range cities {
-		// Loop through all cities and check if we can trade with them.
 		var count int
 		for j, c2 := range cities {
 			if i == j {
@@ -195,8 +195,7 @@ func (m *Civ) calculateEconomicPotential() {
 	}
 
 	// Now normalize trade potential.
-	_, maxTrade := minMax(tradePotential)
-	if maxTrade > 0 {
+	if _, maxTrade := minMax(tradePotential); maxTrade > 0 {
 		for i := range cities {
 			tradePotential[i] /= maxTrade
 		}
