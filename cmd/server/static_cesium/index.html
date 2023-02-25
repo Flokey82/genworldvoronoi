@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <!-- Use correct character set. -->
+  <meta charset="utf-8" />
+  <!-- Tell IE to use the latest, best version. -->
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <!-- Make the application on mobile take up the full browser screen and disable user scaling. -->
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no" />
+  <title>Hello World!</title>
+  <script src="/CesiumUnminified/Cesium.js"></script>
+  <style>
+    @import url(/CesiumUnminified/Widgets/widgets.css);
+
+    html,
+    body,
+    #cesiumContainer {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="cesiumContainer"></div>
+  <script>
+    const viewer = new Cesium.Viewer('cesiumContainer', {
+      animation: false,
+      baseLayerPicker: false,
+      navigationHelpButton: false,
+      sceneModePicker: false,
+      homeButton: false,
+      geocoder: false,
+      fullscreenButton: false,
+      imageryProvider: new Cesium.UrlTemplateImageryProvider({
+        url: `http://localhost:3333/tiles/{z}/{x}/{reverseY}?shadows=true&aspectshadows=true&rivers=true`,
+        minimumLevel: 1,
+        maximumLevel: 20,
+        tileHeight: 256,
+        tileWidth: 256,
+      }),
+      timeline: false,
+    });
+    var geoSource = new Cesium.GeoJsonDataSource("cities");
+    geoSource.load('http://localhost:3333/geojson_cities/1/1/1/1/1', {
+      stroke: Cesium.Color.HOTPINK,
+      fill: Cesium.Color.PINK,
+      strokeWidth: 3,
+      markerSymbol: '?'
+    });
+    viewer.dataSources.add(geoSource);
+    viewer.camera.moveStart.addEventListener(function() { 
+     // the camera started to move
+    });
+
+// Scractch memory allocation, happens only once.
+var scratchRectangle = new Cesium.Rectangle();
+    viewer.camera.moveEnd.addEventListener(function() { 
+      var rect = viewer.camera.computeViewRectangle(viewer.scene.globe.ellipsoid,scratchRectangle);
+      var west = Cesium.Math.toDegrees(rect.west).toFixed(4);
+      var south =  Cesium.Math.toDegrees(rect.south).toFixed(4);
+      var east = Cesium.Math.toDegrees(rect.east).toFixed(4);
+      var north = Cesium.Math.toDegrees(rect.north).toFixed(4);
+      var zoom = 0;
+      var params = zoom + '/' + north + '/' +west + '/' + south + '/' +east;
+        // the camera stopped moving
+        geoSource.load('http://localhost:3333/geojson_cities/'+params, {
+      stroke: Cesium.Color.HOTPINK,
+      fill: Cesium.Color.PINK,
+      strokeWidth: 3,
+      markerSymbol: '?'
+    });
+    });
+  </script>
+</body>
+
+</html>
