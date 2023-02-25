@@ -20,12 +20,14 @@ var (
 	numPlates int     = 25
 	numPoints int     = 40000
 	jitter    float64 = 0.0
+	useGlobe  bool    = true
 )
 
 func init() {
 	flag.Int64Var(&seed, "seed", seed, "the world seed")
 	flag.IntVar(&numPlates, "num_plates", numPlates, "number of plates")
 	flag.IntVar(&numPoints, "num_points", numPoints, "number of points")
+	flag.BoolVar(&useGlobe, "use_globe", useGlobe, "use 3D globe")
 	flag.Float64Var(&jitter, "jitter", jitter, "jitter")
 }
 
@@ -44,7 +46,11 @@ func main() {
 	router.HandleFunc("/tiles/{z}/{x}/{y}", tileHandler)
 	router.HandleFunc("/geojson_cities/{z}/{la1}/{lo1}/{la2}/{lo2}", geoJSONCitiesHandler)
 	router.HandleFunc("/geojson_borders/{z}/{la1}/{lo1}/{la2}/{lo2}", geoJSONBorderHandler)
-	router.PathPrefix("/").Handler(http.FileServer(http.Dir("static")))
+	if useGlobe {
+		router.PathPrefix("/").Handler(http.FileServer(http.Dir("static_globe")))
+	} else {
+		router.PathPrefix("/").Handler(http.FileServer(http.Dir("static")))
+	}
 	log.Fatal(http.ListenAndServe(":3333", router))
 }
 

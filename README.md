@@ -68,3 +68,6 @@ Here some old pictures what it does...
 
 ## Exports to Wavefront OBJ
 ![alt text](https://raw.githubusercontent.com/Flokey82/genworldvoronoi/master/images/obj.png "Screenshot of OBJ Export in Blender!")
+
+## Webglearth sample
+![alt text](https://raw.githubusercontent.com/Flokey82/genworldvoronoi/master/images/webglobe.png "Screenshot of Webglearth!")
