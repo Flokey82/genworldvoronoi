@@ -7,44 +7,46 @@ import (
 	"math/rand"
 	"sort"
 
+	"github.com/Flokey82/go_gens/geoquad"
 	"github.com/Flokey82/go_gens/vectors"
 	"github.com/fogleman/delaunay"
 )
 
 type BaseObject struct {
-	Seed              int64           // Seed for random number generators
-	rand              *rand.Rand      // Rand initialized with above seed
-	noise             *Noise          // Opensimplex noise initialized with above seed
-	mesh              *TriangleMesh   // Triangle mesh containing the sphere information
-	XYZ               []float64       // Point / region xyz coordinates
-	LatLon            [][2]float64    // Point / region latitude and longitude
-	Elevation         []float64       // Point / region elevation
-	Moisture          []float64       // Point / region moisture
-	Rainfall          []float64       // Point / region rainfall
-	Flux              []float64       // Point / region hydrology: throughflow of rainfall
-	Waterpool         []float64       // Point / region hydrology: water pool depth
-	Downhill          []int           // Point / region mapping to its lowest neighbor
-	Drainage          []int           // Point / region mapping of pool to its drainage region
-	Waterbodies       []int           // Point / region mapping of pool to waterbody ID
-	WaterbodySize     map[int]int     // Waterbody ID to size mapping
-	BiomeRegions      []int           // Point / region mapping of regions with the same biome
-	BiomeRegionSize   map[int]int     // Biome region ID to size mapping
-	Landmasses        []int           // Point / region mapping of regions that are part of the same landmass
-	LandmassSize      map[int]int     // Landmass ID to size mapping
-	LakeSize          map[int]int     // Lake ID to size mapping
-	RegionIsMountain  map[int]bool    // Point / region is a mountain
-	RegionIsVolcano   map[int]bool    // Point / region is a volcano
-	RegionIsWaterfall map[int]bool    // Point / region is a waterfall
-	RegionCompression map[int]float64 // Point / region compression factor
-	triMoisture       []float64       // Triangle moisture
-	triElevation      []float64       // Triangle elevation
-	triXYZ            []float64       // Triangle xyz coordinates
-	triPool           []float64       // Triangle water pool depth
-	triLatLon         [][2]float64    // Triangle latitude and longitude
-	triFlow           []float64       // Triangle flow intensity (rainfall)
-	triDownflowSide   []int           // Triangle mapping to side through which water flows downhill.
-	orderTri          []int           // Triangles in uphill order of elevation.
-	sideFlow          []float64       // Flow intensity through sides
+	Seed              int64             // Seed for random number generators
+	rand              *rand.Rand        // Rand initialized with above seed
+	noise             *Noise            // Opensimplex noise initialized with above seed
+	mesh              *TriangleMesh     // Triangle mesh containing the sphere information
+	XYZ               []float64         // Point / region xyz coordinates
+	LatLon            [][2]float64      // Point / region latitude and longitude
+	Elevation         []float64         // Point / region elevation
+	Moisture          []float64         // Point / region moisture
+	Rainfall          []float64         // Point / region rainfall
+	Flux              []float64         // Point / region hydrology: throughflow of rainfall
+	Waterpool         []float64         // Point / region hydrology: water pool depth
+	Downhill          []int             // Point / region mapping to its lowest neighbor
+	Drainage          []int             // Point / region mapping of pool to its drainage region
+	Waterbodies       []int             // Point / region mapping of pool to waterbody ID
+	WaterbodySize     map[int]int       // Waterbody ID to size mapping
+	BiomeRegions      []int             // Point / region mapping of regions with the same biome
+	BiomeRegionSize   map[int]int       // Biome region ID to size mapping
+	Landmasses        []int             // Point / region mapping of regions that are part of the same landmass
+	LandmassSize      map[int]int       // Landmass ID to size mapping
+	LakeSize          map[int]int       // Lake ID to size mapping
+	RegionIsMountain  map[int]bool      // Point / region is a mountain
+	RegionIsVolcano   map[int]bool      // Point / region is a volcano
+	RegionIsWaterfall map[int]bool      // Point / region is a waterfall
+	RegionCompression map[int]float64   // Point / region compression factor
+	triMoisture       []float64         // Triangle moisture
+	triElevation      []float64         // Triangle elevation
+	triXYZ            []float64         // Triangle xyz coordinates
+	triPool           []float64         // Triangle water pool depth
+	triLatLon         [][2]float64      // Triangle latitude and longitude
+	triFlow           []float64         // Triangle flow intensity (rainfall)
+	triDownflowSide   []int             // Triangle mapping to side through which water flows downhill.
+	orderTri          []int             // Triangles in uphill order of elevation.
+	sideFlow          []float64         // Flow intensity through sides
+	regQuadTree       *geoquad.QuadTree // Quadtree for region lookup
 }
 
 func newBaseObject(seed int64, sphere *SphereMesh) *BaseObject {
@@ -81,7 +83,21 @@ func newBaseObject(seed int64, sphere *SphereMesh) *BaseObject {
 		orderTri:          make([]int, mesh.numTriangles),
 		triFlow:           make([]float64, mesh.numTriangles),
 		sideFlow:          make([]float64, mesh.numSides),
+		regQuadTree:       newQuadTreeFromLatLon(sphere.latLon),
 	}
+}
+
+func newQuadTreeFromLatLon(latLon [][2]float64) *geoquad.QuadTree {
+	var points []geoquad.Point
+	for i := range latLon {
+		ll := latLon[i]
+		points = append(points, geoquad.Point{
+			Lat:  ll[0],
+			Lon:  ll[1],
+			Data: i,
+		})
+	}
+	return geoquad.NewQuadTree(points)
 }
 
 // resetRand resets the random number generator to its initial state.

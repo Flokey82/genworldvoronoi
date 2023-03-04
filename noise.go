@@ -81,6 +81,19 @@ func (n *Noise) Eval3(x, y, z float64) float64 {
 	return sum / sumOfAmplitudes
 }
 
+// Eval2 returns the noise value at the given point.
+func (n *Noise) Eval2(x, y float64) float64 {
+	var sum float64
+	var sumOfAmplitudes float64
+	for octave := 0; octave < n.Octaves; octave++ {
+		frequency := 1 << octave
+		fFreq := float64(frequency)
+		sum += n.Amplitudes[octave] * n.OS.Eval2(x*fFreq, y*fFreq)
+		sumOfAmplitudes += n.Amplitudes[octave]
+	}
+	return sum / sumOfAmplitudes
+}
+
 // PlusOneOctave returns a new Noise with one more octave.
 func (n *Noise) PlusOneOctave() *Noise {
 	return NewNoise(n.Octaves+1, n.Persistence, n.Seed)

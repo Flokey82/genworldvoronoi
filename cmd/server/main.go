@@ -2,12 +2,14 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
 	"flag"
 	"image"
 	"image/png"
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/Flokey82/genworldvoronoi"
 	"github.com/gorilla/mux"
@@ -20,7 +22,7 @@ var (
 	numPlates int     = 25
 	numPoints int     = 40000
 	jitter    float64 = 0.0
-	useGlobe  bool    = true
+	useGlobe  bool    = false
 )
 
 func init() {
@@ -44,6 +46,7 @@ func main() {
 	// Start the server.
 	router := mux.NewRouter()
 	router.HandleFunc("/tiles/{z}/{x}/{y}", tileHandler)
+	router.HandleFunc("/terrain/{z}/{x}/{y}", tileHeightMapHandler)
 	router.HandleFunc("/geojson_cities/{z}/{la1}/{lo1}/{la2}/{lo2}", geoJSONCitiesHandler)
 	router.HandleFunc("/geojson_borders/{z}/{la1}/{lo1}/{la2}/{lo2}", geoJSONBorderHandler)
 	if useGlobe {
@@ -198,4 +201,88 @@ func writeImage(w http.ResponseWriter, img *image.Image) {
 	if _, err := w.Write(buffer.Bytes()); err != nil {
 		log.Println("unable to write image.")
 	}
+}
+
+func tile3dHandler(res http.ResponseWriter, req *http.Request) {
+	// Get the tile coordinates and zoom level.
+	vars := mux.Vars(req)
+	tileX, err := strconv.Atoi(vars["x"])
+	if err != nil {
+		panic(err)
+	}
+	vars["y"] = vars["y"][:strings.Index(vars["y"], ".")]
+	tileY, err := strconv.Atoi(vars["y"])
+	if err != nil {
+		panic(err)
+	}
+	tileZ, err := strconv.Atoi(vars["z"])
+	if err != nil {
+		panic(err)
+	}
+
+	// Get the tile image.
+	t3d := worldmap.Get3DTile(tileX, tileY, tileZ)
+	buf := bytes.NewBuffer(nil)
+	if err := t3d.Write(buf); err != nil {
+		panic(err)
+	}
+	// GZIP the data.
+	var b bytes.Buffer
+	w := gzip.NewWriter(&b)
+	if _, err := w.Write(buf.Bytes()); err != nil {
+		panic(err)
+	}
+	if err := w.Close(); err != nil {
+		panic(err)
+	}
+
+	// Set the headers and write the data.
+	data := b.Bytes()
+	res.Header().Set("Content-Type", "application/octet-stream")
+	res.Header().Set("Content-Encoding", "gzip")
+	res.Header().Set("Content-Length", strconv.Itoa(len(buf.Bytes())))
+	res.Header().Set("Access-Control-Allow-Origin", "*")
+	res.Header().Set("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept")
+	res.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	res.Write(data)
+}
+
+func tileHeightMapHandler(res http.ResponseWriter, req *http.Request) {
+	// Get the tile coordinates and zoom level.
+	vars := mux.Vars(req)
+	tileX, err := strconv.Atoi(vars["x"])
+	if err != nil {
+		panic(err)
+	}
+	tileY, err := strconv.Atoi(vars["y"])
+	if err != nil {
+		panic(err)
+	}
+	tileZ, err := strconv.Atoi(vars["z"])
+	if err != nil {
+		panic(err)
+	}
+
+	// Get the tile image.
+	dat := worldmap.GetHeightMapTile(tileX, tileY, tileZ)
+
+	// GZIP the data.
+	var b bytes.Buffer
+	w := gzip.NewWriter(&b)
+	if _, err := w.Write(dat); err != nil {
+		panic(err)
+	}
+	if err := w.Close(); err != nil {
+		panic(err)
+	}
+
+	// Set the headers and write the data.
+	data := b.Bytes()
+	res.Header().Set("Content-Type", "application/octet-stream")
+	res.Header().Set("Content-Encoding", "gzip")
+	res.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	res.Header().Set("Access-Control-Allow-Origin", "*")
+	res.Header().Set("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept")
+	res.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	res.Write(data)
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/Flokey82/genbiome"
 	"github.com/Flokey82/go_gens/gameconstants"
+	"github.com/Flokey82/go_gens/geoquad"
 	"github.com/Flokey82/go_gens/vectors"
 	"github.com/davvo/mercator"
 	"github.com/llgcode/draw2d/draw2dimg"
@@ -171,14 +172,20 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 	// Wrap the tile coordinates.
 	x, y = wrapTileCoordinates(x, y, zoom)
 
+	// Calculate an approximation of the distance between regions.
+	distRegion := math.Sqrt(4 * math.Pi / float64(m.mesh.numRegions))
+
+	// Convert into degrees.
+	distRegionDeg := distRegion * 180 / math.Pi
+
 	// Calculate the bounds of the tile.
 	tbb := newTileBoundingBox(x, y, zoom)
 	la1, lo1, la2, lo2 := tbb.toLatLon()
-	latLonMargin := 20 / float64(zoom)
+	latLonMargin := math.Max(20/float64(zoom), distRegionDeg*10)
 
 	// Calculate the bounds with margin for the tile.
-	la1Margin := math.Max(-90, math.Min(90, la1-latLonMargin))
-	la2Margin := math.Max(-90, math.Min(90, la2+latLonMargin))
+	la1Margin := la1 - latLonMargin //math.Max(-90, math.Min(90, la1-latLonMargin))
+	la2Margin := la2 + latLonMargin //math.Max(-90, math.Min(90, la2+latLonMargin))
 	lo1Margin := lo1 - latLonMargin
 	lo2Margin := lo2 + latLonMargin
 
@@ -204,18 +211,22 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 	dest := image.NewRGBA(image.Rect(0, 0, tileSize, tileSize))
 	gc := draw2dimg.NewGraphicContext(dest)
 
+	var inQuadTree []int
+	qds := m.regQuadTree.FindPointsInRect(geoquad.Rect{
+		MinLat: la1Margin,
+		MaxLat: la2Margin,
+		MinLon: lo1Margin,
+		MaxLon: lo2Margin,
+	})
+	for _, qd := range qds {
+		inQuadTree = append(inQuadTree, qd.Data.(int))
+	}
 	out_t := make([]int, 0, 6)
 	gc.SetLineWidth(1)
-	for i := 0; i < m.mesh.numRegions; i++ {
-		rLat := m.LatLon[i][0]
+
+	for _, i := range inQuadTree {
+		//rLat := m.LatLon[i][0]
 		rLon := m.LatLon[i][1]
-
-		// Check if we are within the tile with a small margin, taking
-		// into account that we might have wrapped around the world.
-		if !isLatLonInBounds(rLat, rLon) {
-			continue
-		}
-
 		// Draw the path that outlines the region.
 		var path [][2]float64
 		for _, j := range m.mesh.r_circulate_t(out_t, i) {
@@ -277,19 +288,11 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 		// Set the color and line width of the wind vectors.
 		gc.SetStrokeColor(color.NRGBA{0, 0, 0, 255})
 		gc.SetLineWidth(1)
-		for i := 0; i < m.mesh.numRegions; i++ {
+		for _, i := range inQuadTree {
 			rLat := m.LatLon[i][0]
 			rLon := m.LatLon[i][1]
 
-			// Check if we are within the tile with a small margin, taking
-			// into account that we might have wrapped around the world.
-			if !isLatLonInBounds(rLat, rLon) {
-				continue
-			}
-
 			// Now draw the wind vector for the region.
-			// windVec := m.RegionToWindVec[i]
-			// windVec := m.RegionToWindVecLocal[i]
 			// NOTE: I'm not 100% sure if this is correct, but it seems to work.
 			wLat, wLon := vectorToLatLong(normalize2(vects[i]))
 			windVec := normalize2([2]float64{wLat, wLon})
@@ -887,13 +890,14 @@ type tileBoundingBox struct {
 	x1, y1 float64
 	x2, y2 float64
 	zoom   int
+	*merc
 }
 
 // toLatLon returns the lat lon coordinates of the north-west and
 // south-east corners of the bounding box.
 func (t *tileBoundingBox) toLatLon() (lat1, lon1, lat2, lon2 float64) {
-	lat1, lon1 = mercator.PixelsToLatLon(t.x1, t.y1, t.zoom)
-	lat2, lon2 = mercator.PixelsToLatLon(t.x2, t.y2, t.zoom)
+	lat1, lon1 = t.PixelsToLatLon(t.x1, t.y1, t.zoom)
+	lat2, lon2 = t.PixelsToLatLon(t.x2, t.y2, t.zoom)
 	return
 }
 
@@ -901,12 +905,68 @@ func (t *tileBoundingBox) toLatLon() (lat1, lon1, lat2, lon2 float64) {
 // and zoom level.
 func newTileBoundingBox(tx, ty, zoom int) tileBoundingBox {
 	return tileBoundingBox{
-		x1:   float64(tx * tileSize),
-		y1:   float64(ty * tileSize),
-		x2:   float64((tx + 1) * tileSize),
-		y2:   float64((ty + 1) * tileSize),
+		x1:   float64(tx * 256),
+		y1:   float64(ty * 256),
+		x2:   float64((tx + 1) * 256),
+		y2:   float64((ty + 1) * 256),
 		zoom: zoom,
+		merc: merc256,
 	}
+}
+
+func newTileBoundingBox32(tx, ty, zoom int) tileBoundingBox {
+	return tileBoundingBox{
+		x1:   float64(tx * 32),
+		y1:   float64(ty * 32),
+		x2:   float64((tx + 1) * 32),
+		y2:   float64((ty + 1) * 32),
+		zoom: zoom,
+		merc: merc32,
+	}
+}
+
+var merc32 = newMerc(32)
+var merc256 = newMerc(256)
+
+type merc struct {
+	tileSize          float64
+	initialResolution float64
+	originShift       float64
+}
+
+func newMerc(tileSize float64) *merc {
+	return &merc{
+		tileSize:          tileSize,
+		initialResolution: 2 * math.Pi * 6378137 / tileSize,
+		originShift:       2 * math.Pi * 6378137 / 2,
+	}
+}
+
+// Resolution calculates the resolution (meters/pixel) for given zoom level (measured at Equator)
+func (m *merc) Resolution(zoom int) float64 {
+	return m.initialResolution / math.Pow(2, float64(zoom))
+}
+
+// PixelsToMeters converts pixel coordinates in given zoom level of pyramid to EPSG:900913
+func (m *merc) PixelsToMeters(px, py float64, zoom int) (float64, float64) {
+	res := m.Resolution(zoom)
+	x := px*res - m.originShift
+	y := py*res - m.originShift
+	return x, y
+}
+
+// PixelsToLatLon converts pixel coordinates in given zoom level to lat/lon in WGS84 Datum
+func (m *merc) PixelsToLatLon(px, py float64, zoom int) (float64, float64) {
+	x, y := m.PixelsToMeters(px, py, zoom)
+	return m.MetersToLatLon(x, y)
+}
+
+// MetersToLatLon converts XY point from Spherical Mercator EPSG:900913 to lat/lon in WGS84 Datum
+func (m *merc) MetersToLatLon(x, y float64) (float64, float64) {
+	lon := (x / m.originShift) * 180
+	lat := (y / m.originShift) * 180
+	lat = 180 / math.Pi * (2*math.Atan(math.Exp(lat*math.Pi/180)) - math.Pi/2)
+	return lat, lon
 }
 
 // boundingBoxResult contains the results of a bounding box query.
