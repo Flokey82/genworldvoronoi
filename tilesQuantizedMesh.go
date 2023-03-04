@@ -214,7 +214,7 @@ func (ei *EdgeIndices) Write(w io.Writer, vertexCount uint32) error {
 			return err
 		}
 	} else {
-		if err := binary.Write(w, byteorder, uint16(ei.WestVertexCount)); err != nil {
+		if err := binary.Write(w, byteorder, ei.WestVertexCount); err != nil {
 			return err
 		}
 		indices16 := make([]uint16, len(ei.WestIndices))
@@ -224,7 +224,7 @@ func (ei *EdgeIndices) Write(w io.Writer, vertexCount uint32) error {
 		if err := binary.Write(w, byteorder, indices16); err != nil {
 			return err
 		}
-		if err := binary.Write(w, byteorder, uint16(ei.SouthVertexCount)); err != nil {
+		if err := binary.Write(w, byteorder, ei.SouthVertexCount); err != nil {
 			return err
 		}
 		indices16 = make([]uint16, len(ei.SouthIndices))
@@ -234,7 +234,7 @@ func (ei *EdgeIndices) Write(w io.Writer, vertexCount uint32) error {
 		if err := binary.Write(w, byteorder, indices16); err != nil {
 			return err
 		}
-		if err := binary.Write(w, byteorder, uint16(ei.EastVertexCount)); err != nil {
+		if err := binary.Write(w, byteorder, ei.EastVertexCount); err != nil {
 			return err
 		}
 		indices16 = make([]uint16, len(ei.EastIndices))
@@ -244,7 +244,7 @@ func (ei *EdgeIndices) Write(w io.Writer, vertexCount uint32) error {
 		if err := binary.Write(w, byteorder, indices16); err != nil {
 			return err
 		}
-		if err := binary.Write(w, byteorder, uint16(ei.NorthVertexCount)); err != nil {
+		if err := binary.Write(w, byteorder, ei.NorthVertexCount); err != nil {
 			return err
 		}
 		indices16 = make([]uint16, len(ei.NorthIndices))

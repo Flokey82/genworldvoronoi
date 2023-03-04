@@ -9,7 +9,6 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/Flokey82/genworldvoronoi"
 	"github.com/gorilla/mux"
@@ -47,6 +46,8 @@ func main() {
 	router := mux.NewRouter()
 	router.HandleFunc("/tiles/{z}/{x}/{y}", tileHandler)
 	router.HandleFunc("/terrain/{z}/{x}/{y}", tileHeightMapHandler)
+	router.HandleFunc("/terrain3d/layer.json", tile3dJSONHandler)
+	router.HandleFunc("/terrain3d/{z}/{x}/{y}.terrain", tile3dHandler)
 	router.HandleFunc("/geojson_cities/{z}/{la1}/{lo1}/{la2}/{lo2}", geoJSONCitiesHandler)
 	router.HandleFunc("/geojson_borders/{z}/{la1}/{lo1}/{la2}/{lo2}", geoJSONBorderHandler)
 	if useGlobe {
@@ -203,6 +204,62 @@ func writeImage(w http.ResponseWriter, img *image.Image) {
 	}
 }
 
+const layerJson = `{
+	"tilejson": "2.1.0",
+	"name": "MDT_Navarra_2014_5m-epsg25830",
+	"description": "",
+	"version": "1.1.0",
+	"format": "quantized-mesh-1.0",
+	"attribution": "",
+	"schema": "tms",
+	"tiles": [ "{z}/{x}/{y}.terrain?v={version}" ],
+	"minzoom": 1,
+	"maxzoom": 16,
+	"projection": "EPSG:3857",
+	"bounds": [ -180.00, -90.00, 0.00, 90.00 ],
+    "available" : [
+        [
+            {
+                "startX" : 0,
+                "startY" : 0,
+                "endX" : 1,
+                "endY" : 0
+            }
+        ],
+        [
+            {
+                "startX" : 0,
+                "startY" : 0,
+                "endX" : 3,
+                "endY" : 1
+            }
+        ]
+    ]
+  }`
+
+func tile3dJSONHandler(res http.ResponseWriter, req *http.Request) {
+	buf := bytes.NewBuffer([]byte(layerJson))
+	// GZIP the data.
+	var b bytes.Buffer
+	w := gzip.NewWriter(&b)
+	if _, err := w.Write(buf.Bytes()); err != nil {
+		panic(err)
+	}
+	if err := w.Close(); err != nil {
+		panic(err)
+	}
+
+	// Set the headers and write the data.
+	data := b.Bytes()
+	res.Header().Set("Content-Type", "application/octet-stream")
+	res.Header().Set("Content-Encoding", "gzip")
+	res.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	res.Header().Set("Access-Control-Allow-Origin", "*")
+	res.Header().Set("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept")
+	res.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	res.Write(data)
+}
+
 func tile3dHandler(res http.ResponseWriter, req *http.Request) {
 	// Get the tile coordinates and zoom level.
 	vars := mux.Vars(req)
@@ -210,7 +267,6 @@ func tile3dHandler(res http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		panic(err)
 	}
-	vars["y"] = vars["y"][:strings.Index(vars["y"], ".")]
 	tileY, err := strconv.Atoi(vars["y"])
 	if err != nil {
 		panic(err)
@@ -240,7 +296,7 @@ func tile3dHandler(res http.ResponseWriter, req *http.Request) {
 	data := b.Bytes()
 	res.Header().Set("Content-Type", "application/octet-stream")
 	res.Header().Set("Content-Encoding", "gzip")
-	res.Header().Set("Content-Length", strconv.Itoa(len(buf.Bytes())))
+	res.Header().Set("Content-Length", strconv.Itoa(len(data)))
 	res.Header().Set("Access-Control-Allow-Origin", "*")
 	res.Header().Set("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept")
 	res.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")

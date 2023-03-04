@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"log"
+	"math"
 
 	"github.com/Flokey82/go_gens/geoquad"
 )
@@ -357,6 +358,9 @@ func (m *Map) Get3DTile(x, y, zoom int) *Tile3D {
 	// in the tile and depending on where they are we will add them to the
 	// appropriate edge list.
 
+	centerLat := (la1 + la2) / 2
+	centerLon := (lo1 + lo2) / 2
+
 	for _, r := range regionsInBounds {
 		// Get the neighbors of the region.
 		neighbors := m.mesh.r_circulate_r(nil, r)
@@ -374,8 +378,8 @@ func (m *Map) Get3DTile(x, y, zoom int) *Tile3D {
 			// Get the index of the region in the tile.
 			regionIndex := regionToIndex[r]
 			// Get the latitude and longitude of the region.
-			lat := m.LatLon[r][0]
-			lon := m.LatLon[r][1]
+			//lat := m.LatLon[r][0]
+			//lon := m.LatLon[r][1]
 			// Check if the region is on the West edge.
 			// For this we have to determine if the missing neighbor is to the
 			// West of the region.
@@ -384,35 +388,29 @@ func (m *Map) Get3DTile(x, y, zoom int) *Tile3D {
 					// Get the latitude and longitude of the neighbor.
 					latN := m.LatLon[n][0]
 					lonN := m.LatLon[n][1]
-					// If the neighbor is to the West of the region then add it to the
-					// West edge list.
-					if lonN < lon {
-						t3d.Edge.WestIndices = append(t3d.Edge.WestIndices, uint32(regionIndex))
-						break
-					}
 
-					// Check if the region is on the South edge.
-					// For this we have to determine if the missing neighbor is to the
-					// South of the region.
-					if latN < lat {
-						t3d.Edge.SouthIndices = append(t3d.Edge.SouthIndices, uint32(regionIndex))
-						break
-					}
+					deltaLat := latN - centerLat
+					deltaLon := lonN - centerLon
 
-					// Check if the region is on the East edge.
-					// For this we have to determine if the missing neighbor is to the
-					// East of the region.
-					if lonN > lon {
-						t3d.Edge.EastIndices = append(t3d.Edge.EastIndices, uint32(regionIndex))
-						break
-					}
-
-					// Check if the region is on the North edge.
-					// For this we have to determine if the missing neighbor is to the
-					// North of the region.
-					if latN > lat {
-						t3d.Edge.NorthIndices = append(t3d.Edge.NorthIndices, uint32(regionIndex))
-						break
+					// Check which delta is larger.
+					if math.Abs(deltaLat) > math.Abs(deltaLon) {
+						// The delta latitude is larger so the region is on the North or South edge.
+						if latN < centerLat {
+							t3d.Edge.SouthIndices = append(t3d.Edge.SouthIndices, uint32(regionIndex))
+							break
+						} else {
+							t3d.Edge.NorthIndices = append(t3d.Edge.NorthIndices, uint32(regionIndex))
+							break
+						}
+					} else {
+						// The delta longitude is larger so the region is on the East or West edge.
+						if lonN < centerLon {
+							t3d.Edge.WestIndices = append(t3d.Edge.WestIndices, uint32(regionIndex))
+							break
+						} else {
+							t3d.Edge.EastIndices = append(t3d.Edge.EastIndices, uint32(regionIndex))
+							break
+						}
 					}
 				}
 			}
