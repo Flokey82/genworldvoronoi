@@ -84,11 +84,11 @@ func (m *Civ) tickPersonDeath(p *Person, nDays int) {
 	if gameconstants.DiesAtAgeWithinNDays(p.Age, nDays) {
 		// If the person just gave birth, we note that the person
 		// died during childbirth.
-		m.killPerson(p)
+		m.killPerson(p, "") // Random cause?
 	}
 }
 
-func (m *Civ) killPerson(p *Person) {
+func (m *Civ) killPerson(p *Person, reason string) {
 	p.Death.Day = int(m.History.GetDayOfYear())
 	p.Death.Year = int(m.History.GetYear())
 	p.Death.Region = p.Region
@@ -100,8 +100,16 @@ func (m *Civ) killPerson(p *Person) {
 
 	// :(
 	if p.Prengancy != nil {
-		m.killPerson(p.Prengancy)
+		m.killPerson(p.Prengancy, reason)
 	}
+
+	var deathStr string
+	if reason == "" {
+		deathStr = fmt.Sprintf("%s died", p.Name())
+	} else {
+		deathStr = fmt.Sprintf("%s died due to %s", p.Name(), reason)
+	}
+	m.AddEvent("Death", deathStr, p.Ref())
 
 	/*
 		var str string
@@ -238,6 +246,14 @@ func (p *Person) Name() string {
 		return fmt.Sprintf("%s %q %s", p.FirstName, p.NickName, p.LastName)
 	}
 	return p.FirstName + " " + p.LastName
+}
+
+// Ref returns the object reference of the person.
+func (p *Person) Ref() ObjectReference {
+	return ObjectReference{
+		ID:   p.ID,
+		Type: ObjectTypePerson,
+	}
 }
 
 // String returns the string representation of the person.

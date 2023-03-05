@@ -87,17 +87,17 @@ func (tm *TriangleMesh) r_circulate_t(out_t []int, r int) []int {
 }
 
 func (tm *TriangleMesh) t_circulate_s(out_s []int, t int) []int {
-	out_s = make([]int, 3)
+	out_s = out_s[:0]
 	for i := 0; i < 3; i++ {
-		out_s[i] = 3*t + i
+		out_s = append(out_s, 3*t+i)
 	}
 	return out_s
 }
 
 func (tm *TriangleMesh) t_circulate_r(out_r []int, t int) []int {
-	out_r = make([]int, 3)
+	out_r = out_r[:0]
 	for i := 0; i < 3; i++ {
-		out_r[i] = tm.Triangles[3*t+i]
+		out_r = append(out_r, tm.Triangles[3*t+i])
 	}
 	return out_r
 }

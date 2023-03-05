@@ -172,7 +172,7 @@ func (m *Civ) tickCityDisaster(c *City, gDisFunc func(int) GeoDisasterChance, da
 	dead := int(math.Ceil(float64(c.Population) * popLoss))
 
 	// HACK: Kill the people that died in the disaster.
-	// c.People = m.killNPeople2(c.People, dead)
+	// c.People = m.killNPeople(c.People, dead)
 
 	year := m.Geo.Calendar.GetYear()
 

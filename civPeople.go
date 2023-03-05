@@ -42,6 +42,16 @@ func (m *Civ) tickPeople(people []*Person, nDays int, cf func(int) *Culture) []*
 	return alive
 }
 
+// placePopulationAt places a population of n randomly generated people at the given region.
+// The people are assigned a culture based on the given culture function.
+//
+// NOTE: 'cf' is a function that returns a culture for a given location.
+// We use this function to determine the culture of a newborn based on the region
+// it is born in.
+//
+// NOTE: This function does not assign the people to any city that might be at the region.
+//
+// TODO: Assign people to cities!
 func (m *Civ) placePopulationAt(r, n int, cf func(int) *Culture) []*Person {
 	// Get the culture at the region.
 	culture := cf(r)
@@ -60,7 +70,11 @@ func (m *Civ) placePopulationAt(r, n int, cf func(int) *Culture) []*Person {
 	return localPop
 }
 
-func (m *Civ) killNPeople(people []*Person, n int) []*Person {
+// killNPeople kills n people from the given list of people and returns the list of
+// people that are still alive.
+//
+// NOTE: This function filters out dead people and does not kill people that are already dead.
+func (m *Civ) killNPeople(people []*Person, n int, reason string) []*Person {
 	var killed int
 	alive := make([]*Person, 0, len(people))
 	for _, i := range rand.Perm(len(people)) {
@@ -69,7 +83,7 @@ func (m *Civ) killNPeople(people []*Person, n int) []*Person {
 			if killed >= n {
 				alive = append(alive, p)
 			} else {
-				m.killPerson(p)
+				m.killPerson(p, reason)
 				killed++
 			}
 		}
@@ -77,6 +91,15 @@ func (m *Civ) killNPeople(people []*Person, n int) []*Person {
 	return alive
 }
 
+// migrateNPeopleFromTo migrates n people from the given list of people from / to the given region.
+// It returns the list of people that are still alive in the original region and the list of people
+// that were migrated to the new region.
+//
+// NOTE: This function filters out dead people.
+//
+// NOTE: This function does not assign the people to any city that might be at the region.
+//
+// TODO: Assign people to / remove people from cities!
 func (m *Civ) migrateNPeopleFromTo(pFrom []*Person, rTo, n int) (pFromAfter, pToMigrate []*Person) {
 	pFromAfter = make([]*Person, 0, len(pFrom))
 	pToMigrate = make([]*Person, 0, n)
@@ -115,6 +138,7 @@ func (m *Civ) LogPopulationStats(people []*Person) {
 	}
 }
 
+// matchMaker matches up single people based on their age and region.
 func (m *Civ) matchMaker(people []*Person) {
 	// Get eligible singles (not dead, not married, and already alive).
 	single := make([]*Person, 0, len(people))

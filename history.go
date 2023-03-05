@@ -25,6 +25,7 @@ const (
 	ObjectTypeLake
 	ObjectTypeSea
 	ObjectTypeVolcano
+	ObjectTypePerson
 )
 
 type ObjectReference struct {
@@ -37,6 +38,12 @@ type Event struct {
 	Type string          // Maybe use an enum?
 	Msg  string          // Message that describes the event.
 	ID   ObjectReference // Reference to the object that the event is about.
+
+	// TODO: Related event(s), related object(s), etc.?
+	// For example, the death of a person might be related to the birth of a
+	// child, or the founding of a city.
+	// Related object(s) might be the city that a person was born in, or the
+	// people that were killed in a battle.
 }
 
 func (e *Event) String() string {
@@ -53,13 +60,16 @@ func (h *History) GetEvents(id int, t byte) []*Event {
 	return events
 }
 
-func (h *History) AddEvent(t string, msg string, id ObjectReference) {
-	h.Events = append(h.Events, &Event{
+// AddEvent adds an event to the history and returns a pointer to the event.
+func (h *History) AddEvent(t string, msg string, id ObjectReference) *Event {
+	event := &Event{
 		Year: h.GetYear(),
 		Type: t,
 		Msg:  msg,
 		ID:   id,
-	})
+	}
+	h.Events = append(h.Events, event)
+	return event
 }
 
 /*

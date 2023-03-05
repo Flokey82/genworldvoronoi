@@ -279,9 +279,7 @@ func (m *BaseObject) assignDownflow() {
 // GetDistance calculate the distance between two regions using
 // the lat long and haversine.
 func (m *BaseObject) GetDistance(r1, r2 int) float64 {
-	la1, lo1 := m.LatLon[r1][0], m.LatLon[r1][1]
-	la2, lo2 := m.LatLon[r2][0], m.LatLon[r2][1]
-	return haversine(la1, lo1, la2, lo2)
+	return haversine(m.LatLon[r1][0], m.LatLon[r1][1], m.LatLon[r2][0], m.LatLon[r2][1])
 }
 
 // GetRegNeighbors returns the neighbor regions of a region.
@@ -694,7 +692,7 @@ func (m *BaseObject) assignDistanceField(seedRegs []int, stopReg map[int]bool) [
 
 	// Initialize the queue for the breadth first search with
 	// the seed regions.
-	queue := make([]int, len(seedRegs))
+	queue := make([]int, len(seedRegs), numRegions)
 	for i, r := range seedRegs {
 		queue[i] = r
 		regDistance[r] = 0

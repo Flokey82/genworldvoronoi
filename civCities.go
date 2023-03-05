@@ -300,6 +300,9 @@ func (m *Civ) getFitnessCityDefault() func(int) float64 {
 	_, maxFlux := minMax(m.Flux)
 	steepness := m.GetSteepness()
 
+	// WARNING: Using this will prevent us from using the fitness function concurrently.
+	out_r := make([]int, 0, 8)
+
 	return func(r int) float64 {
 		// If we are below (or at) sea level, or we are in a pool of water,
 		// assign lowest score and continue.
@@ -309,7 +312,7 @@ func (m *Civ) getFitnessCityDefault() func(int) float64 {
 
 		// Visit all neighbors and modify the score based on their properties.
 		var hasWaterBodyBonus bool
-		nbs := m.GetRegNeighbors(r)
+		nbs := m.mesh.r_circulate_r(out_r, r)
 
 		// Initialize fitness score with the normalized flux value.
 		// This will favor placing cities along (and at the end of)

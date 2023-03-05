@@ -61,8 +61,8 @@ func NewCiv(geo *Geo) *Civ {
 }
 
 func (m *Civ) generateCivilization() {
-	enableCityAging := true
-	enableOrganizedReligions := true
+	enableCityAging := false
+	enableOrganizedReligions := false
 
 	// TODO: The generation should happen somewhat like this...
 	// 0. Calculate time of settlement per region through flood fill.
@@ -309,6 +309,7 @@ func (m *Civ) generateTimeOfSettlement() {
 	}
 
 	// Expand settlements until we have settled all regions.
+	out_r := make([]int, 0, 8)
 	for queue.Len() > 0 {
 		u := heap.Pop(&queue).(*queueEntry)
 
@@ -320,7 +321,7 @@ func (m *Civ) generateTimeOfSettlement() {
 		// The higher the score, the more difficult it is to settle there,
 		// and the longer it took to settle there.
 		settleTime[u.destination] = int64(u.score)
-		for _, v := range m.GetRegNeighbors(u.destination) {
+		for _, v := range m.mesh.r_circulate_r(out_r, u.destination) {
 			// Check if the region has already been settled.
 			if settleTime[v] >= 0 {
 				continue

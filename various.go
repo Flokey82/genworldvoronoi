@@ -2,7 +2,6 @@ package genworldvoronoi
 
 import (
 	"image/color"
-	"log"
 	"math"
 	"math/rand"
 	"sort"
@@ -112,8 +111,7 @@ func distToSegment2(v, w, p [2]float64) float64 {
 		// segment points.
 		return dist2(p, v)
 	}
-	t := ((p[0]-v[0])*(w[0]-v[0]) + (p[1]-v[1])*(w[1]-v[1])) / (l2 * l2)
-	t = math.Max(0, math.Min(1, t))
+	t := math.Max(0, math.Min(1, ((p[0]-v[0])*(w[0]-v[0])+(p[1]-v[1])*(w[1]-v[1]))/(l2*l2)))
 	return dist2(p, [2]float64{v[0] + t*(w[0]-v[0]), v[1] + t*(w[1]-v[1])})
 }
 
@@ -144,9 +142,8 @@ func addVecToLatLong(lat, lon float64, vec [2]float64) (float64, float64) {
 
 // I'm not sure if this is correct, but it seems to work.
 func vectorToLatLong(vec [2]float64) (float64, float64) {
-	lat := radToDeg(math.Asin(vec[0]))
-	lon := radToDeg(math.Atan2(vec[1], math.Sqrt(1-vec[0]*vec[0])))
-	return lat, lon
+	return radToDeg(math.Asin(vec[0])), // Lat
+		radToDeg(math.Atan2(vec[1], math.Sqrt(1-vec[0]*vec[0]))) // Lon
 }
 
 // calcVecFromLatLong calculates the vector between two lat/long pairs.
@@ -178,23 +175,15 @@ func latLonToCartesian(latDeg, lonDeg float64) []float64 {
 // See: https://rbrundritt.wordpress.com/2008/10/14/conversion-between-spherical-and-cartesian-coordinates-systems/
 func latLonFromVec3(position vectors.Vec3, sphereRadius float64) (float64, float64) {
 	// See https://stackoverflow.com/questions/46247499/vector3-to-latitude-longitude
-	lat := math.Asin(position.Z / sphereRadius) // theta
-	lon := math.Atan2(position.Y, position.X)   // phi
-	return radToDeg(lat), radToDeg(lon)
+	return radToDeg(math.Asin(position.Z / sphereRadius)), // theta
+		radToDeg(math.Atan2(position.Y, position.X)) // phi
 }
 
 // haversine returns the great arc distance between two lat/long pairs.
 func haversine(lat1, lon1, lat2, lon2 float64) float64 {
-	// distance between latitudes and longitudes
-	dLat := degToRad(lat2 - lat1)
-	dLon := degToRad(lon2 - lon1)
-
-	// convert to radians
-	lat1 = degToRad(lat1)
-	lat2 = degToRad(lat2)
-
-	// apply formula
-	a := math.Pow(math.Sin(dLat/2), 2) + math.Pow(math.Sin(dLon/2), 2)*math.Cos(lat1)*math.Cos(lat2)
+	dLatSin := math.Sin(degToRad(lat2-lat1) / 2)
+	dLonSin := math.Sin(degToRad(lon2-lon1) / 2)
+	a := dLatSin*dLatSin + dLonSin*dLonSin*math.Cos(degToRad(lat1))*math.Cos(degToRad(lat2))
 	return 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
 }
 
@@ -310,74 +299,45 @@ func initSlice[V utils.Number](size int) []V {
 // mergeIndexSegments matches up the ends of the segments (region pairs) and returns
 // a slice containing all continuous, connected segments as sequence of connected regions.
 func mergeIndexSegments(segs [][2]int) [][]int {
-	log.Println("start adj")
 	adj := make(map[int][]int)
-	var maxSegIdx int
 	for i := 0; i < len(segs); i++ {
 		seg := segs[i]
 		adj[seg[0]] = append(adj[seg[0]], seg[1])
 		adj[seg[1]] = append(adj[seg[1]], seg[0])
-		if seg[0] > maxSegIdx {
-			maxSegIdx = seg[0]
-		}
-		if seg[1] > maxSegIdx {
-			maxSegIdx = seg[1]
-		}
 	}
-	done := make([]bool, maxSegIdx)
 	var paths [][]int
 	var path []int
-	log.Println("start paths")
-	for {
+	for len(segs) > 0 {
 		if path == nil {
-			for i := 0; i < len(segs); i++ {
-				if done[i] {
-					continue
-				}
-				done[i] = true
-				path = []int{segs[i][0], segs[i][1]}
-				break
-			}
-			if path == nil {
-				break
-			}
+			seg := segs[0]
+			segs = segs[1:]
+			path = []int{seg[0], seg[1]}
 		}
 		var changed bool
 		for i := 0; i < len(segs); i++ {
-			if done[i] {
-				continue
+			seg := segs[i]
+			if len(adj[path[0]]) == 2 && (seg[0] == path[0] || seg[1] == path[0]) {
+				if seg[0] == path[0] {
+					path = unshiftIndexPath(path, seg[1])
+				} else {
+					path = unshiftIndexPath(path, seg[0])
+				}
+				segs = append(segs[:i], segs[i+1:]...)
+				changed = true
+				break
 			}
-			if len(adj[path[0]]) == 2 {
-				if segs[i][0] == path[0] {
-					path = unshiftIndexPath(path, segs[i][1])
-					done[i] = true
-					changed = true
-					break
+			if len(adj[path[len(path)-1]]) == 2 && (seg[0] == path[len(path)-1] || seg[1] == path[len(path)-1]) {
+				if seg[0] == path[len(path)-1] {
+					path = append(path, seg[1])
+				} else {
+					path = append(path, seg[0])
 				}
-				if segs[i][1] == path[0] {
-					path = unshiftIndexPath(path, segs[i][0])
-					done[i] = true
-					changed = true
-					break
-				}
-			}
-			if len(adj[path[len(path)-1]]) == 2 {
-				if segs[i][0] == path[len(path)-1] {
-					path = append(path, segs[i][1])
-					done[i] = true
-					changed = true
-					break
-				}
-				if segs[i][1] == path[len(path)-1] {
-					path = append(path, segs[i][0])
-					done[i] = true
-					changed = true
-					break
-				}
+				segs = append(segs[:i], segs[i+1:]...)
+				changed = true
+				break
 			}
 		}
 		if !changed {
-			//log.Println("done paths", len(paths), "pathlen", len(path))
 			paths = append(paths, path)
 			path = nil
 		}
@@ -397,15 +357,6 @@ func roundToDecimals(v, d float64) float64 {
 	m := math.Pow(10, d)
 	return math.Round(v*m) / m
 }
-
-/*
-func ra(array []string) string {
-	return array[rand.Intn(len(array))]
-}
-
-func rw(mp map[string]int) string {
-	return ra(weightedToArray(mp))
-}*/
 
 // weightedToArray converts a map of weighted values to an array.
 func weightedToArray(weighted map[string]int) []string {
@@ -525,9 +476,6 @@ func genGreen(intensity float64) color.NRGBA {
 // genBlackShadow returns a black color that is more transparent the higher the intensity.
 func genBlackShadow(intensity float64) color.NRGBA {
 	return color.NRGBA{
-		R: 0,
-		G: 0,
-		B: 0,
 		A: uint8((1 - intensity) * 255),
 	}
 }
