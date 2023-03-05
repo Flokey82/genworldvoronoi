@@ -428,30 +428,151 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 			}
 
 			// We have already the coordinates of all 3 regions, so we can just use them.
+
+			// We need to calculate the midpoint for each side of the triangle if one or two
+			// of the regions are below the sea level.
+			// We do this by calculating the intersection of the triangle segment
+			// with the sea level plane and then calculate the new midpoint for the triangle.
+			var midSides [3][2]float64
+
+			// Calculate the midpoints of each side of the triangle,
+			// given a possible intercept with the sea level plane.
+			// We need to do this for each side of the triangle where
+			// one of the regions is below the sea level.
+			var regsBelowSeaLevel [3]bool
+			var countBelowSeaLevel int
 			for j := 0; j < 3; j++ {
-				// Set the color of the triangle segment.
+				// Get the 2 regions of the triangle segment.
+				r1 := regions[j]
+				r2 := regions[(j+1)%3]
+				// Get the 2 points of the triangle segment.
+				x1, y1, z1 := path[j][0], path[j][1], m.Elevation[r1]
+				x2, y2, z2 := path[(j+1)%3][0], path[(j+1)%3][1], m.Elevation[r2]
+
+				if z1 <= 0 {
+					regsBelowSeaLevel[j] = true
+					countBelowSeaLevel++
+				}
+
+				// Check if we have a triangle segment that crosses the sea level plane.
+				if (z1 <= 0) != (z2 <= 0) {
+					// Calculate the intersection of the triangle segment with the sea level plane
+					// (when z becomes zero).
+					// We do this by calculating the ratio of the distance from the first point
+					// to the intersection point to the distance between the first and second point.
+					// We then use this ratio to calculate the coordinates of the intersection point.
+					ratio := math.Abs(z1) / (math.Abs(z1) + math.Abs(z2))
+					x := x1 + (x2-x1)*ratio
+					y := y1 + (y2-y1)*ratio
+
+					// Set the midpoint of the triangle segment to the intersection point.
+					midSides[j][0] = x
+					midSides[j][1] = y
+				} else {
+					// If the triangle segment does not cross the sea level plane,
+					// we can just use the midpoint of the triangle segment.
+					midSides[j][0] = (x1 + x2) / 2
+					midSides[j][1] = (y1 + y2) / 2
+				}
+			}
+
+			// Calculate the new midpoint of the triangle, which needs to be
+			// at sea level if one or two of the regions are below the sea level.
+			// - If one or two regions ar below the sea level, the midpoint of the triangle should
+			// be set at the midpoint between the two midpoints of the triangle segments that
+			// cross the sea level plane.
+			// - If all regions are above the sea level, the midpoint of the triangle should
+			// be set at the midpoint of the triangle.
+			var midTriangle [2]float64
+
+			// If only one region is below the sea level, the midpoint of the triangle should
+			// be set at the midpoint between the two midpoints of the triangle segments that
+			// cross the sea level plane.
+			if countBelowSeaLevel == 1 {
+				for j := 0; j < 3; j++ {
+					if regsBelowSeaLevel[j] {
+						midTriangle[0] = (midSides[(j+0)%3][0] + midSides[(j+2)%3][0]) / 2
+						midTriangle[1] = (midSides[(j+0)%3][1] + midSides[(j+2)%3][1]) / 2
+						break
+					}
+				}
+			} else if countBelowSeaLevel == 2 {
+				// If two regions are below the sea level, the midpoint of the triangle should
+				// be set at the midpoint between the two midpoints of the triangle segments that
+				// cross the sea level plane.
+				for j := 0; j < 3; j++ {
+					// If the current region is above the sea level, we can use the midpoint
+					// of the triangle segments, which are the current segment and the previous segment.
+					if !regsBelowSeaLevel[j] {
+						midTriangle[0] = (midSides[(j+0)%3][0] + midSides[(j+2)%3][0]) / 2
+						midTriangle[1] = (midSides[(j+0)%3][1] + midSides[(j+2)%3][1]) / 2
+						break
+					}
+				}
+			} else {
+				// If all regions are above the sea level, the midpoint of the triangle should
+				// be set at the midpoint of the triangle.
+				midTriangle[0] = (path[0][0] + path[1][0] + path[2][0]) / 3
+				midTriangle[1] = (path[0][1] + path[1][1] + path[2][1]) / 3
+			}
+
+			// Now we can draw the triangle using the adjusted midpoints.
+			for j := 0; j < 3; j++ {
+				// Set the color of the triangle shard.
 				col := colorFunc(regions[j], brightness)
 				gc.SetStrokeColor(col)
 				gc.SetFillColor(col)
 
-				// Get the 2 points of the triangle segment.
+				// Get the 4 points of the triangle shard
+				// One region is the original point of the triangle,
+				// the other two are the midpoints of the triangle segment,
+				// and the midpoint of the triangle.
 				x1, y1 := path[j][0], path[j][1]
-				x2, y2 := path[(j+1)%3][0], path[(j+1)%3][1]
-				x3, y3 := path[(j+2)%3][0], path[(j+2)%3][1]
+				x2, y2 := midSides[(j+0)%3][0], midSides[(j+0)%3][1]
+				x3, y3 := midTriangle[0], midTriangle[1]
+				x4, y4 := midSides[(j+2)%3][0], midSides[(j+2)%3][1]
 
-				// Draw the triangle segment.
+				// Draw the triangle shard.
 				gc.BeginPath()
-				// First, we move to the first point of the triangle segment,
+				// First, we move to the first point of the triangle shard,
 				gc.MoveTo(x1, y1)
-				// then we draw a line to the midpoint between the first and second point,
-				gc.LineTo((x1+x2)/2, (y1+y2)/2)
-				// then we draw a line to the center of the triangle,
-				gc.LineTo((x1+x2+x3)/3, (y1+y2+y3)/3)
-				// then we draw a line to the midpoint between the third and first point.
-				gc.LineTo((x1+x3)/2, (y1+y3)/2)
+				// then we draw a line to the midpoint of the first line segment,
+				gc.LineTo(x2, y2)
+				// then we draw a line to the midpoint of the triangle,
+				gc.LineTo(x3, y3)
+				// then we draw a line to the midpoint of the third line segment,
+				gc.LineTo(x4, y4)
+				// and finally we close the path.
 				gc.Close()
 				gc.FillStroke()
 			}
+
+			/*
+				for j := 0; j < 3; j++ {
+					// Set the color of the triangle segment.
+					col := colorFunc(regions[j], brightness)
+					gc.SetStrokeColor(col)
+					gc.SetFillColor(col)
+
+					// Get the 3 points of the triangle segment.
+					x1, y1 := path[j][0], path[j][1]
+					x2, y2 := path[(j+1)%3][0], path[(j+1)%3][1]
+					x3, y3 := path[(j+2)%3][0], path[(j+2)%3][1]
+
+					// Draw the triangle segment.
+					gc.BeginPath()
+					// First, we move to the first point of the triangle segment,
+					gc.MoveTo(x1, y1)
+					// then we draw a line to the midpoint between the first and second point,
+					gc.LineTo((x1+x2)/2, (y1+y2)/2)
+					// then we draw a line to the center of the triangle,
+					gc.LineTo((x1+x2+x3)/3, (y1+y2+y3)/3)
+					// then we draw a line to the midpoint between the third and first point.
+					gc.LineTo((x1+x3)/2, (y1+y3)/2)
+					gc.Close()
+					gc.FillStroke()
+				}
+			*/
 		}
 	}
 
@@ -506,6 +627,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 
 				// If both points are in a pool or below sea level, we end the path,
 				// move to the new point and start a new path.
+				// TODO: Calculate intercept of the river with the sea level.
 				if (m.Elevation[p] <= 0 || m.Waterpool[p] > 0 && drawLakes) &&
 					(m.Elevation[river[i]] <= 0 || m.Waterpool[river[i]] > 0 && drawLakes) {
 					// Draw from the last position to the midpoint.
