@@ -286,6 +286,18 @@ func (m *Civ) CalcCityScore(sf func(int) float64, distSeedFunc func() []int) []f
 	return m.CalcFitnessScore(sfCity, distSeedFunc)
 }
 
+func (m *Civ) CalcCityScoreWithDistanceField(sf func(int) float64, regDistanceC []float64) []float64 {
+	sfCity := func(r int) float64 {
+		// If we are below (or at) sea level, or we are in a pool of water,
+		// assign lowest score and continue.
+		if m.Elevation[r] <= 0 || m.Waterpool[r] > 0 {
+			return -1.0
+		}
+		return sf(r)
+	}
+	return m.CalcFitnessScoreWithDistanceField(sfCity, regDistanceC)
+}
+
 func (m *Civ) getFitnessTradingTowns() func(int) float64 {
 	// TODO: Fix this.
 	// I think this function should avoid the penalty wrt.

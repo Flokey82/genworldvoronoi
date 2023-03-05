@@ -157,6 +157,7 @@ func (m *Geo) assignWindVectors() {
 				seaRegs = append(seaRegs, r)
 			}
 		}
+		outRegs := make([]int, 0, 8)
 		regDistanceSea := m.assignDistanceField(seaRegs, make(map[int]bool))
 		for r := range regWindVecLocal {
 			regVec := regWindVec[r]
@@ -172,7 +173,7 @@ func (m *Geo) assignWindVectors() {
 				X: regVec[0],
 				Y: regVec[1],
 			})
-			for _, nb := range m.GetRegNeighbors(r) {
+			for _, nb := range m.mesh.r_circulate_r(outRegs, r) {
 				nbLat := m.LatLon[nb][0]
 				nbLon := m.LatLon[nb][1]
 				tempNb := getMeanAnnualTemp(nbLat) - getTempFalloffFromAltitude(8850*m.Elevation[nb]/maxElev)
@@ -188,6 +189,7 @@ func (m *Geo) assignWindVectors() {
 		}
 	} else {
 		// Add wind deflection based on altitude changes.
+		outRegs := make([]int, 0, 8)
 		for r := range regWindVecLocal {
 			regVec := regWindVec[r]
 			// Get XYZ Position of r.
@@ -219,7 +221,7 @@ func (m *Geo) assignWindVectors() {
 			// Calculate Vector between r and wind_r.
 			vb := vectors.Sub3(rwXYZ, regXYZ).Normalize()
 
-			for _, nbReg := range m.GetRegNeighbors(r) {
+			for _, nbReg := range m.mesh.r_circulate_r(outRegs, r) {
 				// if is_sea[neighbor_r] {
 				//	continue
 				// }
@@ -268,6 +270,7 @@ func (m *Geo) assignWindVectors() {
 // mixing them with the wind vectors of their neighbor regions.
 func (m *Geo) interpolateWindVecs(in [][2]float64, steps int) [][2]float64 {
 	// Average wind vectors using neighbor vectors.
+	outRegs := make([]int, 0, 8)
 	for i := 0; i < steps; i++ {
 		regWindVecInterpolated := make([][2]float64, m.mesh.numRegions)
 		for r := range regWindVecInterpolated {
@@ -276,7 +279,7 @@ func (m *Geo) interpolateWindVecs(in [][2]float64, steps int) [][2]float64 {
 				in[r][1],
 			}
 			var count int
-			for _, nbReg := range m.GetRegNeighbors(r) {
+			for _, nbReg := range m.mesh.r_circulate_r(outRegs, r) {
 				resVec[0] += in[nbReg][0]
 				resVec[1] += in[nbReg][1]
 				count++
@@ -399,6 +402,7 @@ func (m *Geo) assignRainfall(numSteps, transferMode, sortOrder int) {
 			// 3.1.B For each region, calculate dot product of Vec r -> r_neighbor and wind vector of r.
 			//       This will give us the amount of moisture we transfer to the neighbor region.
 			// NOTE: This variant copies moisture from the current region to the neighbors that are in wind direction.
+			outRegs := make([]int, 0, 8)
 			for _, r := range sortOrderRegs {
 				count := 0
 				// Get XYZ Position of r.
@@ -409,7 +413,7 @@ func (m *Geo) assignRainfall(numSteps, transferMode, sortOrder int) {
 
 				// Add wind vector to neighbor lat/lon to get the "wind vector lat long" or something like that..
 				regToWindVec3 := convToVec3(latLonToCartesian(regLat+regWindVec[r][1], regLon+regWindVec[r][0])).Normalize()
-				for _, nbReg := range m.GetRegNeighbors(r) {
+				for _, nbReg := range m.mesh.r_circulate_r(outRegs, r) {
 					if isSea[nbReg] {
 						continue
 					}
@@ -451,12 +455,13 @@ func (m *Geo) assignRainfall(numSteps, transferMode, sortOrder int) {
 			// 3.2. For each region, calculate dot product of Vec r -> r_neighbor and wind vector of r_neighbor.
 			//    This will give us the amount of moisture we transfer from the neighbor region.
 			// NOTE: This variant copies moisture to the current region from the neighbors depending on their wind direction.
+			outRegs := make([]int, 0, 8)
 			for _, r := range sortOrderRegs {
 				count := 0
 				sum := 0.0
 				// Get XYZ Position of r as vector3
 				regVec3 := convToVec3(m.XYZ[r*3 : r*3+3])
-				for _, nbReg := range m.GetRegNeighbors(r) {
+				for _, nbReg := range m.mesh.r_circulate_r(outRegs, r) {
 					// Calculate dot product of wind vector to vector r -> neighbor_r.
 					// Get XYZ Position of r_neighbor.
 					regToNbVec3 := convToVec3(m.XYZ[nbReg*3 : nbReg*3+3])
@@ -595,12 +600,13 @@ func (m *Geo) assignRainfallBasic() {
 	//
 	// NOTE: Since we start and stop at +- 180° long, we need to run the code several times
 	// to ensure that moisture is pushed across the longitude wrap-around.
+	outRegs := make([]int, 0, 8)
 	for i := 0; i < 4; i++ {
 		for _, r := range windOrderRegs {
 			var humidity float64
 
 			// Calculate humidity.
-			for _, nbReg := range m.GetRegNeighbors(r) {
+			for _, nbReg := range m.mesh.r_circulate_r(outRegs, r) {
 				rL := m.LatLon[r]
 				nL := m.LatLon[nbReg]
 
@@ -637,6 +643,7 @@ func (m *Geo) assignRainfallBasic() {
 }
 
 func (m *Geo) interpolateRainfallMoisture(interpolationSteps int) {
+	outRegs := make([]int, 0, 8)
 	for i := 0; i < interpolationSteps; i++ {
 		regMoistureInterpol := make([]float64, m.mesh.numRegions)
 		regRainfallInterpol := make([]float64, m.mesh.numRegions)
@@ -644,7 +651,7 @@ func (m *Geo) interpolateRainfallMoisture(interpolationSteps int) {
 			rMoist := m.Moisture[r]
 			rRain := m.Rainfall[r]
 			var count int
-			for _, nbReg := range m.GetRegNeighbors(r) {
+			for _, nbReg := range m.mesh.r_circulate_r(outRegs, r) {
 				// Gravity! Water moves downwards.
 				// This is not super-accurate since you'd have to take
 				// in account how steep the slope is etc.

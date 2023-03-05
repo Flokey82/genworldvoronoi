@@ -734,6 +734,64 @@ func (m *BaseObject) assignDistanceField(seedRegs []int, stopReg map[int]bool) [
 	return regDistance
 }
 
+// UpdateDistanceField updates the distance field for the given regions, given the new seed points.
+func (m *BaseObject) UpdateDistanceField(regDistance []float64, seedRegs []int, stopReg map[int]bool) []float64 {
+	// Reset the random number generator.
+	m.resetRand()
+	mesh := m.mesh
+
+	var queue []int
+
+	// TODO: Also check if a seed point has "disappeared" .If so, we
+	// might need to recompute the distance field for all regions.
+	for _, r := range seedRegs {
+		// Check if the region distance in the current field is not 0,
+		// which means that the region has not been previously used as
+		// a seed region. If the region distance is not 0, we set it
+		// to 0 and add it to the queue.
+		if regDistance[r] != 0 {
+			regDistance[r] = 0
+			queue = append(queue, r)
+		}
+	}
+
+	// Allocate a slice for the output of mesh.r_circulate_r.
+	outRegs := make([]int, 0, 6)
+
+	// Random search adapted from breadth first search.
+	// TODO: Improve the queue. Currently this is growing unchecked.
+	for queueOut := 0; queueOut < len(queue); queueOut++ {
+		pos := queueOut + m.rand.Intn(len(queue)-queueOut)
+		currentReg := queue[pos]
+		queue[pos] = queue[queueOut]
+		nextRegDistance := regDistance[currentReg] + 1
+		for _, nbReg := range mesh.r_circulate_r(outRegs, currentReg) {
+			// If the distance we expect to find for the neighbor region is
+			// is larger than the current distance, we skip the neighbor
+			// since we have already found a shorter path to a seed region.
+			if regDistance[nbReg] <= nextRegDistance || stopReg[nbReg] {
+				continue
+			}
+
+			// If the current distance value for neighbor_r is unset (-1)
+			// and if neighbor_r is not a "stop region", we set the distance
+			// value to the distance value of current_r, incremented by 1.
+			regDistance[nbReg] = nextRegDistance
+			queue = append(queue, nbReg)
+		}
+
+		// If we have consumed over 1000000 elements in the queue,
+		// we reset the queue to the remaining elements.
+		if queueOut > 10000 {
+			n := copy(queue, queue[queueOut:])
+			queue = queue[:n]
+			queueOut = 0
+		}
+	}
+
+	return regDistance
+}
+
 type interpolated struct {
 	numRegions int
 	BaseObject

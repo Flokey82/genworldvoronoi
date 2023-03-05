@@ -435,15 +435,33 @@ func (m *Civ) PlaceNCities(n int, cType TownType) {
 	// For now we just maximize the distance to cities of the same type.
 	distSeedFunc := cType.GetDistanceSeedFunc(m)
 
+	/*
+		// The old way of placing cities which re-calculates the distance field
+		// for each city (slow).
+		for i := 0; i < n; i++ {
+			c := m.PlaceCity(cType, scoreFunc, distSeedFunc)
+			log.Printf("placing %s city %d: %s", cType, i, c.String())
+		}
+	*/
+
 	// Place n cities of the given type.
+	regDistanceC := m.assignDistanceField(distSeedFunc(), make(map[int]bool))
 	for i := 0; i < n; i++ {
-		c := m.PlaceCity(cType, scoreFunc, distSeedFunc)
+		// Place a city at the region with the highest fitness score.
+		c := m.placeCityWithScore(cType, m.CalcCityScoreWithDistanceField(scoreFunc, regDistanceC))
 		log.Printf("placing %s city %d: %s", cType, i, c.String())
+
+		// Update the distance field.
+		regDistanceC = m.UpdateDistanceField(regDistanceC, distSeedFunc(), make(map[int]bool))
 	}
 }
 
 // PlaceCity places another city at the region with the highest fitness score.
 func (m *Civ) PlaceCity(cType TownType, scoreFunc func(int) float64, distSeedFunc func() []int) *City {
+	return m.placeCityWithScore(cType, m.CalcCityScore(scoreFunc, distSeedFunc))
+}
+
+func (m *Civ) placeCityWithScore(cType TownType, cityScore []float64) *City {
 	// Pick the region with the highest fitness score.
 	occupied := make(map[int]bool)
 	for _, c := range m.Cities {
@@ -453,7 +471,7 @@ func (m *Civ) PlaceCity(cType TownType, scoreFunc func(int) float64, distSeedFun
 	// Find the best location based on the fitness function.
 	var newcity int
 	lastMax := math.Inf(-1)
-	for i, val := range m.CalcCityScore(scoreFunc, distSeedFunc) {
+	for i, val := range cityScore {
 		if val > lastMax && !occupied[i] {
 			newcity = i
 			lastMax = val

@@ -114,10 +114,12 @@ func (m *Geo) getFitnessClimate() func(int) float64 {
 // - 'distSeedFunc' returns a number of regions from which we maximize the distance when
 // calculating the fitness score.
 func (m *Geo) CalcFitnessScore(sf func(int) float64, distSeedFunc func() []int) []float64 {
-	score := make([]float64, m.mesh.numRegions)
-
 	// Get distance to other seed regions returned by the distSeedFunc.
-	regDistanceC := m.assignDistanceField(distSeedFunc(), make(map[int]bool))
+	return m.CalcFitnessScoreWithDistanceField(sf, m.assignDistanceField(distSeedFunc(), make(map[int]bool)))
+}
+
+func (m *Geo) CalcFitnessScoreWithDistanceField(sf func(int) float64, regDistanceC []float64) []float64 {
+	score := make([]float64, m.mesh.numRegions)
 
 	// Get the max distance for normalizing the distance.
 	_, maxDistC := minMax(regDistanceC)
