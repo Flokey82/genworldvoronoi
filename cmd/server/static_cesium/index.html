@@ -53,42 +53,42 @@
         requestMetadata: false,
         tilingScheme: new Cesium.WebMercatorTilingScheme(),
       }),;*/
-     terrainProvider: new Cesium.CustomHeightmapTerrainProvider({
-       width: 256,
-       height: 256,
-       tilingScheme: new Cesium.WebMercatorTilingScheme(),
-       callback: function (x, y, level) {
-         // Return a promise that resolves to the heightmap data
-         const lev = level;
-         const reverseY = (1 << level) - y - 1;
-         const xx = x;
+      terrainProvider: new Cesium.CustomHeightmapTerrainProvider({
+        width: 256,
+        height: 256,
+        tilingScheme: new Cesium.WebMercatorTilingScheme(),
+        callback: function (x, y, level) {
+          // Return a promise that resolves to the heightmap data
+          const lev = level;
+          const reverseY = (1 << level) - y - 1;
+          const xx = x;
 
-         return new Promise(function (resolve, reject) {
-           // load heightmap data from a server
-           // Invert the y coordinate
-           var url = 'http://localhost:3333/terrain/' + lev + '/' + xx + '/' + reverseY;
-           var xhr = new XMLHttpRequest();
-           xhr.open('GET', url, true);
-           xhr.responseType = 'arraybuffer';
-           xhr.onload = function () {
-             if (xhr.status === 200) {
-               // Decode the uint16 array from the server
-               const data = xhr.response;
-               const buffer = new Uint16Array(data);
-               // Convert to float32 array
-               var floatBuffer = new Float32Array(buffer.length);
-               for (var i = 0; i < buffer.length; i++) {
-                 floatBuffer[i] = buffer[i]*5;
-               }
-               resolve(floatBuffer);
-             } else {
-               reject('Error loading heightmap data');
-             }
-           };
-           xhr.send(null);
-         });
-       },
-     }),
+          return new Promise(function (resolve, reject) {
+            // load heightmap data from a server
+            // Invert the y coordinate
+            var url = 'http://localhost:3333/terrain/' + lev + '/' + xx + '/' + reverseY;
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', url, true);
+            xhr.responseType = 'arraybuffer';
+            xhr.onload = function () {
+              if (xhr.status === 200) {
+                // Decode the uint16 array from the server
+                const data = xhr.response;
+                const buffer = new Uint16Array(data);
+                // Convert to float32 array
+                var floatBuffer = new Float32Array(buffer.length);
+                for (var i = 0; i < buffer.length; i++) {
+                  floatBuffer[i] = buffer[i] * 5;
+                }
+                resolve(floatBuffer);
+              } else {
+                reject('Error loading heightmap data');
+              }
+            };
+            xhr.send(null);
+          });
+        },
+      }),
       timeline: false,
     })
     var geoSource = new Cesium.GeoJsonDataSource("cities");
@@ -96,12 +96,16 @@
       stroke: Cesium.Color.HOTPINK,
       fill: Cesium.Color.PINK,
       strokeWidth: 3,
-      markerSymbol: '?'
+      markerSymbol: '!',
+      clampToGround: true
     });
     viewer.dataSources.add(geoSource);
     viewer.camera.moveStart.addEventListener(function () {
       // the camera started to move
     });
+
+    // remember the last zoom level, so we don't reload the same data
+    var prevZoomURL = '';
 
     // Scractch memory allocation, happens only once.
     var scratchRectangle = new Cesium.Rectangle();
@@ -113,14 +117,29 @@
       var north = Cesium.Math.toDegrees(rect.north).toFixed(4);
       var zoom = 0;
       var params = zoom + '/' + north + '/' + west + '/' + south + '/' + east;
+
+      // only reload if the zoom level or the view rectangle changed
+      if (prevZoomURL == params) {
+        return;
+      }
+      prevZoomURL = params;
+
       // the camera stopped moving
       geoSource.load('http://localhost:3333/geojson_cities/' + params, {
         stroke: Cesium.Color.HOTPINK,
         fill: Cesium.Color.PINK,
         strokeWidth: 3,
-        markerSymbol: '?'
+        markerSymbol: '!',
+        clampToGround: true
       });
     });
+
+    // viewer.scene.globe.enableLighting = true;
+    viewer.scene.globe.depthTestAgainstTerrain = true;
+    viewer.camera.inertiaRotate = 0;
+    viewer.camera.inertiaZoom = 0;
+    viewer.camera.inertiaTranslate = 0;
+    viewer.camera.inertiaSpin = 0;
     function stringToArrayBuffer(str) {
       var buf = new ArrayBuffer(str.length);
       var bufView = new Uint8Array(buf);
