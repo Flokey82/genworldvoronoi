@@ -9,59 +9,6 @@ import (
 	"github.com/Flokey82/go_gens/geoquad"
 )
 
-func (m *Map) GetHeight(lat, lon float64) float64 {
-	// Find the closest triangle center.
-	var minDist float64
-	var minDistIndex int
-	for tri := 0; tri < m.mesh.numTriangles; tri++ {
-		triLat := m.triLatLon[tri][0]
-		// If the diff is too big, we can skip this triangle.
-		if lat < triLat-0.1 || lat > triLat+0.1 {
-			continue
-		}
-		triLon := m.triLatLon[tri][1]
-		// If the diff is too big, we can skip this triangle.
-		if lon < triLon-0.1 || lon > triLon+0.1 {
-			continue
-		}
-		// for speed, we just use the euclidean distance here.
-		dist := (lat-triLat)*(lat-triLat) + (lon-triLon)*(lon-triLon)
-		if tri == 0 || dist < minDist {
-			minDist = dist
-			minDistIndex = tri
-		}
-	}
-
-	// Calculate the height of our point in the triangle.
-	// We have the heights of the three corners of the triangle.
-	regs := m.mesh.t_circulate_r(nil, minDistIndex)
-	// Get the three corners.
-	x := lon
-	y := lat
-	x1 := m.LatLon[regs[0]][1]
-	y1 := m.LatLon[regs[0]][0]
-	z1 := m.Elevation[regs[0]]
-	x2 := m.LatLon[regs[1]][1]
-	y2 := m.LatLon[regs[1]][0]
-	z2 := m.Elevation[regs[1]]
-	x3 := m.LatLon[regs[2]][1]
-	y3 := m.LatLon[regs[2]][0]
-	z3 := m.Elevation[regs[2]]
-	z := (z3*(x-x1)*(y-y2) + z1*(x-x2)*(y-y3) + z2*(x-x3)*(y-y1) - z2*(x-x1)*(y-y3) - z3*(x-x2)*(y-y1) - z1*(x-x3)*(y-y2)) / ((x-x1)*(y-y2) + (x-x2)*(y-y3) + (x-x3)*(y-y1) - (x-x1)*(y-y3) - (x-x2)*(y-y1) - (x-x3)*(y-y2))
-	return z
-}
-
-func calcHeight(p1, p2, p3, p [2]float64, z1, z2, z3 float64) float64 {
-	// Calculate the barycentric coordinates of the point (xp, yp) with respect to the triangle
-	denom := (p2[1]-p3[1])*(p1[0]-p3[0]) + (p3[0]-p2[0])*(p1[1]-p3[1])
-	s := ((p2[1]-p3[1])*(p[0]-p3[0]) + (p3[0]-p2[0])*(p[1]-p3[1])) / denom
-	t := ((p3[1]-p1[1])*(p[0]-p3[0]) + (p1[0]-p3[0])*(p[1]-p3[1])) / denom
-	u := 1 - s - t
-	// Calculate the height of our point in the triangle.
-	z := z1*s + z2*t + z3*u
-	return z
-}
-
 func (m *Map) GetHeightMapTile(x, y, zoom int) []byte {
 	// The tiles are 65x65 vertices and overlap their neighbors at their edges.
 	// In other words, at the root, the eastern-most column of heights in the western
@@ -98,20 +45,7 @@ func (m *Map) GetHeightMapTile(x, y, zoom int) []byte {
 		p3x, p3y := latLonToPixels(p3[0], p3[1], zoom)
 		px, py := latLonToPixels(p[0], p[1], zoom)
 
-		return calcHeight([2]float64{p1x, p1y}, [2]float64{p2x, p2y}, [2]float64{p3x, p3y}, [2]float64{px, py}, z1, z2, z3)
-	}
-
-	// inTriangle returns true if the point (xp, yp) is inside the triangle or
-	// on the edge of the triangle.
-	inTriangle := func(p1, p2, p3, p [2]float64) bool {
-		// Calculate the barycentric coordinates of the point (xp, yp) with respect to the triangle
-		denom := (p2[1]-p3[1])*(p1[0]-p3[0]) + (p3[0]-p2[0])*(p1[1]-p3[1])
-		s := ((p2[1]-p3[1])*(p[0]-p3[0]) + (p3[0]-p2[0])*(p[1]-p3[1])) / denom
-		t := ((p3[1]-p1[1])*(p[0]-p3[0]) + (p1[0]-p3[0])*(p[1]-p3[1])) / denom
-		u := 1 - s - t
-
-		// Check if the point is inside the triangle
-		return s >= 0 && t >= 0 && u >= 0
+		return calcHeightInTriangle([2]float64{p1x, p1y}, [2]float64{p2x, p2y}, [2]float64{p3x, p3y}, [2]float64{px, py}, z1, z2, z3)
 	}
 
 	// inTriangleMercator uses the mercator projection to determine if a point is in a triangle.
@@ -123,7 +57,7 @@ func (m *Map) GetHeightMapTile(x, y, zoom int) []byte {
 		px, py := latLonToPixels(p[0], p[1], zoom)
 
 		// Now we can use the regular inTriangle function.
-		return inTriangle([2]float64{p1x, p1y}, [2]float64{p2x, p2y}, [2]float64{p3x, p3y}, [2]float64{px, py})
+		return isPointInTriangle([2]float64{p1x, p1y}, [2]float64{p2x, p2y}, [2]float64{p3x, p3y}, [2]float64{px, py})
 	}
 
 	outTri := make([]int, 0, 7)

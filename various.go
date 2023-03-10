@@ -233,6 +233,31 @@ func crossArc(lat1, lon1, lat2, lon2, lat3, lon3 float64) float64 {
 	return math.Abs(dxt)
 }
 
+// calcHeightInTriangle calculates the height of a point in a triangle.
+func calcHeightInTriangle(p1, p2, p3, p [2]float64, z1, z2, z3 float64) float64 {
+	// Calculate the barycentric coordinates of the point (xp, yp) with respect to the triangle
+	denom := (p2[1]-p3[1])*(p1[0]-p3[0]) + (p3[0]-p2[0])*(p1[1]-p3[1])
+	s := ((p2[1]-p3[1])*(p[0]-p3[0]) + (p3[0]-p2[0])*(p[1]-p3[1])) / denom
+	t := ((p3[1]-p1[1])*(p[0]-p3[0]) + (p1[0]-p3[0])*(p[1]-p3[1])) / denom
+	u := 1 - s - t
+	// Calculate the height of our point in the triangle.
+	z := z1*s + z2*t + z3*u
+	return z
+}
+
+// isPointInTriangle returns true if the point (xp, yp) is inside the triangle or
+// on the edge of the triangle.
+func isPointInTriangle(p1, p2, p3, p [2]float64) bool {
+	// Calculate the barycentric coordinates of the point (xp, yp) with respect to the triangle
+	denom := (p2[1]-p3[1])*(p1[0]-p3[0]) + (p3[0]-p2[0])*(p1[1]-p3[1])
+	s := ((p2[1]-p3[1])*(p[0]-p3[0]) + (p3[0]-p2[0])*(p[1]-p3[1])) / denom
+	t := ((p3[1]-p1[1])*(p[0]-p3[0]) + (p1[0]-p3[0])*(p[1]-p3[1])) / denom
+	u := 1 - s - t
+
+	// Check if the point is inside the triangle
+	return s >= 0 && t >= 0 && u >= 0
+}
+
 // heronsTriArea returns the area of a triangle given the three sides.
 // See: https://www.mathopenref.com/heronsformula.html
 func heronsTriArea(a, b, c float64) float64 {
