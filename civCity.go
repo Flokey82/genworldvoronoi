@@ -41,10 +41,9 @@ func (m *Civ) tickCityDays(c *City, gDisFunc func(int) GeoDisasterChance, cf fun
 	//
 	// TODO: Compare the actual population with the population we calculate
 	// here and kill off people if the actual population is larger.
-	if factor := float64(c.Population) * math.Pow(math.E, c.PopulationGrowthRate()*float64(days)/365); factor >= 1 {
-		newArrivals := int(math.Ceil(factor))
-		c.Population += newArrivals
-	} else if m.rand.Float64() < factor {
+	if newPop := float64(c.Population) * math.Pow(math.E, c.PopulationGrowthRate()*float64(days)/365); newPop >= 1 {
+		c.Population = int(math.Ceil(newPop))
+	} else if m.rand.Float64() < newPop {
 		c.Population++
 	}
 
@@ -416,12 +415,12 @@ func (c *City) String() string {
 
 // MaxPopulationLimit returns the maximum population sustainable by the city.
 func (c *City) MaxPopulationLimit() int {
-	return 200 + int(200000*math.Pow((c.EconomicPotential+c.Attractiveness), 2))
+	return 200 + int(20000*math.Pow((c.EconomicPotential+c.Attractiveness), 2))
 }
 
 // PopulationGrowthRate returns the population growth rate per year.
 func (c *City) PopulationGrowthRate() float64 {
-	return 0.3 * (c.EconomicPotential + c.Attractiveness) / (2 * 100)
+	return 0.0005 + 0.0025*(c.EconomicPotential+c.Attractiveness)/2
 }
 
 // PlaceNCities places n cities with the highest fitness scores.
@@ -434,15 +433,6 @@ func (m *Civ) PlaceNCities(n int, cType TownType) {
 	// want to be far away from.
 	// For now we just maximize the distance to cities of the same type.
 	distSeedFunc := cType.GetDistanceSeedFunc(m)
-
-	/*
-		// The old way of placing cities which re-calculates the distance field
-		// for each city (slow).
-		for i := 0; i < n; i++ {
-			c := m.PlaceCity(cType, scoreFunc, distSeedFunc)
-			log.Printf("placing %s city %d: %s", cType, i, c.String())
-		}
-	*/
 
 	// Place n cities of the given type.
 	regDistanceC := m.assignDistanceField(distSeedFunc(), make(map[int]bool))

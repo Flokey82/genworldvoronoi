@@ -61,8 +61,8 @@ func NewCiv(geo *Geo) *Civ {
 }
 
 func (m *Civ) generateCivilization() {
-	enableCityAging := false
-	enableOrganizedReligions := false
+	enableCityAging := true
+	enableOrganizedReligions := true
 
 	// TODO: The generation should happen somewhat like this...
 	// 0. Calculate time of settlement per region through flood fill.
