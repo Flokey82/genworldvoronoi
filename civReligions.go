@@ -2,6 +2,7 @@ package genworldvoronoi
 
 import (
 	"fmt"
+	"log"
 	"math/rand"
 	"sort"
 
@@ -125,23 +126,29 @@ func (m *Civ) placeReligionAt(r int, founded int64, group string, culture *Cultu
 		Parent:  parent,
 	}
 
-	rlgGen := genreligion.NewGenerator(int64(r))
+	rlgGen := genreligion.NewGenerator(int64(r), lang)
 	if parent != nil {
 		// Inherit some characteristics from parent.
 		// TODO: If parent is not nil, maybe swich form to cult or heresy?
-		relg.Classification = rlgGen.NewClassification(group, parent.Form, "")
+		relg.Classification = rlgGen.NewClassificationWithForm(group, parent.Form)
 	} else {
-		relg.Classification = rlgGen.NewClassification(group, "", "")
+		relg.Classification = rlgGen.NewClassification(group)
 	}
 
 	// If appropriate, add a deity to the religion.
 	if relg.HasDeity() {
+		var err error
 		if parent != nil && parent.HasDeity() {
 			// If we have a parent religion with a deity, we use the same approach
 			// to generate the deity, otherwise the generator will pick a random approach.
-			relg.Deity = rlgGen.GetDeity(lang, parent.Deity.Approach)
+			relg.Deity, err = rlgGen.GetDeityWithApproach(parent.Deity.Approach)
 		} else {
-			relg.Deity = rlgGen.GetDeity(lang, "")
+			relg.Deity, err = rlgGen.GetDeity()
+		}
+
+		// TODO: Error handling.
+		if err != nil {
+			log.Printf("error generating deity: %v", err)
 		}
 	}
 

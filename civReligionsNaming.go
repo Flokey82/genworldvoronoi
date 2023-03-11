@@ -5,81 +5,94 @@ import (
 
 	"github.com/Flokey82/go_gens/genlanguage"
 	"github.com/Flokey82/go_gens/genreligion"
+	"github.com/Flokey82/go_gens/genstory"
 )
 
 // getOrganizedReligionName generates a name for the given form and deity at the given center.
 // This code is based on:
 // https://github.com/Azgaar/Fantasy-Map-Generator/blob/master/modules/religions-generator.js
 func (m *Civ) getOrganizedReligionName(rlgGen *genreligion.Generator, c *Culture, lang *genlanguage.Language, deity *genreligion.Deity, rel *genreligion.Classification, r int) (string, string) {
-	if c == nil {
-		return "MISSING_CULTURE", "MISSING_CULTURE"
-	}
-
 	// Returns the name of the city, -state, or culture at the given region.
 	place := func() string {
 		// Get the name of the city at the region.
 		for _, city := range m.Cities {
 			if city.ID == r {
-				// Trim the vowels from the name and return it.
-				return TrimVowels(strings.Split(city.Name, " ")[0], 3)
+				return city.Name
 			}
 		}
 
-		// If unsuccessful, Check if we have a state at the region.
+		// If unsuccessful, Check if we have a state at the region
+		// and use the capital name.
 		if stateId := m.RegionToCityState[r]; stateId >= 0 {
 			for _, city := range m.Cities {
 				if city.ID == stateId {
-					// Trim the vowels from the name and return it.
-					return TrimVowels(strings.Split(city.Name, " ")[0], 3)
+					return city.Name
 				}
 			}
 		}
 
-		// If unsuccessful, use the culture name.
-		// Trim the vowels from the name and return it.
-		return TrimVowels(strings.Split(c.Name, " ")[0], 3)
+		// TODO: Try the empire name.
+		return "" // If unsuccessful, return an empty string.
 	}
 
-	// Attempt to generate a name for the religion.
-	switch rlgGen.RandGenMethod() {
-	case genreligion.MethodFaithOfSupreme:
-		if deity != nil {
-			// Example: "Grognark, The Supreme Being" -> "Faith of Grognark, The Supreme Being"
-			return rlgGen.GenNameFaitOfSupreme(deity.FullName()), ReligionExpGlobal
-		}
-	case genreligion.MethodRandomType:
-		// GenNamedTypeOfForm generates a name for a named religion type based on a given
-		// religion form ("Polytheism", "Dualism", etc).
-		// E.g. "Pradanium deities".
-		return lang.MakeName() + " " + rel.Type, ReligionExpGlobal
-	case genreligion.MethodPlaceIanType:
-		// GenNamedTypeOfForm generates a name for a named religion type based on a given
-		// religion form ("Polytheism", "Dualism", etc).
-		// E.g. "Pradanium deities".
-		return genlanguage.GetAdjective(place()) + "ian " + rel.Type, ReligionExpState
-	case genreligion.MethodCultureType:
-		// GenNamedTypeOfForm generates a name for a named religion type based on a given
-		// religion form ("Polytheism", "Dualism", etc).
-		// E.g. "Pradanium deities".
-		return c.Name + " " + rel.Type, ReligionExpCulture
-	case genreligion.MethodSurpremeIsm:
-		if deity != nil {
-			// Example: "Grognark, The Supreme Being" -> "Grognarkism"
-			return rlgGen.GenNamedIsm(deity.Name), ReligionExpGlobal
-		}
-	case genreligion.MethodRandomIsm:
-		return rlgGen.GenNamedIsm(lang.MakeName()), ReligionExpGlobal
-	case genreligion.MethodCultureIsm:
-		return rlgGen.GenNamedIsm(c.Name), ReligionExpCulture
-	case genreligion.MethodPlaceIsm:
-		return place() + "ism", ReligionExpState
+	// Calculate all available tokens.
+	//
+	// TODO: Find a way to only generate the tokens when needed.
+	// This might work by using the modifier functions of the generator,
+	// which are only called when a token is used.
+	var tokens []genstory.TokenReplacement
+	tokens = append(tokens, genstory.TokenReplacement{
+		Token:       genreligion.TokenCulture,
+		Replacement: c.Name,
+	}, genstory.TokenReplacement{
+		Token:       genreligion.TokenType,
+		Replacement: rel.Type,
+	}, genstory.TokenReplacement{
+		Token:       genreligion.TokenRandom,
+		Replacement: lang.MakeName(), // TODO: Use the religion generator to generat religous terms.
+	})
+
+	// Try to find a location token.
+	if place := place(); place != "" {
+		tokens = append(tokens, genstory.TokenReplacement{
+			Token:       genreligion.TokenPlace,
+			Replacement: strings.Split(place, " ")[0],
+		})
 	}
-	return rlgGen.GenNamedIsm(lang.MakeName()), ReligionExpGlobal
+
+	// If we have a deity, add it to the tokens.
+	if deity != nil {
+		tokens = append(tokens, genstory.TokenReplacement{
+			Token:       genreligion.TokenSurpreme,
+			Replacement: deity.Name,
+		})
+	}
+
+	// Generate the name and method.
+	str, method, err := rlgGen.GenFaithName(tokens)
+	if err != nil {
+		return err.Error(), "ERROR"
+	}
+
+	// Select expansion based on the method which indicates the
+	// focus of the faith (culture, location, or... global).
+	var expansion string
+	switch method {
+	case genreligion.MethodCultureIsm,
+		genreligion.MethodCultureType:
+		expansion = ReligionExpCulture
+	case genreligion.MethodPlaceIanType,
+		genreligion.MethodPlaceIsm:
+		expansion = ReligionExpState
+	default:
+		expansion = ReligionExpGlobal
+	}
+	return str, expansion
 }
 
 const (
 	// Expansion modes.
-	ReligionExpGlobal  = "global"
-	ReligionExpState   = "state"
-	ReligionExpCulture = "culture"
+	ReligionExpGlobal  = genreligion.ReligionExpGlobal
+	ReligionExpState   = genreligion.ReligionExpState
+	ReligionExpCulture = genreligion.ReligionExpCulture
 )
