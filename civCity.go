@@ -41,7 +41,7 @@ func (m *Civ) tickCityDays(c *City, gDisFunc func(int) GeoDisasterChance, cf fun
 	//
 	// TODO: Compare the actual population with the population we calculate
 	// here and kill off people if the actual population is larger.
-	if factor := float64(c.Population) * c.PopulationGrowthRate() * float64(days) / 365; factor >= 1 {
+	if factor := float64(c.Population) * math.Pow(math.E, c.PopulationGrowthRate()*float64(days)/365); factor >= 1 {
 		newArrivals := int(math.Ceil(factor))
 		c.Population += newArrivals
 	} else if m.rand.Float64() < factor {
