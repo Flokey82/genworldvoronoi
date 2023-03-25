@@ -53,24 +53,27 @@ func (b *Bio) getTolerancesForRegionFunc() func(int) SpeciesTolerances {
 			return [2]float64{newMin, newMax}
 		}
 
+		// The possible variation of the ranges.
+		variation := 0.2
+
 		// Prefered elevation range.
 		if s.Ecosphere == EcosphereTypeOcean {
-			s.ElevRange = minMaxRange(b.Elevation[r], minElev, 0, 0.2)
+			s.ElevRange = minMaxRange(b.Elevation[r], minElev, 0, variation)
 		} else {
-			s.ElevRange = minMaxRange(b.Elevation[r], 0, maxElev, 0.2)
+			s.ElevRange = minMaxRange(b.Elevation[r], 0, maxElev, variation)
 		}
 
 		// Preferred temperature range.
-		s.TempRange = minMaxRange(b.getRegTemperature(r, maxElev), float64(minTemp), float64(maxTemp), 0.2)
+		s.TempRange = minMaxRange(b.getRegTemperature(r, maxElev), float64(minTemp), float64(maxTemp), variation)
 
 		// Preferred humidity range.
-		s.HumRange = minMaxRange(b.Moisture[r]/maxHum, 0, 1, 0.2)
+		s.HumRange = minMaxRange(b.Moisture[r]/maxHum, 0, 1, variation)
 
 		// Preferred rain range.
-		s.RainRange = minMaxRange(maxPrecipitation*b.Rainfall[r]/maxRain, 0, maxPrecipitation, 0.2)
+		s.RainRange = minMaxRange(maxPrecipitation*b.Rainfall[r]/maxRain, 0, maxPrecipitation, variation)
 
 		// Preferred steepness range.
-		s.SteepRange = minMaxRange(steep[r], 0, 1, 0.2)
+		s.SteepRange = minMaxRange(steep[r], 0, 1, variation)
 
 		// If we are not in the ocean, we probably have a preferred biome.
 		if s.Ecosphere != EcosphereTypeOcean && b.rand.Float64() < 0.7 {

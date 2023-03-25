@@ -1,12 +1,127 @@
 package genworldvoronoi
 
 import (
+	"container/heap"
 	"log"
 	"math"
 	"math/rand"
 
 	"github.com/Flokey82/genbiome"
 )
+
+func (b *Bio) expandSpecies2() map[SpeciesFamily][]int {
+	// For now, let's just do this the dumb way.
+	// TODO: Species with different competition hashes should be able to coexist in
+	// the same region?
+	// We might need to create a full index of all regions for each unique
+	// competition hash.... or, which is more wasteful, per species.
+	var seedPoints []int
+	originToSpecFit := make(map[int]func(int) float64)
+	originToSecies := make(map[int]*Species)
+	for _, s := range b.Species {
+		seedPoints = append(seedPoints, s.Origin)
+		originToSpecFit[s.Origin] = b.getToleranceScoreFunc(s.SpeciesTolerances)
+		originToSecies[s.Origin] = s
+	}
+	var queue ascPriorityQueue
+	heap.Init(&queue)
+	outReg := make([]int, 0, 8)
+
+	// Get maxFlux and maxElev for normalizing.
+	_, maxFlux := minMax(b.Flux)
+	_, maxElev := minMax(b.Elevation)
+
+	// TODO: Move this to a generic function.
+	terrainWeight := func(o, u, v int) float64 {
+		// Don't cross from water to land and vice versa.
+		if (b.Elevation[u] > 0) != (b.Elevation[v] > 0) {
+			return -1
+		}
+
+		// Calculate horizontal distance.
+		ulat := b.LatLon[u][0]
+		ulon := b.LatLon[u][1]
+		vlat := b.LatLon[v][0]
+		vlon := b.LatLon[v][1]
+		horiz := haversine(ulat, ulon, vlat, vlon) / (2 * math.Pi)
+
+		// Calculate vertical distance.
+		vert := (b.Elevation[v] - b.Elevation[u]) / maxElev
+		if vert > 0 {
+			vert /= 10
+		}
+		diff := 1 + 0.25*math.Pow(vert/horiz, 2)
+
+		// NOTE: Flux should only apply to animals since plants and fungi
+		// don't need to worry about drowning.
+		diff += 100 * math.Sqrt(b.Flux[u]/maxFlux)
+		if b.Elevation[u] <= 0 {
+			diff = 100
+		}
+		return horiz * diff
+	}
+
+	weight := func(o, u, v int) float64 {
+		// Call species specific fitness function.
+		sFit := originToSpecFit[o](v)
+		if sFit < 0 {
+			return -1
+		}
+		// Call terrain specific fitness function.
+		tFit := terrainWeight(o, u, v)
+		if tFit < 0 {
+			return -1
+		}
+		return tFit * sFit
+	}
+
+	// 'terr' will hold a mapping of region to species.
+	// The territory ID is the region number of the species origin.
+	terr := make(map[SpeciesFamily][]int)
+	for i := 0; i < len(seedPoints); i++ {
+		s := originToSecies[seedPoints[i]]
+		if _, ok := terr[s.Family]; !ok {
+			terr[s.Family] = initRegionSlice(b.mesh.numRegions)
+		}
+		terr[s.Family][seedPoints[i]] = seedPoints[i]
+		for _, v := range b.mesh.r_circulate_r(outReg, seedPoints[i]) {
+			newdist := weight(seedPoints[i], seedPoints[i], v)
+			if newdist < 0 {
+				continue
+			}
+			heap.Push(&queue, &queueEntry{
+				score:       newdist,
+				origin:      seedPoints[i],
+				destination: v,
+			})
+		}
+	}
+
+	// Extend territories until the queue is empty.
+	for queue.Len() > 0 {
+		u := heap.Pop(&queue).(*queueEntry)
+		s := originToSecies[u.origin]
+		if terr[s.Family][u.destination] >= 0 {
+			continue
+		}
+		terr[s.Family][u.destination] = u.origin
+		for _, v := range b.mesh.r_circulate_r(outReg, u.destination) {
+			if terr[s.Family][v] >= 0 {
+				continue
+			}
+			newdist := weight(u.origin, u.destination, v)
+			if newdist < 0 {
+				continue
+			}
+			heap.Push(&queue, &queueEntry{
+				score:       u.score + newdist,
+				origin:      u.origin,
+				destination: v,
+			})
+		}
+	}
+	return terr
+}
 
 func (b *Bio) placeAllSpecies(kingdom *BioLevel) {
 	// Place all species.
@@ -166,11 +281,13 @@ func (b *BioLevel) getAllByLevel(level int) []*BioLevel {
 }
 
 func (b *BioLevel) ToSpecies() *Species {
-	return &Species{
+	sp := &Species{
 		Name:              b.Name,
 		SpeciesProperties: b.SpeciesProperties,
 		SpeciesTolerances: b.SpeciesTolerances,
 	}
+	sp.SpeciesProperties.Family = SpeciesFamily(b.Parent.Name)
+	return sp
 }
 
 var (

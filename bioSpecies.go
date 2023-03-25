@@ -209,6 +209,9 @@ func (b *Bio) newSpecies(r int, t SpeciesKingdom, tf func(int) SpeciesTolerances
 		}
 	}
 
+	// Pick a name.
+	s.Name = b.genSpeciesNameByFamily(s.Family)
+
 	// Pick a random type of prey.
 	digestiveSystems := s.Kingdom.DigestiveSystems()
 	s.Digestion = digestiveSystems[b.rand.Intn(len(digestiveSystems))]

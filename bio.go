@@ -5,22 +5,24 @@ import "math/rand"
 // Bio handles the generation of life on the map (plants, animals, etc.).
 type Bio struct {
 	*Geo
-	Species          []*Species // All species on the map.
-	SpeciesRegions   []int      // Regions where each species is found.
-	GrowthDays       []int      // Number of days within the growth period for each region.
-	GrowthInsolation []float64  // Average insolation for each region during the growth period.
-	NumSpecies       int        // Number of species to generate.
-	rand             *rand.Rand // Random number generator.
+	Species                []*Species              // All species on the map.
+	SpeciesFamilyToRegions map[SpeciesFamily][]int // Regions where each species is found.
+	SpeciesRegions         []int                   // Regions where each species is found.
+	GrowthDays             []int                   // Number of days within the growth period for each region.
+	GrowthInsolation       []float64               // Average insolation for each region during the growth period.
+	NumSpecies             int                     // Number of species to generate.
+	rand                   *rand.Rand              // Random number generator.
 }
 
 func newBio(geo *Geo) *Bio {
 	return &Bio{
-		Geo:              geo,
-		GrowthDays:       make([]int, geo.mesh.numRegions),
-		GrowthInsolation: make([]float64, geo.mesh.numRegions),
-		SpeciesRegions:   make([]int, geo.mesh.numRegions),
-		NumSpecies:       100,
-		rand:             rand.New(rand.NewSource(geo.Seed)),
+		Geo:                    geo,
+		GrowthDays:             make([]int, geo.mesh.numRegions),
+		GrowthInsolation:       make([]float64, geo.mesh.numRegions),
+		SpeciesRegions:         make([]int, geo.mesh.numRegions),
+		SpeciesFamilyToRegions: make(map[SpeciesFamily][]int),
+		NumSpecies:             100,
+		rand:                   rand.New(rand.NewSource(geo.Seed)),
 	}
 }
 
@@ -43,14 +45,17 @@ func (b *Bio) generateBiology() {
 	// total survivability).
 
 	// Generate the pre-defined species.
-	// b.placeAllSpecies(KingdomFauna)
-	// b.placeAllSpecies(KingdomFlora)
-	// b.placeAllSpecies(KingdomFungi)
+	/*
+		b.placeAllSpecies(KingdomFauna)
+		b.placeAllSpecies(KingdomFlora)
+		b.placeAllSpecies(KingdomFungi)
+	*/
 	b.placeAllSpecies(GenusCereal)
 
 	// Generate the species.
 	// b.genNRandomSpecies(b.NumSpecies)
 	b.SpeciesRegions = b.expandSpecies()
+	b.SpeciesFamilyToRegions = b.expandSpecies2()
 }
 
 // calcGrowthPeriod calculates the duration of the potential growth

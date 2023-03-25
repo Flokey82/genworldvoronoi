@@ -25,24 +25,16 @@ func (s *SpeciesProperties) String() string {
 	return fmt.Sprintf("%s %s %s %s %s", s.Kingdom, s.Family, s.Digestion, s.Size, s.Locomotion)
 }
 
-type SpeciesKingdom int
+type SpeciesKingdom string
 
 const (
-	SpeciesKingdomFlora SpeciesKingdom = iota
-	SpeciesKingdomFauna                // Maybe split this up into different types of fauna?
-	SpeciesKingdomFunga
+	SpeciesKingdomFlora SpeciesKingdom = "flora"
+	SpeciesKingdomFauna SpeciesKingdom = "fauna" // Maybe split this up into different types of fauna?
+	SpeciesKingdomFunga SpeciesKingdom = "funga"
 )
 
 func (s SpeciesKingdom) String() string {
-	switch s {
-	case SpeciesKingdomFlora:
-		return "flora"
-	case SpeciesKingdomFauna:
-		return "fauna"
-	case SpeciesKingdomFunga:
-		return "funga"
-	}
-	return "unknown"
+	return string(s)
 }
 
 func (s SpeciesKingdom) DigestiveSystems() []DigestiveSystem {
@@ -74,99 +66,41 @@ var SpeciesKingdoms = []SpeciesKingdom{
 	SpeciesKingdomFunga,
 }
 
-type SpeciesFamily int
+type SpeciesFamily string
 
 const (
-	SpeciesFamilyNone SpeciesFamily = iota
-	SpeciesFamilyTree
-	SpeciesFamilyShrub
-	SpeciesFamilyGrass
-	SpeciesFamilyReed
-	SpeciesFamilyHerb
-	SpeciesFamilyFlower
-	SpeciesFamilyFern
-	SpeciesFamilyMoss
-	SpeciesFamilyVine
-	SpeciesFamilyCactus
-	SpeciesFamilySucculent
-	SpeciesFamilyInsect
-	SpeciesFamilyArachnid
-	SpeciesFamilyMammal
-	SpeciesFamilyBird
-	SpeciesFamilyFish
-	SpeciesFamilyCrustacean
-	SpeciesFamilyMollusk
-	SpeciesFamilyMolluskClam
-	SpeciesFamilyMolluskSnail
-	SpeciesFamilyAmphibian
-	SpeciesFamilyReptileSerpent
-	SpeciesFamilyReptileLizard
-	SpeciesFamilyRodent
-	SpeciesFamilyWorm
-	SpeciesFamilyMushroom
-	SpeciesFamilyMold
+	SpeciesFamilyNone           SpeciesFamily = "None"
+	SpeciesFamilyTree           SpeciesFamily = "Tree"
+	SpeciesFamilyShrub          SpeciesFamily = "Shrub"
+	SpeciesFamilyGrass          SpeciesFamily = "Grass"
+	SpeciesFamilyReed           SpeciesFamily = "Reed"
+	SpeciesFamilyHerb           SpeciesFamily = "Herb"
+	SpeciesFamilyFlower         SpeciesFamily = "Flower"
+	SpeciesFamilyFern           SpeciesFamily = "Fern"
+	SpeciesFamilyMoss           SpeciesFamily = "Moss"
+	SpeciesFamilyVine           SpeciesFamily = "Vine"
+	SpeciesFamilyCactus         SpeciesFamily = "Cactus"
+	SpeciesFamilySucculent      SpeciesFamily = "Succulent"
+	SpeciesFamilyInsect         SpeciesFamily = "Insect"
+	SpeciesFamilyArachnid       SpeciesFamily = "Arachnid"
+	SpeciesFamilyMammal         SpeciesFamily = "Mammal"
+	SpeciesFamilyBird           SpeciesFamily = "Bird"
+	SpeciesFamilyFish           SpeciesFamily = "Fish"
+	SpeciesFamilyCrustacean     SpeciesFamily = "Crustacean"
+	SpeciesFamilyMollusk        SpeciesFamily = "Mollusk"
+	SpeciesFamilyMolluskClam    SpeciesFamily = "Clam"
+	SpeciesFamilyMolluskSnail   SpeciesFamily = "Snail"
+	SpeciesFamilyAmphibian      SpeciesFamily = "Amphibian"
+	SpeciesFamilyReptileSerpent SpeciesFamily = "Serpent"
+	SpeciesFamilyReptileLizard  SpeciesFamily = "Lizard"
+	SpeciesFamilyRodent         SpeciesFamily = "Rodent"
+	SpeciesFamilyWorm           SpeciesFamily = "Worm"
+	SpeciesFamilyMushroom       SpeciesFamily = "Mushroom"
+	SpeciesFamilyMold           SpeciesFamily = "Mold"
 )
 
 func (s SpeciesFamily) String() string {
-	switch s {
-	case SpeciesFamilyNone:
-		return "none"
-	case SpeciesFamilyTree:
-		return "tree"
-	case SpeciesFamilyShrub:
-		return "shrub"
-	case SpeciesFamilyGrass:
-		return "grass"
-	case SpeciesFamilyReed:
-		return "reed"
-	case SpeciesFamilyHerb:
-		return "herb"
-	case SpeciesFamilyFlower:
-		return "flower"
-	case SpeciesFamilyFern:
-		return "fern"
-	case SpeciesFamilyMoss:
-		return "moss"
-	case SpeciesFamilyVine:
-		return "vine"
-	case SpeciesFamilyCactus:
-		return "cactus"
-	case SpeciesFamilySucculent:
-		return "succulent"
-	case SpeciesFamilyInsect:
-		return "insect"
-	case SpeciesFamilyArachnid:
-		return "arachnid"
-	case SpeciesFamilyMammal:
-		return "mammal"
-	case SpeciesFamilyBird:
-		return "bird"
-	case SpeciesFamilyFish:
-		return "fish"
-	case SpeciesFamilyCrustacean:
-		return "crustacean"
-	case SpeciesFamilyMollusk:
-		return "mollusk"
-	case SpeciesFamilyMolluskClam:
-		return "clam"
-	case SpeciesFamilyMolluskSnail:
-		return "snail"
-	case SpeciesFamilyAmphibian:
-		return "amphibian"
-	case SpeciesFamilyReptileSerpent:
-		return "serpent"
-	case SpeciesFamilyReptileLizard:
-		return "lizard"
-	case SpeciesFamilyRodent:
-		return "rodent"
-	case SpeciesFamilyWorm:
-		return "worm"
-	case SpeciesFamilyMushroom:
-		return "mushroom"
-	case SpeciesFamilyMold:
-		return "mold"
-	}
-	return "unknown"
+	return string(s)
 }
 
 func (s SpeciesFamily) Locomotion() Locomotion {
