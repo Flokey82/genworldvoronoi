@@ -1,13 +1,14 @@
 package genworldvoronoi
 
 type TriangleMesh struct {
-	RegInSide    []int
-	Triangles    []int
-	Halfedges    []int
-	numSides     int
-	numRegions   int
-	numTriangles int
-	numHalfedges int
+	RegInSide            []int
+	Triangles            []int
+	Halfedges            []int
+	RegionNeighborsCache [][]int
+	numSides             int
+	numRegions           int
+	numTriangles         int
+	numHalfedges         int
 }
 
 // NewTriangleMesh takes partial mesh information and fills in the rest; the
@@ -15,12 +16,13 @@ type TriangleMesh struct {
 func NewTriangleMesh(numRegions int, tris, halfEdges []int) *TriangleMesh {
 	// Update internal data structures to match the input mesh.
 	tm := &TriangleMesh{
-		Triangles:    tris,
-		Halfedges:    halfEdges,
-		numRegions:   numRegions,
-		numSides:     len(tris),
-		numTriangles: len(tris) / 3,
-		numHalfedges: len(halfEdges),
+		Triangles:            tris,
+		Halfedges:            halfEdges,
+		RegionNeighborsCache: make([][]int, numRegions),
+		numRegions:           numRegions,
+		numSides:             len(tris),
+		numTriangles:         len(tris) / 3,
+		numHalfedges:         len(halfEdges),
 	}
 
 	// Construct an index for finding sides connected to a region
@@ -34,6 +36,11 @@ func NewTriangleMesh(numRegions int, tris, halfEdges []int) *TriangleMesh {
 		if tm.RegInSide[endpoint] == 0 || tm.Halfedges[s] == -1 {
 			tm.RegInSide[endpoint] = s
 		}
+	}
+
+	// Cache the neighbors for each region and return.
+	for r := 0; r < tm.numRegions; r++ {
+		tm.RegionNeighborsCache[r] = tm.r_circulate_r_no_cache(nil, r)
 	}
 	return tm
 }
@@ -56,7 +63,21 @@ func s_next_s(s int) int {
 	return s + 1
 }
 
+// r_circulate_r returns the regions adjacent to r using the cached
+// neighbors. This is faster than r_circulate_r_no_cache, but it
+// requires that the cached neighbors are up to date.
 func (tm *TriangleMesh) r_circulate_r(out_r []int, r int) []int {
+	out_r = out_r[:0]
+	for _, rn := range tm.RegionNeighborsCache[r] {
+		out_r = append(out_r, rn)
+	}
+	return out_r
+}
+
+// r_circulate_r_no_cache returns the regions adjacent to r without
+// using the cached neighbors. This is slower than r_circulate_r, but
+// it does not require that the cached neighbors are up to date.
+func (tm *TriangleMesh) r_circulate_r_no_cache(out_r []int, r int) []int {
 	s0 := tm.RegInSide[r]
 	incoming := s0
 	out_r = out_r[:0]

@@ -41,22 +41,19 @@ func (m *Civ) tickCityDays(c *City, gDisFunc func(int) GeoDisasterChance, cf fun
 	//
 	// TODO: Compare the actual population with the population we calculate
 	// here and kill off people if the actual population is larger.
-	if newPop := float64(c.Population) * math.Pow(math.E, c.PopulationGrowthRate()*float64(days)/365); newPop >= 1 {
-		c.Population = int(math.Ceil(newPop))
-	} else if m.rand.Float64() < newPop {
-		c.Population++
-	}
 
-	/*
-		delta := c.Population - len(c.People)
-		log.Println("City population growth:", c.Name, c.Population, len(c.People), delta)
-		if delta > 0 {
-			m.addNToCity(c, delta, cf)
-			//c.People = append(c.People, m.placePopulationAt(c.ID, delta, cf)...)
-		} else if delta < 0 {
-			c.People = m.killNPeople2(c.People, -delta)
-		}
-	*/
+	// Calculate the new population.
+
+	// This variant uses the logistic growth function, taking into account
+	// the carrying capacity of the city.
+	maxPop := float64(c.MaxPopulationLimit())
+	curPop := float64(c.Population)
+	newPop := (curPop * maxPop) / (curPop + (maxPop-curPop)*math.Pow(math.E, -c.PopulationGrowthRate()*float64(days)/365))
+	c.Population = int(math.Ceil(newPop))
+
+	// This variant uses the exponential growth function.
+	// newPop := float64(c.Population) * math.Pow(math.E, c.PopulationGrowthRate()*float64(days)/365)
+	// c.Population = int(math.Ceil(newPop))
 
 	// Calculate the limit of the population based on attractiveness and
 	// economic potential and see if we have exceeded the limit of what
