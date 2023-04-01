@@ -50,14 +50,14 @@ type BaseObject struct {
 }
 
 func newBaseObject(seed int64, sphere *SphereMesh) *BaseObject {
-	mesh := sphere.mesh
+	mesh := sphere.TriangleMesh
 	return &BaseObject{
 		Seed:              seed,
 		rand:              rand.New(rand.NewSource(seed)),
 		noise:             NewNoise(6, 2.0/3.0, seed),
-		mesh:              sphere.mesh,
-		XYZ:               sphere.xyz,
-		LatLon:            sphere.latLon,
+		mesh:              sphere.TriangleMesh,
+		XYZ:               sphere.XYZ,
+		LatLon:            sphere.LatLon,
 		Elevation:         make([]float64, mesh.numRegions),
 		Moisture:          make([]float64, mesh.numRegions),
 		Flux:              make([]float64, mesh.numRegions),
@@ -83,7 +83,7 @@ func newBaseObject(seed int64, sphere *SphereMesh) *BaseObject {
 		orderTri:          make([]int, mesh.numTriangles),
 		triFlow:           make([]float64, mesh.numTriangles),
 		sideFlow:          make([]float64, mesh.numSides),
-		regQuadTree:       newQuadTreeFromLatLon(sphere.latLon),
+		regQuadTree:       newQuadTreeFromLatLon(sphere.LatLon),
 	}
 }
 

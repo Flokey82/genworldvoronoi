@@ -269,67 +269,15 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 		gc.SetStrokeColor(col)
 		gc.SetFillColor(col)
 		gc.BeginPath()
-		gc.MoveTo(path[0][0], path[0][1])
-		for _, p := range path[1:] {
-			gc.LineTo(p[0], p[1])
+		for i, p := range path {
+			if i == 0 {
+				gc.MoveTo(p[0], p[1])
+			} else {
+				gc.LineTo(p[0], p[1])
+			}
 		}
 		gc.Close()
 		gc.FillStroke()
-	}
-
-	// Draw all the wind vectors on top.
-	if vectorMode > 0 {
-		vects := m.RegionToWindVec
-		if vectorMode == 2 {
-			vects = m.RegionToWindVecLocal
-		} else if vectorMode == 3 {
-			vects = m.RegionToOceanVec
-		}
-		// Set the color and line width of the wind vectors.
-		gc.SetStrokeColor(color.NRGBA{0, 0, 0, 255})
-		gc.SetLineWidth(1)
-		for _, i := range inQuadTree {
-			rLat := m.LatLon[i][0]
-			rLon := m.LatLon[i][1]
-
-			// Now draw the wind vector for the region.
-			// NOTE: I'm not 100% sure if this is correct, but it seems to work.
-			wLat, wLon := vectorToLatLong(normalize2(vects[i]))
-			windVec := normalize2([2]float64{wLat, wLon})
-
-			// Calculate the coordinates of the center of the region.
-			x, y := latLonToPixels(rLat, rLon, zoom)
-			x -= dx
-			y -= dy2
-
-			// Calculate the length of the wind vector.
-			length := len2(windVec)
-
-			// Calculate the angle of the wind vector.
-			angle := math.Atan2(windVec[1], windVec[0])
-
-			// Calculate the coordinates of the end of the wind vector.
-			// Since we are on a computer screen, we need to flip the y-axis.
-			x2 := x + math.Cos(angle)*length*50
-			y2 := y - math.Sin(angle)*length*50
-
-			// Draw the wind vector.
-			gc.BeginPath()
-			gc.MoveTo(x, y)
-			gc.LineTo(x2, y2)
-			gc.Stroke()
-
-			// Draw the arrow head.
-			gc.BeginPath()
-			gc.MoveTo(x2, y2)
-			gc.LineTo(x2-math.Cos(angle+math.Pi/6)*5, y2+math.Sin(angle+math.Pi/6)*5)
-			gc.Stroke()
-
-			gc.BeginPath()
-			gc.MoveTo(x2, y2)
-			gc.LineTo(x2-math.Cos(angle-math.Pi/6)*5, y2+math.Sin(angle-math.Pi/6)*5)
-			gc.Stroke()
-		}
 	}
 
 	if drawShadows {
@@ -573,6 +521,61 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 					gc.FillStroke()
 				}
 			*/
+		}
+	}
+
+	// Draw all the wind vectors on top.
+	if vectorMode > 0 {
+		vects := m.RegionToWindVec
+		if vectorMode == 2 {
+			vects = m.RegionToWindVecLocal
+		} else if vectorMode == 3 {
+			vects = m.RegionToOceanVec
+		}
+		// Set the color and line width of the wind vectors.
+		gc.SetStrokeColor(color.NRGBA{0, 0, 0, 255})
+		gc.SetLineWidth(1)
+		for _, i := range inQuadTree {
+			rLat := m.LatLon[i][0]
+			rLon := m.LatLon[i][1]
+
+			// Now draw the wind vector for the region.
+			// NOTE: I'm not 100% sure if this is correct, but it seems to work.
+			wLat, wLon := vectorToLatLong(normalize2(vects[i]))
+			windVec := normalize2([2]float64{wLat, wLon})
+
+			// Calculate the coordinates of the center of the region.
+			x, y := latLonToPixels(rLat, rLon, zoom)
+			x -= dx
+			y -= dy2
+
+			// Calculate the length of the wind vector.
+			length := len2(windVec)
+
+			// Calculate the angle of the wind vector.
+			angle := math.Atan2(windVec[1], windVec[0])
+
+			// Calculate the coordinates of the end of the wind vector.
+			// Since we are on a computer screen, we need to flip the y-axis.
+			x2 := x + math.Cos(angle)*length*50
+			y2 := y - math.Sin(angle)*length*50
+
+			// Draw the wind vector.
+			gc.BeginPath()
+			gc.MoveTo(x, y)
+			gc.LineTo(x2, y2)
+			gc.Stroke()
+
+			// Draw the arrow head.
+			gc.BeginPath()
+			gc.MoveTo(x2, y2)
+			gc.LineTo(x2-math.Cos(angle+math.Pi/6)*5, y2+math.Sin(angle+math.Pi/6)*5)
+			gc.Stroke()
+
+			gc.BeginPath()
+			gc.MoveTo(x2, y2)
+			gc.LineTo(x2-math.Cos(angle-math.Pi/6)*5, y2+math.Sin(angle-math.Pi/6)*5)
+			gc.Stroke()
 		}
 	}
 

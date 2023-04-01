@@ -107,8 +107,8 @@ func addSouthPoleToMesh(southPoleId int, d *delaunay.Triangulation) *delaunay.Tr
 }
 
 // stereographicProjection converts 3d coordinates into two dimensions.
+// See: https://en.wikipedia.org/wiki/Stereographic_projection
 func stereographicProjection(xyz []float64) []float64 {
-	// See <https://en.wikipedia.org/wiki/Stereographic_projection>
 	numPoints := len(xyz) / 3
 	xy := make([]float64, 0, 2*numPoints)
 	for r := 0; r < numPoints; r++ {
@@ -121,13 +121,16 @@ func stereographicProjection(xyz []float64) []float64 {
 }
 
 type SphereMesh struct {
-	mesh   *TriangleMesh
-	xyz    []float64    // Region coordinates
-	latLon [][2]float64 // Region latitude and longitude
+	*TriangleMesh
+	XYZ    []float64    // Region coordinates
+	LatLon [][2]float64 // Region latitude and longitude
 }
 
 func MakeSphere(seed int64, numPoints int, jitter float64) (*SphereMesh, error) {
+	// Generate a Fibonacci sphere.
 	latlong := generateFibonacciSphere(seed, numPoints, jitter)
+
+	// Convert the lat/lon coordinates to x,y,z.
 	var xyz []float64
 	var latLon [][2]float64
 	for r := 0; r < len(latlong); r += 2 {
@@ -139,25 +142,28 @@ func MakeSphere(seed int64, numPoints int, jitter float64) (*SphereMesh, error) 
 		xyz = append(xyz, latLonToCartesian(latlong[r], latlong[r+1])...)
 	}
 
+	// Map the sphere on a plane using the stereographic projection.
 	xy := stereographicProjection(xyz)
+
+	// Create a Delaunay triangulation of the points.
 	pts := make([]delaunay.Point, 0, len(xy)/2)
 	for i := 0; i < len(xy); i += 2 {
 		pts = append(pts, delaunay.Point{X: xy[i], Y: xy[i+1]})
 	}
-
 	tri, err := delaunay.Triangulate(pts)
 	if err != nil {
 		return nil, err
 	}
 
+	// Close the hole at the south pole.
 	// TODO: rotate an existing point into this spot instead of creating one.
 	xyz = append(xyz, 0, 0, 1)
 	latLon = append(latLon, [2]float64{-90.0, 45.0})
 	tri = addSouthPoleToMesh((len(xyz)/3)-1, tri)
 
 	return &SphereMesh{
-		mesh:   NewTriangleMesh(numPoints+1, tri.Triangles, tri.Halfedges),
-		xyz:    xyz,
-		latLon: latLon,
+		TriangleMesh: NewTriangleMesh(numPoints+1, tri.Triangles, tri.Halfedges),
+		XYZ:          xyz,
+		LatLon:       latLon,
 	}, nil
 }

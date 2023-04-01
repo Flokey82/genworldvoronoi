@@ -31,7 +31,7 @@ func newGeo(seed int64, numPlates, numPoints int, jitter float64) (*Geo, error) 
 	if err != nil {
 		return nil, err
 	}
-	mesh := result.mesh
+	mesh := result.TriangleMesh
 
 	m := &Geo{
 		Calendar:             NewCalendar(),
