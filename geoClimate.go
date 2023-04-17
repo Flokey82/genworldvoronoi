@@ -163,7 +163,7 @@ func (m *Geo) assignWindVectors() {
 			regVec := regWindVec[r]
 			lat := m.LatLon[r][0]
 			lon := m.LatLon[r][1]
-			tempReg := getMeanAnnualTemp(lat) - getTempFalloffFromAltitude(8850*m.Elevation[r]/maxElev)
+			tempReg := getMeanAnnualTemp(lat) - getTempFalloffFromAltitude(maxAltitudeFactor*m.Elevation[r]/maxElev)
 			if m.Elevation[r] < 0 {
 				// TODO: Use actual distance from ocean to calculate temperature falloff.
 				tempReg -= 1 / (regDistanceSea[r] + 1)
@@ -176,7 +176,7 @@ func (m *Geo) assignWindVectors() {
 			for _, nb := range m.mesh.r_circulate_r(outRegs, r) {
 				nbLat := m.LatLon[nb][0]
 				nbLon := m.LatLon[nb][1]
-				tempNb := getMeanAnnualTemp(nbLat) - getTempFalloffFromAltitude(8850*m.Elevation[nb]/maxElev)
+				tempNb := getMeanAnnualTemp(nbLat) - getTempFalloffFromAltitude(maxAltitudeFactor*m.Elevation[nb]/maxElev)
 				if m.Elevation[nb] < 0 {
 					// TODO: Use actual distance from ocean to calculate temperature falloff.
 					tempNb -= 1 / (regDistanceSea[nb] + 1)

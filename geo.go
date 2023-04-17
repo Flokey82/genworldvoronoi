@@ -122,7 +122,7 @@ func (m *Geo) generateGeology() {
 
 	// Assign ocean currents.
 	start = time.Now()
-	//m.assignOceanCurrents()
+	// m.assignOceanCurrents()
 	log.Println("Done ocean currents in ", time.Since(start).String())
 }
 
