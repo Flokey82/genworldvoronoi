@@ -60,6 +60,213 @@ func (m *Geo) genOceanCurrents2() {
 	m.RegionToOceanVec = regCurrentVec
 }
 
+func (m *Geo) assignOceanCurrents3() {
+	// Adapted from:
+	// https://github.com/FreezeDriedMangos/realistic-planet-generation-and-simulation/blob/main/src/Generate_Weather.js
+
+	// Assign the ocean currents to the mesh.
+	const latLeeway = 2
+	seedSupergroup := make(map[int]int)
+
+	//const numCurrentBandsPerHemisphere = 2
+	//const step = 90/numCurrentBandsPerHemisphere
+	//const seedLatsBands = []
+	//for(let l = step / 2; l < 90; l += step) seedLatsBands.push(l)
+
+	// initialize output variable
+	r_currents := make([][2]float64, m.mesh.numRegions)
+
+	// select seeds. all regions that are "close enough" to the center of a current band becomes a seed
+	var seeds []int
+	bands := [][2]float64{
+		{75.0, 60.0},
+		// {37.5, 22.5},
+		// {15.0, 0.01},
+	}
+	for _, band := range bands {
+		highLatBand := band[0]
+		lowLatBand := band[1]
+		//const highLatBand = 75.0 // 67.5
+		//const lowLatBand = 60.0  // 22.5
+		for r := 0; r < m.mesh.numRegions; r++ {
+			if m.Elevation[r] >= 0 {
+				continue
+			}
+
+			lat := m.LatLon[r][0]
+			//lon := m.LatLon[r][1]
+
+			// let band = seedLatBands.filter(bandLat => Math.abs(lat-bandLat) < latLeeway)[0]
+			// if (band === undefined) continue
+			// seeds.push(r)
+
+			if math.Abs(math.Abs(lat)-lowLatBand) <= latLeeway {
+				seeds = append(seeds, r)
+				if lat > 0 {
+					seedSupergroup[r] = 0
+				} else {
+					seedSupergroup[r] = 1
+				}
+			} else if math.Abs(math.Abs(lat)-highLatBand) <= latLeeway {
+				seeds = append(seeds, r)
+				if lat > 0 {
+					seedSupergroup[r] = 2
+				} else {
+					seedSupergroup[r] = 3
+				}
+			}
+		}
+	}
+
+	// assign every region to the closest seed, accounting for obstacles (where land is an obstacle)
+	// a bunch of regions assigned to the same seed are called a group
+	groups := m.bfsMetaVoronoi(seeds, func(r int) bool { return m.Elevation[r] < 0 }, true)
+
+	// merge groups that are touching
+	for r := 0; r < m.mesh.numRegions; r++ {
+		for _, sr := range m.GetRegNeighbors(r) {
+			if groups[r] == groups[sr] {
+				continue
+			}
+			if groups[r] == -1 || groups[sr] == -1 {
+				continue
+			}
+			if seedSupergroup[groups[r]] != seedSupergroup[groups[sr]] {
+				continue // if r and sr are in different "bands", aka supergroups, do not merge them
+			}
+			// assign all reigons belonging to the same group as sr, to the same group as r
+			for i := range groups {
+				if groups[i] == groups[sr] {
+					groups[i] = groups[r]
+				}
+			}
+		}
+	}
+
+	// determine how close each region is to the edge of its group
+	distFromEdge := initRegionSlice(m.mesh.numRegions)
+
+	for _, seed := range seeds {
+		var groupmates []int
+		for r := range groups {
+			if groups[r] == seed {
+				groupmates = append(groupmates, r)
+			}
+		}
+		var edge []int
+		for _, r := range groupmates {
+			for _, nr := range m.GetRegNeighbors(r) {
+				if groups[nr] != groups[r] {
+					edge = append(edge, r)
+					break
+				}
+			}
+		}
+		for _, r := range edge {
+			distFromEdge[r] = 0
+		}
+
+		frontier := edge
+		for len(frontier) > 0 {
+			curr := frontier[0]
+			frontier = frontier[1:]
+			for _, nr := range m.GetRegNeighbors(curr) {
+				if distFromEdge[nr] < 0 {
+					distFromEdge[nr] = 9999
+				}
+				if distFromEdge[nr] <= distFromEdge[curr]+1 {
+					continue
+				}
+				distFromEdge[nr] = distFromEdge[curr] + 1
+				frontier = append(frontier, nr)
+			}
+		}
+
+		//assign current vectors
+		var maxDist int
+		for _, r := range groupmates {
+			if distFromEdge[r] > maxDist {
+				maxDist = distFromEdge[r]
+			}
+		}
+		for _, r := range groupmates {
+			var inwardDirRaw [2]float64
+			for _, nr := range m.GetRegNeighbors(r) {
+				// if this neighbor has a smaller distance to edge, or belongs to a different gyre, the inward dir points away from it (so we add dirFromTo(nr, r), aka the dir away from nr)
+				if groups[nr] != groups[r] {
+					inwardDirRaw = add2(inwardDirRaw, m.dirVecFromToRegs(nr, r))
+				} else if distFromEdge[nr] < distFromEdge[r] {
+					inwardDirRaw = add2(inwardDirRaw, m.dirVecFromToRegs(nr, r))
+				} else if distFromEdge[nr] == distFromEdge[r] {
+					continue
+				} else {
+					// if the neighbor has a larger dist to the edge, the inward dir points towards it
+					inwardDirRaw = add2(inwardDirRaw, m.dirVecFromToRegs(r, nr))
+				}
+			}
+			// normalize inward dir
+			inwardDir := setMagnitude2(inwardDirRaw, 1)
+			var clockwise bool
+			clockwise = seedSupergroup[seed] == 1 || seedSupergroup[seed] == 2
+			var perpendicular [2]float64
+			if clockwise {
+				perpendicular = [2]float64{-inwardDir[1], inwardDir[0]}
+			} else {
+				perpendicular = [2]float64{inwardDir[1], -inwardDir[0]}
+			}
+			// since currents at gyre edges are a mess, we'll decrease their magnitude
+			// map.r_currents[r] = setMagnitude(perpendicular, 2*(1-distFromEdge[r]/maxDist))
+			r_currents[r] = perpendicular
+
+			// if(distFromEdge[r] === 0) map.r_currents[r] = setMagnitude(perpendicular, 0.4)
+		}
+	}
+	m.RegionToOceanVec = m.interpolateWindVecs(r_currents, 4)
+}
+
+// bfsMetaVoronoi is similar to distanceField, but instead of returning the distance to the closest seed, it returns the seed that is closest to the region.
+// TODO: Optimize, fix, maybe replace.
+func (m *Geo) bfsMetaVoronoi(seeds []int, includeCondition func(int) bool, forceIncludeIsolatedRegions bool) []int {
+	rGroup := initRegionSlice(m.mesh.numRegions)
+	isSeed := make([]bool, m.mesh.numRegions)
+	for _, seed := range seeds {
+		isSeed[seed] = true
+	}
+
+	for r := 0; r < m.mesh.numRegions; r++ {
+		if includeCondition != nil && !includeCondition(r) {
+			continue
+		}
+
+		// bfs from r. first seed found is the one r gets assigned to
+		frontier := []int{r}
+		visited := make([]bool, m.mesh.numRegions)
+		for len(frontier) > 0 {
+			curr := frontier[0]
+			frontier = frontier[1:]
+			if isSeed[curr] {
+				rGroup[r] = curr
+				break
+			}
+			if visited[curr] || (includeCondition != nil && !includeCondition(curr)) {
+				continue
+			}
+			visited[curr] = true
+
+			for _, neighbor := range m.GetRegNeighbors(curr) {
+				if visited[neighbor] || (includeCondition != nil && !includeCondition(neighbor)) {
+					continue
+				}
+				frontier = append(frontier, neighbor)
+			}
+		}
+		if rGroup[r] == 0 && forceIncludeIsolatedRegions {
+			rGroup[r] = r
+		}
+	}
+	return rGroup
+}
+
 func (m *Geo) assignOceanCurrentsInflowOutflow() {
 	// Calculate the inflow and outflow of each ocean region, which can be used
 	// to calculate the ocean currents.
