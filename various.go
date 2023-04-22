@@ -69,6 +69,14 @@ func scale2(v [2]float64, s float64) [2]float64 {
 	}
 }
 
+func setMagnitude2(v [2]float64, mag float64) [2]float64 {
+	oldMag := math.Sqrt(v[0]*v[0] + v[1]*v[1])
+	if oldMag == 0 {
+		return v
+	}
+	return [2]float64{v[0] * mag / oldMag, v[1] * mag / oldMag}
+}
+
 // normal2 returns the normalized vector of the given vector.
 func normal2(v [2]float64) [2]float64 {
 	l := 1.0 / len2(v)
@@ -148,15 +156,47 @@ func vectorToLatLong(vec [2]float64) (float64, float64) {
 
 // calcVecFromLatLong calculates the vector between two lat/long pairs.
 func calcVecFromLatLong(lat1, lon1, lat2, lon2 float64) [2]float64 {
+	// Old implementation, which is wrong.
+	// convert to radians
+	// lat1 = degToRad(lat1)
+	// lon1 = degToRad(lon1)
+	// lat2 = degToRad(lat2)
+	// lon2 = degToRad(lon2)
+	//
+	// 	return [2]float64{
+	// 		math.Cos(lat1)*math.Sin(lat2) - math.Sin(lat1)*math.Cos(lat2)*math.Cos(lon2-lon1), // X
+	// 		math.Sin(lon2-lon1) * math.Cos(lat2),                                              // Y
+	// 	}
+
+	// Calculate the vector between two lat/long pairs using the bearing we calculate
+	// from the lat/long pairs.
+	bearing := calcBearing(lat1, lon1, lat2, lon2)
+
+	// Note that the bearing is 0 when facing north, and increases clockwise, so we need to
+	// convert it so that int is 0 when facing east, and increases counter-clockwise (and to radians).
+	bearing = degToRad(90 - bearing)
+
+	// Convert the bearing to a vector.
+	v := [2]float64{math.Cos(bearing), math.Sin(bearing)}
+
+	// Scale the vector to the distance between the two points.
+	dist := haversine(lat1, lon1, lat2, lon2)
+
+	return [2]float64{v[0] * dist, v[1] * dist}
+}
+
+// calcBearing calculates the bearing between two lat/long pairs.
+func calcBearing(lat1, lon1, lat2, lon2 float64) float64 {
 	// convert to radians
 	lat1 = degToRad(lat1)
 	lon1 = degToRad(lon1)
 	lat2 = degToRad(lat2)
 	lon2 = degToRad(lon2)
-	return [2]float64{
-		math.Cos(lat1)*math.Sin(lat2) - math.Sin(lat1)*math.Cos(lat2)*math.Cos(lon2-lon1), // X
-		math.Sin(lon2-lon1) * math.Cos(lat2),                                              // Y
-	}
+
+	y := math.Sin(lon2-lon1) * math.Cos(lat2)
+	x := math.Cos(lat1)*math.Sin(lat2) - math.Sin(lat1)*math.Cos(lat2)*math.Cos(lon2-lon1)
+
+	return radToDeg(math.Atan2(y, x))
 }
 
 // latLonToCartesian converts latitude and longitude to x, y, z coordinates.

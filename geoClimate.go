@@ -122,6 +122,12 @@ func getGlobalWindVector(lat float64) [2]float64 {
 	return [2]float64{math.Cos(rad), math.Sin(rad)}
 }
 
+const (
+	localWindModeTemperature = iota
+	localWindModeAltitude
+	localWindModeMixed
+)
+
 // assignWindVectors constructs faux global wind cells reminiscent of a simplified earth model.
 // NOTE: This function includes an experimental part that calculates local winds that are influenced
 // by the topography / elevation changes. Please note that the code for local winds is incomplete.
@@ -136,11 +142,11 @@ func (m *Geo) assignWindVectors() {
 	regWindVecLocal := make([][2]float64, m.mesh.numRegions)
 	_, maxElev := minMax(m.Elevation)
 
-	// Experimental: Local wind vectors based on temperature gradients.
-	useTempGradient := false
+	calcMode := localWindModeMixed
 
 	// NOTE: This is currently overridden by the altitude changes below.
-	if useTempGradient {
+	switch calcMode {
+	case localWindModeTemperature:
 		// Add local wind vectors based on local temperature gradients.
 		//
 		// NOTE: You won't be happy about the results of the temp gradient anyway
@@ -187,14 +193,16 @@ func (m *Geo) assignWindVectors() {
 			v = vectors.Normalize(v)
 			regWindVecLocal[r] = [2]float64{v.X, v.Y}
 		}
-	} else {
+
+	case localWindModeAltitude:
 		// Add wind deflection based on altitude changes.
 		outRegs := make([]int, 0, 8)
 		for r := range regWindVecLocal {
+			// Get the wind vector for r.
 			regVec := regWindVec[r]
 			// Get XYZ Position of r.
 			regXYZ := convToVec3(m.XYZ[r*3 : r*3+3])
-			// Convert to polar coordinates.
+			// Get polar coordinates.
 			regLat := m.LatLon[r][0]
 			regLon := m.LatLon[r][1]
 			h := m.Elevation[r]
@@ -252,18 +260,61 @@ func (m *Geo) assignWindVectors() {
 					// The higher the dot product (the more direct the neighbor is in wind direction), the higher
 					// the influence of an elevation change. So a steep mountain ahead will slow the wind down.
 					// If a steep mountain is to the left, the wind vector will be pushed to the right.
-					v = v.Add(vx.Mul(dotV * (hnb - h) / maxElev))
+					deltaElev := hnb - h // Positive if neighbor is higher.
+					v = v.Add(vx.Mul(dotV * (deltaElev) / maxElev))
 				}
 			}
 			v = vectors.Normalize(v)
 			regWindVecLocal[r] = [2]float64{v.X, v.Y}
 		}
+	case localWindModeMixed:
+		// Adapted from:
+		// https://github.com/FreezeDriedMangos/realistic-planet-generation-and-simulation/blob/main/src/Generate_Weather.js
+		WATER_LEVEL := 0.0
+		TEMPERATURE_INFLUENCE_FACTOR := 0.5
+		ELEVATION_CHANGE_FACTOR := 1.0
+		isInit := false
+
+		outRegs := make([]int, 0, 8)
+		for r, windDir := range regWindVec {
+			// slowdown/speedup according to elevation change
+			blowsPastReg := m.getClosestNeighbor(r, windDir)
+
+			// Elevation change is negative if the current region is higher than the region the wind blows past.
+			// This will result in wind slowing down if it blows towards a mountain and to speed up if it blows
+			// towards a valley.
+			elevationChange := math.Max(m.Elevation[blowsPastReg], WATER_LEVEL) - math.Max(m.Elevation[r], WATER_LEVEL)
+			windSpeed := (1 - (2*elevationChange)*ELEVATION_CHANGE_FACTOR)
+			windSpeed = math.Max(0.1, windSpeed)
+			// map.r_wind[r] = 5*(1-(terrain.depthMap[i][j]-terrain.depthMap[k][l])/1000);
+			// my windspeed: [0, 3]
+			if isInit {
+				regWindVecLocal[r] = setMagnitude2(windDir, windSpeed)
+				continue
+			}
+
+			var acc [2]float64
+			for _, nr := range m.mesh.r_circulate_r(outRegs, r) {
+				// Magnitude will be positive if the neighbor is warmer than the current region, which will
+				// result in a wind vector pointing towards the neighbor.
+				magnitude := (m.getRegTemperature(nr, maxElev) - m.getRegTemperature(r, maxElev))
+				vec := setMagnitude2(m.dirVecFromToRegs(r, nr), magnitude)
+				acc = add2(vec, acc)
+			}
+			// Add the temperature vector to the wind vector.
+			windDir = add2(windDir, setMagnitude2(acc, TEMPERATURE_INFLUENCE_FACTOR))
+
+			// Scale the wind vector to the wind speed.
+			regWindVecLocal[r] = setMagnitude2(windDir, windSpeed)
+		}
 	}
+
 	// Average wind vectors using neighbor vectors.
 	interpolationSteps := 0
-
-	m.RegionToWindVecLocal = m.interpolateWindVecs(regWindVecLocal, interpolationSteps)
 	m.RegionToWindVec = m.interpolateWindVecs(regWindVec, interpolationSteps)
+
+	interpolationStepsLocal := 4
+	m.RegionToWindVecLocal = m.interpolateWindVecs(regWindVecLocal, interpolationStepsLocal)
 }
 
 // interpolateWindVecs interpolates the given wind vectors at their respective regions by

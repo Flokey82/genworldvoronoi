@@ -301,6 +301,35 @@ func (m *BaseObject) getLowestRegNeighbor(r int) int {
 	return lowestReg
 }
 
+// dirVecFromToRegs returns the direction vector from region r1 to r2.
+func (m *BaseObject) dirVecFromToRegs(from, to int) [2]float64 {
+	return calcVecFromLatLong(m.LatLon[from][0], m.LatLon[from][1], m.LatLon[to][0], m.LatLon[to][1])
+}
+
+// getClosestNeighbor returns the closest neighbor of r in the given direction.
+func (m *BaseObject) getClosestNeighbor(r int, vec [2]float64) int {
+	if vec[0] == 0 && vec[1] == 0 {
+		return r
+	}
+	lat := m.LatLon[r][0]
+	lon := m.LatLon[r][1]
+	lat, lon = addVecToLatLong(lat, lon, vec)
+
+	bestDist := math.Inf(1)
+	bestR := -1
+
+	neighbors := m.GetRegNeighbors(r)
+	for i := 0; i < len(neighbors); i++ {
+		latLon2 := m.LatLon[neighbors[i]]
+		dist := haversine(lat, lon, latLon2[0], latLon2[1])
+		if dist < bestDist {
+			bestDist = dist
+			bestR = neighbors[i]
+		}
+	}
+	return bestR
+}
+
 // TestAreas essentially sums up the surface area of all the regions
 // and prints the total.. which shows that we're pretty close to the
 // surface area of a unit sphere. :) Yay!
