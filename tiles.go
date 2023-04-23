@@ -119,8 +119,6 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 		}
 	case 20:
 		// Get a blue to red temperature gradient.
-		// Calculate the min and max elevation.
-		_, max := minMax(m.Elevation)
 
 		// Create the color gradient.
 		colorGrad := colorgrad.NewGradient()
@@ -137,11 +135,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 		}
 
 		// Cache all region temperatures.
-		// This is a bit greedy, but it helps with normalizing the temperature.
-		temp := make([]float64, m.mesh.numRegions)
-		for i := range temp {
-			temp[i] = m.getRegTemperature(i, max)
-		}
+		temp := m.AirTemperature
 		// Get min and max temperature.
 		minTemp, maxTemp := minMax(temp)
 
@@ -170,11 +164,8 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 		}
 
 		// Cache all region temperatures.
-		// This is a bit greedy, but it helps with normalizing the temperature.
-		temp := make([]float64, m.mesh.numRegions)
-		if m.OceanTemperature != nil {
-			temp = m.OceanTemperature
-		}
+		temp := m.OceanTemperature
+
 		// Get min and max temperature.
 		minTemp, maxTemp := minMax(temp)
 

@@ -24,7 +24,8 @@ type BaseObject struct {
 	Rainfall          []float64         // Point / region rainfall
 	Flux              []float64         // Point / region hydrology: throughflow of rainfall
 	Waterpool         []float64         // Point / region hydrology: water pool depth
-	OceanTemperature  []float64         // Ocean temperatures
+	OceanTemperature  []float64         // Ocean temperatures (yearly average)
+	AirTemperature    []float64         // Air temperatures (yearly average)
 	Downhill          []int             // Point / region mapping to its lowest neighbor
 	Drainage          []int             // Point / region mapping of pool to its drainage region
 	Waterbodies       []int             // Point / region mapping of pool to waterbody ID
@@ -65,6 +66,7 @@ func newBaseObject(seed int64, sphere *SphereMesh) *BaseObject {
 		Waterpool:         make([]float64, mesh.numRegions),
 		Rainfall:          make([]float64, mesh.numRegions),
 		OceanTemperature:  make([]float64, mesh.numRegions),
+		AirTemperature:    make([]float64, mesh.numRegions),
 		Downhill:          make([]int, mesh.numRegions),
 		Drainage:          make([]int, mesh.numRegions),
 		Waterbodies:       make([]int, mesh.numRegions),
@@ -870,6 +872,8 @@ func (m *BaseObject) interpolate(regions []int) (*interpolated, error) {
 		ipl.Flux = append(ipl.Flux, m.Flux[r])
 		ipl.Waterpool = append(ipl.Waterpool, m.Waterpool[r])
 		ipl.Elevation = append(ipl.Elevation, m.Elevation[r])
+		ipl.OceanTemperature = append(ipl.OceanTemperature, m.OceanTemperature[r])
+		ipl.AirTemperature = append(ipl.AirTemperature, m.AirTemperature[r])
 
 		// Circulate_r all points and add midpoints.
 		for _, nbReg := range m.mesh.r_circulate_r(outRegs, r) {
@@ -904,6 +908,8 @@ func (m *BaseObject) interpolate(regions []int) (*interpolated, error) {
 			diffRainfall := m.Rainfall[nbReg] - m.Rainfall[r]
 			diffFlux := m.Flux[nbReg] - m.Flux[r]
 			diffPool := m.Waterpool[nbReg] - m.Waterpool[r]
+			diffOceanTemp := m.OceanTemperature[nbReg] - m.OceanTemperature[r]
+			diffAirTemp := m.AirTemperature[nbReg] - m.AirTemperature[r]
 
 			// TODO: Add some better variation with the water pool and stuff.
 			// TODO: Add flood fill, downhill and flux?
@@ -914,6 +920,8 @@ func (m *BaseObject) interpolate(regions []int) (*interpolated, error) {
 			ipl.Rainfall = append(ipl.Rainfall, m.Rainfall[r]+(diffRainfall*nvl))
 			ipl.Flux = append(ipl.Flux, m.Flux[r]+(diffFlux*nvl))
 			ipl.Waterpool = append(ipl.Waterpool, m.Waterpool[r]+(diffPool*nvl))
+			ipl.OceanTemperature = append(ipl.OceanTemperature, m.OceanTemperature[r]+(diffOceanTemp*nvl))
+			ipl.AirTemperature = append(ipl.AirTemperature, m.AirTemperature[r]+(diffAirTemp*nvl))
 		}
 	}
 	for r := 0; r < len(ipl.XYZ); r += 3 {

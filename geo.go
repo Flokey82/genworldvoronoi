@@ -62,6 +62,11 @@ func (m *Geo) generateGeology() {
 	m.assignRegionElevation()
 	log.Println("Done elevation in ", time.Since(start).String())
 
+	// Calculate wind vectors.
+	start = time.Now()
+	m.assignWindVectors()
+	log.Println("Done wind vectors in ", time.Since(start).String())
+
 	// Assign rainfall, moisture.
 	start = time.Now()
 	m.assignRainfallBasic()
@@ -125,6 +130,19 @@ func (m *Geo) generateGeology() {
 	// m.assignOceanCurrents()
 	m.assignOceanCurrents3()
 	log.Println("Done ocean currents in ", time.Since(start).String())
+
+	// Hacky: Generate temperatures.
+	transportTemp := false
+	start = time.Now()
+	// TODO: Do iterative steps since the water temperature will influence
+	// the air temperature and vice versa.
+	m.initRegionWaterTemperature()
+	m.initRegionAirTemperature()
+	if transportTemp {
+		m.transportRegionWaterTemperature()
+		m.assignRegionAirTemperature()
+	}
+	log.Println("Done temperatures in ", time.Since(start).String())
 }
 
 func (m *Geo) Tick() {

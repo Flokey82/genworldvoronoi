@@ -6,498 +6,6 @@ import (
 	"sort"
 )
 
-func (m *Geo) genOceanCurrents2() {
-	regCurrentVec := make([][2]float64, m.mesh.numRegions)
-
-	// Seed the ocean currents.
-	m.seedOceanCurrents(regCurrentVec)
-
-	// Build the region to region neighbor vectors.
-	regToRegNeighborVec := m.getRegionToNeighborVec()
-
-	deflectCurrent := func(r int) [2]float64 {
-		if m.Elevation[r] > 0 || regCurrentVec[r] == zero2 {
-			return [2]float64{0, 0}
-		}
-
-		// Check if the current vector is pointing into the land.
-		// If so, we need to deflect it.
-		currentVec := regCurrentVec[r]
-		maxDotLand := math.Inf(-1)
-		maxDotOcean := math.Inf(-1)
-		maxRegOcean := -1
-		for _, neighbor := range m.GetRegNeighbors(r) {
-			dot := dot2(normalize2(regToRegNeighborVec[r][neighbor]), normalize2(currentVec))
-			if m.Elevation[neighbor] > 0 {
-				if dot > maxDotLand {
-					maxDotLand = dot
-				}
-			} else {
-				if dot > maxDotOcean || maxRegOcean < 0 {
-					maxDotOcean = dot
-					maxRegOcean = neighbor
-				}
-			}
-		}
-
-		// If the max dot product for land is greater than the max dot product
-		// for ocean, we need to deflect the current vector.
-		if maxDotLand >= 0 && maxRegOcean >= 0 {
-			return normalize2(regToRegNeighborVec[r][maxRegOcean])
-		}
-		return currentVec
-	}
-	newVec := make([][2]float64, m.mesh.numRegions)
-
-	// Loop once so we can see what it looks like.
-	for i := 0; i < 1; i++ {
-		// Deflect the current vectors.
-		for r := range regCurrentVec {
-			newVec[r] = deflectCurrent(r)
-		}
-		regCurrentVec, newVec = newVec, regCurrentVec
-	}
-	m.RegionToOceanVec = regCurrentVec
-}
-
-func (m *Geo) assignOceanCurrents3() {
-	// Adapted from:
-	// https://github.com/FreezeDriedMangos/realistic-planet-generation-and-simulation/blob/main/src/Generate_Weather.js
-
-	// Assign the ocean currents to the mesh.
-	const latLeeway = 2
-	seedSupergroup := make(map[int]int)
-
-	//const numCurrentBandsPerHemisphere = 2
-	//const step = 90/numCurrentBandsPerHemisphere
-	//const seedLatsBands = []
-	//for(let l = step / 2; l < 90; l += step) seedLatsBands.push(l)
-
-	// initialize output variable
-	r_currents := make([][2]float64, m.mesh.numRegions)
-
-	// select seeds. all regions that are "close enough" to the center of a current band becomes a seed
-	var seeds []int
-	bands := [][2]float64{
-		{75.0, 60.0},
-		// {37.5, 22.5},
-		// {15.0, 0.01},
-	}
-	for _, band := range bands {
-		highLatBand := band[0]
-		lowLatBand := band[1]
-		//const highLatBand = 75.0 // 67.5
-		//const lowLatBand = 60.0  // 22.5
-		for r := 0; r < m.mesh.numRegions; r++ {
-			if m.Elevation[r] >= 0 {
-				continue
-			}
-
-			lat := m.LatLon[r][0]
-			//lon := m.LatLon[r][1]
-
-			// let band = seedLatBands.filter(bandLat => Math.abs(lat-bandLat) < latLeeway)[0]
-			// if (band === undefined) continue
-			// seeds.push(r)
-
-			if math.Abs(math.Abs(lat)-lowLatBand) <= latLeeway {
-				seeds = append(seeds, r)
-				if lat > 0 {
-					seedSupergroup[r] = 0
-				} else {
-					seedSupergroup[r] = 1
-				}
-			} else if math.Abs(math.Abs(lat)-highLatBand) <= latLeeway {
-				seeds = append(seeds, r)
-				if lat > 0 {
-					seedSupergroup[r] = 2
-				} else {
-					seedSupergroup[r] = 3
-				}
-			}
-		}
-	}
-
-	// assign every region to the closest seed, accounting for obstacles (where land is an obstacle)
-	// a bunch of regions assigned to the same seed are called a group
-	groups := m.bfsMetaVoronoi(seeds, func(r int) bool { return m.Elevation[r] <= 0 }, true)
-	outRegs := make([]int, 0, 8)
-
-	// merge groups that are touching
-	for r := 0; r < m.mesh.numRegions; r++ {
-		for _, sr := range m.mesh.r_circulate_r(outRegs, r) {
-			if groups[r] == groups[sr] {
-				continue
-			}
-			if groups[r] == -1 || groups[sr] == -1 {
-				continue
-			}
-			if seedSupergroup[groups[r]] != seedSupergroup[groups[sr]] {
-				continue // if r and sr are in different "bands", aka supergroups, do not merge them
-			}
-			// assign all regions belonging to the same group as sr, to the same group as r
-			for i := range groups {
-				if groups[i] == groups[sr] {
-					groups[i] = groups[r]
-				}
-			}
-		}
-	}
-
-	// determine how close each region is to the edge of its group
-	distFromEdge := initRegionSlice(m.mesh.numRegions)
-
-	frontier := make([]int, 0, m.mesh.numRegions)
-	groupmates := make([]int, 0, 100)
-	for _, seed := range seeds {
-		groupmates = groupmates[:0]
-		for r := range groups {
-			if groups[r] == seed {
-				groupmates = append(groupmates, r)
-			}
-		}
-		frontier = frontier[:0]
-		for _, r := range groupmates {
-			for _, nr := range m.mesh.r_circulate_r(outRegs, r) {
-				if groups[nr] != groups[r] {
-					frontier = append(frontier, r)
-					distFromEdge[r] = 0
-					break
-				}
-			}
-		}
-
-		for fidx := 0; fidx < len(frontier); fidx++ {
-			curr := frontier[fidx]
-			//frontier = frontier[1:]
-			for _, nr := range m.mesh.r_circulate_r(outRegs, curr) {
-				if distFromEdge[nr] < 0 {
-					distFromEdge[nr] = 9999
-				}
-				if distFromEdge[nr] <= distFromEdge[curr]+1 {
-					continue
-				}
-				distFromEdge[nr] = distFromEdge[curr] + 1
-				frontier = append(frontier, nr)
-			}
-		}
-
-		//assign current vectors
-		var maxDist int
-		for _, r := range groupmates {
-			if distFromEdge[r] > maxDist {
-				maxDist = distFromEdge[r]
-			}
-		}
-		for _, r := range groupmates {
-			var inwardDirRaw [2]float64
-			for _, nr := range m.mesh.r_circulate_r(outRegs, r) {
-				// if this neighbor has a smaller distance to edge, or belongs to a different gyre, the inward dir points away from it (so we add dirFromTo(nr, r), aka the dir away from nr)
-				if groups[nr] != groups[r] {
-					inwardDirRaw = add2(inwardDirRaw, m.dirVecFromToRegs(nr, r))
-				} else if distFromEdge[nr] < distFromEdge[r] {
-					inwardDirRaw = add2(inwardDirRaw, m.dirVecFromToRegs(nr, r))
-				} else if distFromEdge[nr] == distFromEdge[r] {
-					continue
-				} else {
-					// if the neighbor has a larger dist to the edge, the inward dir points towards it
-					inwardDirRaw = add2(inwardDirRaw, m.dirVecFromToRegs(r, nr))
-				}
-			}
-			// normalize inward dir
-			inwardDir := setMagnitude2(inwardDirRaw, 1)
-			var clockwise bool
-			clockwise = seedSupergroup[seed] == 1 || seedSupergroup[seed] == 2
-			var perpendicular [2]float64
-			if clockwise {
-				perpendicular = [2]float64{-inwardDir[1], inwardDir[0]}
-			} else {
-				perpendicular = [2]float64{inwardDir[1], -inwardDir[0]}
-			}
-			// since currents at gyre edges are a mess, we'll decrease their magnitude
-			// map.r_currents[r] = setMagnitude(perpendicular, 2*(1-distFromEdge[r]/maxDist))
-			r_currents[r] = perpendicular
-
-			// if(distFromEdge[r] === 0) map.r_currents[r] = setMagnitude(perpendicular, 0.4)
-		}
-	}
-
-	// TODO: Create a proper solution for ocean current vectors that
-	// doesn't affect vectors on land.
-	for i := 0; i < 4; i++ {
-		m.RegionToOceanVec = m.interpolateWindVecs(r_currents, 1)
-		// Reset all vectors that are not in the ocean
-		for r := 0; r < m.mesh.numRegions; r++ {
-			if m.Elevation[r] >= 0 {
-				m.RegionToOceanVec[r] = [2]float64{0, 0}
-			}
-		}
-		r_currents = m.RegionToOceanVec
-	}
-	m.assignRegionWaterTemperature(false)
-}
-
-// bfsMetaVoronoi is similar to distanceField, but instead of returning the distance to the closest seed, it returns the seed that is closest to the region.
-// TODO: Optimize, fix, maybe replace.
-func (m *BaseObject) bfsMetaVoronoi(seeds []int, includeCondition func(int) bool, forceIncludeIsolatedRegions bool) []int {
-	// Reset the random number generator.
-	m.resetRand()
-	rGroup := initRegionSlice(m.mesh.numRegions)
-	isSeed := make([]bool, m.mesh.numRegions)
-	for _, seed := range seeds {
-		isSeed[seed] = true
-	}
-
-	mesh := m.mesh
-	numRegions := mesh.numRegions
-
-	// Initialize the queue for the breadth first search with
-	// the seed regions.
-	queue := make([]int, len(seeds), numRegions)
-	for i, r := range seeds {
-		queue[i] = r
-		rGroup[r] = r
-	}
-
-	// Allocate a slice for the output of mesh.r_circulate_r.
-	outRegs := make([]int, 0, 6)
-
-	// Random search adapted from breadth first search.
-	// TODO: Improve the queue. Currently this is growing unchecked.
-	for queueOut := 0; queueOut < len(queue); queueOut++ {
-		pos := queueOut + m.rand.Intn(len(queue)-queueOut)
-		currentReg := queue[pos]
-		queue[pos] = queue[queueOut]
-		for _, nbReg := range mesh.r_circulate_r(outRegs, currentReg) {
-			if rGroup[nbReg] >= 0 || !includeCondition(nbReg) {
-				continue
-			}
-
-			// Grow the assigned region to the current region.
-			rGroup[nbReg] = rGroup[currentReg]
-			queue = append(queue, nbReg)
-		}
-
-		// If we have consumed over 1000000 elements in the queue,
-		// we reset the queue to the remaining elements.
-		if queueOut > 10000 {
-			n := copy(queue, queue[queueOut:])
-			queue = queue[:n]
-			queueOut = 0
-		}
-	}
-	return rGroup
-}
-
-func (m *Geo) assignRegionWaterTemperature(isInit bool) {
-	prevTemperature := make([]float64, m.mesh.numRegions)
-	_, maxElev := minMax(m.Elevation)
-	newTemperature := make([]float64, m.mesh.numRegions)
-	baseTemperature := make([]float64, m.mesh.numRegions)
-	for r := 0; r < m.mesh.numRegions; r++ {
-		if m.Elevation[r] <= 0 {
-			prevTemperature[r] = m.getRegTemperature(r, maxElev)
-		} else {
-			newTemperature[r] = 0.5
-		}
-	}
-
-	outregs := make([]int, 0, 8)
-	for r := 0; r < m.mesh.numRegions; r++ {
-		if m.Elevation[r] <= 0 {
-			continue
-		}
-
-		// base
-		//lat := m.LatLon[r][0]
-		//absLat := math.Abs(lat)
-		//lon :=  m.LatLon[r][1]
-		//absLat := math.Abs(lat - m.getSunLattitude())
-		startTemp := prevTemperature[r]
-		newTemperature[r] = startTemp
-		baseTemperature[r] = startTemp
-
-		if isInit {
-			continue
-		}
-
-		// diffusion
-		neighbors := m.mesh.r_circulate_r(outregs, r)
-		neighborAverage := newTemperature[r]
-		neighborCount := 1
-		for i := 0; i < len(neighbors); i++ {
-			nr := neighbors[i]
-			if m.Elevation[nr] <= 0 {
-				neighborAverage += newTemperature[nr]
-				neighborCount++
-			}
-		}
-		neighborAverage /= float64(neighborCount)
-
-		newTemperature[r] = 0.75*newTemperature[r] + 0.25*neighborAverage
-
-		//newTemperature[r] = clamp(0, 1, newTemperature[r] - map.r_clouds[r]/2)
-	}
-
-	if !isInit {
-		const transferIn = 0.01
-		const transferOut = 1.0 - transferIn
-		for step := 0; step < 30; step++ {
-			movedTemp := make([][]float64, m.mesh.numRegions)
-			for r := 0; r < m.mesh.numRegions; r++ {
-				// add in the "pulled temp"
-				movedTemp[r] = append(movedTemp[r], newTemperature[r])
-
-				pr := m.getPreviousNeighbor(outregs, r, m.RegionToOceanVec[r])
-				if m.Elevation[pr] <= 0 {
-					movedTemp[r] = append(movedTemp[r], prevTemperature[pr])
-				}
-
-				// add in pushed temp
-				nr := m.getClosestNeighbor(outregs, r, m.RegionToOceanVec[r])
-				if nr == r || m.Elevation[nr] > 0 {
-					continue
-				}
-				//const heldHeat = newTemperature[r] - baseTemperature[r]
-				//const potentialHeat = newTemperature[r] - baseTemperature[nr]
-
-				//movedTemp[nr] = movedTemp[nr]? movedTemp[nr] : 0
-				//movedTemp[r] -= map.r_currents[r]*heldHeat
-				//movedTemp[nr] += map.r_currents[r]*potentialHeat
-				//movedTemp[nr] = movedTemp[nr]? movedTemp[nr] : []float64{}
-				movedTemp[nr] = append(movedTemp[nr], transferOut*prevTemperature[r]+transferIn*newTemperature[r])
-			}
-
-			for r := 0; r < m.mesh.numRegions; r++ {
-				//newTemperature[r] += movedTemp[r]
-				if movedTemp[r] != nil && len(movedTemp[r]) > 0 {
-					newTemperature[r] = movedTemp[r][0]
-					for i := 1; i < len(movedTemp[r]); i++ {
-						newTemperature[r] += movedTemp[r][i]
-					}
-					newTemperature[r] /= float64(len(movedTemp[r]))
-				}
-				//if (movedTemp[r] !== undefined && movedTemp[r].length > 0) newTemperature[r] = movedTemp[r].reduce((acc, temp) => acc + temp, 0) / movedTemp[r].length
-			}
-		}
-	}
-	m.OceanTemperature = newTemperature
-}
-
-func (m *Geo) getPreviousNeighbor(outregs []int, r int, vec [2]float64) int {
-	return m.getClosestNeighbor(outregs, r, [2]float64{-vec[0], -vec[1]})
-}
-
-func (m *Geo) assignOceanCurrentsInflowOutflow() {
-	// Calculate the inflow and outflow of each ocean region, which can be used
-	// to calculate the ocean currents.
-
-	// We start off by setting the primary ocean current vectors and then iterate
-	// over the regions to calculate the inflow and outflow vectors, depending
-	// on the pressure in the region.
-	regCurrentVec := make([][2]float64, m.mesh.numRegions)
-
-	// Build the region to region neighbor vectors.
-	regToRegNeighborVec := m.getRegionToNeighborVec()
-
-	// Loop a few times to establis an equilibrium.
-	for i := 0; i < 100; i++ {
-		// Set the primary ocean current vectors.
-		m.seedOceanCurrents(regCurrentVec)
-
-		// Calculate the pressure in each ocean region.
-		regPressure := m.calcCurrentPressure(regCurrentVec)
-
-		// Calculate the inflow and outflow vectors based on the pressure difference.
-		for reg := 0; reg < m.mesh.numRegions; reg++ {
-			// If the region is not an ocean region, skip it.
-			if m.Elevation[reg] > 0 {
-				continue
-			}
-			// Calculate the inflow and outflow vectors.
-			// The inflow vector is the sum of the vectors of the neighbors
-			// that have a positive pressure.
-			// The outflow vector is the current vector.
-			inflowVec := [2]float64{0, 0}
-			outflowVec := [2]float64{0, 0}
-			for _, neighbor := range m.GetRegNeighbors(reg) {
-				// Skip neighbors that are not ocean regions.
-				if m.Elevation[neighbor] > 0 {
-					continue
-				}
-				// If the neghbor has no current, we can skip it.
-				if regCurrentVec[neighbor] == [2]float64{0, 0} {
-					continue
-				}
-				// Calculate the dot product of the vector from the neighbor to the
-				// current region and the current vector of the neighbor.
-				// This will tell us how much of the current vector of the neighbor
-				// is flowing into the current region.
-				dot := dot2(normalize2(regToRegNeighborVec[neighbor][reg]), normalize2(regCurrentVec[neighbor]))
-
-				// If the dot product is positive, the neighbor is flowing into the
-				// current region, so it is part of the inflow vector.
-				if dot > 0 {
-					inflowVec = add2(inflowVec, scale2(regCurrentVec[neighbor], dot))
-				} else if dot < 0 {
-					// If the dot product is negative, the neighbor is flowing out of
-					// the current region, so it is part of the outflow vector.
-					outflowVec = add2(outflowVec, scale2(regCurrentVec[neighbor], -dot))
-				}
-			}
-
-			// The difference in magnitude between the inflow and outflow vectors
-			// indicates the pressure difference.
-			lenIn := len2(inflowVec)
-			lenOut := len2(outflowVec)
-			diff := lenIn - lenOut
-
-			log.Println("reg", reg, "pressure", regPressure[reg], "inflow", lenIn, "outflow", lenOut, "diff", diff)
-
-			// If we have a pressure difference, we need to adjust the current vector.
-			if regPressure[reg] != 0 {
-				// Loop through all neighbors and adjust the current vector.
-				for _, neighbor := range m.GetRegNeighbors(reg) {
-					if m.Elevation[neighbor] > 0 {
-						continue
-					}
-					// Skip higher pressure regions.
-					if regPressure[neighbor] > regPressure[reg] {
-						continue
-					}
-					// Calculate the dot product of the vector from the neighbor to the
-					// current region and the current vector of the neighbor.
-					// This will tell us how much of the current vector of the neighbor
-					// is flowing into the current region.
-					dot := dot2(normalize2(regToRegNeighborVec[neighbor][reg]), normalize2(regCurrentVec[neighbor]))
-					// If the dot product is positive, the neighbor is flowing into the
-					// current region, so it is part of the inflow vector.
-					if dot > 0 {
-						// Calculate the amount of the inflow vector that will be
-						// transferred to the neighbor.
-						transfer := dot * regPressure[reg]
-						// Add the transfer to the neighbor's current vector.
-						regCurrentVec[neighbor] = add2(regCurrentVec[neighbor], scale2(inflowVec, transfer))
-						// Subtract the transfer from the current region's current vector.
-						regCurrentVec[reg] = add2(regCurrentVec[reg], scale2(inflowVec, -transfer))
-					}
-				}
-			}
-		}
-
-		// Normalize the current vectors.
-		for reg := 0; reg < m.mesh.numRegions; reg++ {
-			// If the region is not an ocean region, skip it.
-			if m.Elevation[reg] > 0 {
-				continue
-			}
-			// Normalize the current vector.
-			regCurrentVec[reg] = normal2(regCurrentVec[reg])
-		}
-	}
-	m.RegionToOceanVec = regCurrentVec
-}
-
 // assignOceanCurrents will calculate the ocean currents for the map.
 // NOTE: THIS IS NOT WORKING YET!!!!!
 // For interesting approaches, see:
@@ -754,6 +262,116 @@ func (m *Geo) getCurrentSortOrder(revVecs [][2]float64, reverse bool) []int {
 	return orderedRegs
 }
 
+func (m *Geo) assignOceanCurrentsInflowOutflow() {
+	// Calculate the inflow and outflow of each ocean region, which can be used
+	// to calculate the ocean currents.
+
+	// We start off by setting the primary ocean current vectors and then iterate
+	// over the regions to calculate the inflow and outflow vectors, depending
+	// on the pressure in the region.
+	regCurrentVec := make([][2]float64, m.mesh.numRegions)
+
+	// Build the region to region neighbor vectors.
+	regToRegNeighborVec := m.getRegionToNeighborVec()
+
+	// Loop a few times to establis an equilibrium.
+	for i := 0; i < 100; i++ {
+		// Set the primary ocean current vectors.
+		m.seedOceanCurrents(regCurrentVec)
+
+		// Calculate the pressure in each ocean region.
+		regPressure := m.calcCurrentPressure(regCurrentVec)
+
+		// Calculate the inflow and outflow vectors based on the pressure difference.
+		for reg := 0; reg < m.mesh.numRegions; reg++ {
+			// If the region is not an ocean region, skip it.
+			if m.Elevation[reg] > 0 {
+				continue
+			}
+			// Calculate the inflow and outflow vectors.
+			// The inflow vector is the sum of the vectors of the neighbors
+			// that have a positive pressure.
+			// The outflow vector is the current vector.
+			inflowVec := [2]float64{0, 0}
+			outflowVec := [2]float64{0, 0}
+			for _, neighbor := range m.GetRegNeighbors(reg) {
+				// Skip neighbors that are not ocean regions.
+				if m.Elevation[neighbor] > 0 {
+					continue
+				}
+				// If the neghbor has no current, we can skip it.
+				if regCurrentVec[neighbor] == [2]float64{0, 0} {
+					continue
+				}
+				// Calculate the dot product of the vector from the neighbor to the
+				// current region and the current vector of the neighbor.
+				// This will tell us how much of the current vector of the neighbor
+				// is flowing into the current region.
+				dot := dot2(normalize2(regToRegNeighborVec[neighbor][reg]), normalize2(regCurrentVec[neighbor]))
+
+				// If the dot product is positive, the neighbor is flowing into the
+				// current region, so it is part of the inflow vector.
+				if dot > 0 {
+					inflowVec = add2(inflowVec, scale2(regCurrentVec[neighbor], dot))
+				} else if dot < 0 {
+					// If the dot product is negative, the neighbor is flowing out of
+					// the current region, so it is part of the outflow vector.
+					outflowVec = add2(outflowVec, scale2(regCurrentVec[neighbor], -dot))
+				}
+			}
+
+			// The difference in magnitude between the inflow and outflow vectors
+			// indicates the pressure difference.
+			lenIn := len2(inflowVec)
+			lenOut := len2(outflowVec)
+			diff := lenIn - lenOut
+
+			log.Println("reg", reg, "pressure", regPressure[reg], "inflow", lenIn, "outflow", lenOut, "diff", diff)
+
+			// If we have a pressure difference, we need to adjust the current vector.
+			if regPressure[reg] != 0 {
+				// Loop through all neighbors and adjust the current vector.
+				for _, neighbor := range m.GetRegNeighbors(reg) {
+					if m.Elevation[neighbor] > 0 {
+						continue
+					}
+					// Skip higher pressure regions.
+					if regPressure[neighbor] > regPressure[reg] {
+						continue
+					}
+					// Calculate the dot product of the vector from the neighbor to the
+					// current region and the current vector of the neighbor.
+					// This will tell us how much of the current vector of the neighbor
+					// is flowing into the current region.
+					dot := dot2(normalize2(regToRegNeighborVec[neighbor][reg]), normalize2(regCurrentVec[neighbor]))
+					// If the dot product is positive, the neighbor is flowing into the
+					// current region, so it is part of the inflow vector.
+					if dot > 0 {
+						// Calculate the amount of the inflow vector that will be
+						// transferred to the neighbor.
+						transfer := dot * regPressure[reg]
+						// Add the transfer to the neighbor's current vector.
+						regCurrentVec[neighbor] = add2(regCurrentVec[neighbor], scale2(inflowVec, transfer))
+						// Subtract the transfer from the current region's current vector.
+						regCurrentVec[reg] = add2(regCurrentVec[reg], scale2(inflowVec, -transfer))
+					}
+				}
+			}
+		}
+
+		// Normalize the current vectors.
+		for reg := 0; reg < m.mesh.numRegions; reg++ {
+			// If the region is not an ocean region, skip it.
+			if m.Elevation[reg] > 0 {
+				continue
+			}
+			// Normalize the current vector.
+			regCurrentVec[reg] = normal2(regCurrentVec[reg])
+		}
+	}
+	m.RegionToOceanVec = regCurrentVec
+}
+
 func (m *Geo) calcCurrentPressure(currentVecs [][2]float64) []float64 {
 	// Calculate the pressure in each region based on inflow and outflow.
 	// The pressure is the sum of the inflow and outflow vectors.
@@ -858,4 +476,293 @@ func (m *Geo) getRegionToNeighborVec() []map[int][2]float64 {
 		}
 	}
 	return regToNeighborVec
+}
+
+func (m *Geo) genOceanCurrents2() {
+	regCurrentVec := make([][2]float64, m.mesh.numRegions)
+
+	// Seed the ocean currents.
+	m.seedOceanCurrents(regCurrentVec)
+
+	// Build the region to region neighbor vectors.
+	regToRegNeighborVec := m.getRegionToNeighborVec()
+
+	deflectCurrent := func(r int) [2]float64 {
+		if m.Elevation[r] > 0 || regCurrentVec[r] == zero2 {
+			return [2]float64{0, 0}
+		}
+
+		// Check if the current vector is pointing into the land.
+		// If so, we need to deflect it.
+		currentVec := regCurrentVec[r]
+		maxDotLand := math.Inf(-1)
+		maxDotOcean := math.Inf(-1)
+		maxRegOcean := -1
+		for _, neighbor := range m.GetRegNeighbors(r) {
+			dot := dot2(normalize2(regToRegNeighborVec[r][neighbor]), normalize2(currentVec))
+			if m.Elevation[neighbor] > 0 {
+				if dot > maxDotLand {
+					maxDotLand = dot
+				}
+			} else {
+				if dot > maxDotOcean || maxRegOcean < 0 {
+					maxDotOcean = dot
+					maxRegOcean = neighbor
+				}
+			}
+		}
+
+		// If the max dot product for land is greater than the max dot product
+		// for ocean, we need to deflect the current vector.
+		if maxDotLand >= 0 && maxRegOcean >= 0 {
+			return normalize2(regToRegNeighborVec[r][maxRegOcean])
+		}
+		return currentVec
+	}
+	newVec := make([][2]float64, m.mesh.numRegions)
+
+	// Loop once so we can see what it looks like.
+	for i := 0; i < 1; i++ {
+		// Deflect the current vectors.
+		for r := range regCurrentVec {
+			newVec[r] = deflectCurrent(r)
+		}
+		regCurrentVec, newVec = newVec, regCurrentVec
+	}
+	m.RegionToOceanVec = regCurrentVec
+}
+
+func (m *Geo) assignOceanCurrents3() {
+	// Adapted from:
+	// https://github.com/FreezeDriedMangos/realistic-planet-generation-and-simulation/blob/main/src/Generate_Weather.js
+
+	// Assign the ocean currents to the mesh.
+	const latLeeway = 2
+	seedSupergroup := make(map[int]int)
+
+	//const numCurrentBandsPerHemisphere = 2
+	//const step = 90/numCurrentBandsPerHemisphere
+	//const seedLatsBands = []
+	//for(let l = step / 2; l < 90; l += step) seedLatsBands.push(l)
+
+	// initialize output variable
+	r_currents := make([][2]float64, m.mesh.numRegions)
+
+	// select seeds. all regions that are "close enough" to the center of a current band becomes a seed
+	var seeds []int
+	bands := [][2]float64{
+		{75.0, 60.0},
+		// {37.5, 22.5},
+		// {15.0, 0.01},
+	}
+	for _, band := range bands {
+		highLatBand := band[0]
+		lowLatBand := band[1]
+		//const highLatBand = 75.0 // 67.5
+		//const lowLatBand = 60.0  // 22.5
+		for r := 0; r < m.mesh.numRegions; r++ {
+			if m.Elevation[r] > 0 {
+				continue
+			}
+
+			lat := m.LatLon[r][0]
+			//lon := m.LatLon[r][1]
+
+			// let band = seedLatBands.filter(bandLat => Math.abs(lat-bandLat) < latLeeway)[0]
+			// if (band === undefined) continue
+			// seeds.push(r)
+
+			if math.Abs(math.Abs(lat)-lowLatBand) <= latLeeway {
+				seeds = append(seeds, r)
+				if lat > 0 {
+					seedSupergroup[r] = 0
+				} else {
+					seedSupergroup[r] = 1
+				}
+			} else if math.Abs(math.Abs(lat)-highLatBand) <= latLeeway {
+				seeds = append(seeds, r)
+				if lat > 0 {
+					seedSupergroup[r] = 2
+				} else {
+					seedSupergroup[r] = 3
+				}
+			}
+		}
+	}
+
+	// assign every region to the closest seed, accounting for obstacles (where land is an obstacle)
+	// a bunch of regions assigned to the same seed are called a group
+	groups := m.bfsMetaVoronoi(seeds, func(r int) bool { return m.Elevation[r] <= 0 }, true)
+	outRegs := make([]int, 0, 8)
+
+	// merge groups that are touching
+	for r := 0; r < m.mesh.numRegions; r++ {
+		if m.Elevation[r] > 0 {
+			continue
+		}
+		for _, sr := range m.mesh.r_circulate_r(outRegs, r) {
+			if groups[r] == groups[sr] {
+				continue
+			}
+			if groups[r] == -1 || groups[sr] == -1 {
+				continue
+			}
+			if seedSupergroup[groups[r]] != seedSupergroup[groups[sr]] {
+				continue // if r and sr are in different "bands", aka supergroups, do not merge them
+			}
+			// assign all regions belonging to the same group as sr, to the same group as r
+			for i := range groups {
+				if groups[i] == groups[sr] {
+					groups[i] = groups[r]
+				}
+			}
+		}
+	}
+
+	// determine how close each region is to the edge of its group
+	distFromEdge := initRegionSlice(m.mesh.numRegions)
+
+	frontier := make([]int, 0, m.mesh.numRegions)
+	groupmates := make([]int, 0, 100)
+	for _, seed := range seeds {
+		groupmates = groupmates[:0]
+		for r := range groups {
+			if groups[r] == seed {
+				groupmates = append(groupmates, r)
+			}
+		}
+		frontier = frontier[:0]
+		for _, r := range groupmates {
+			for _, nr := range m.mesh.r_circulate_r(outRegs, r) {
+				if groups[nr] != groups[r] {
+					frontier = append(frontier, r)
+					distFromEdge[r] = 0
+					break
+				}
+			}
+		}
+
+		for fidx := 0; fidx < len(frontier); fidx++ {
+			curr := frontier[fidx]
+			//frontier = frontier[1:]
+			for _, nr := range m.mesh.r_circulate_r(outRegs, curr) {
+				if distFromEdge[nr] < 0 {
+					distFromEdge[nr] = 9999
+				}
+				if distFromEdge[nr] <= distFromEdge[curr]+1 {
+					continue
+				}
+				distFromEdge[nr] = distFromEdge[curr] + 1
+				frontier = append(frontier, nr)
+			}
+		}
+
+		//assign current vectors
+		var maxDist int
+		for _, r := range groupmates {
+			if distFromEdge[r] > maxDist {
+				maxDist = distFromEdge[r]
+			}
+		}
+		for _, r := range groupmates {
+			var inwardDirRaw [2]float64
+			for _, nr := range m.mesh.r_circulate_r(outRegs, r) {
+				// if this neighbor has a smaller distance to edge, or belongs to a different gyre, the inward dir points away from it (so we add dirFromTo(nr, r), aka the dir away from nr)
+				if groups[nr] != groups[r] {
+					inwardDirRaw = add2(inwardDirRaw, m.dirVecFromToRegs(nr, r))
+				} else if distFromEdge[nr] < distFromEdge[r] {
+					inwardDirRaw = add2(inwardDirRaw, m.dirVecFromToRegs(nr, r))
+				} else if distFromEdge[nr] == distFromEdge[r] {
+					continue
+				} else {
+					// if the neighbor has a larger dist to the edge, the inward dir points towards it
+					inwardDirRaw = add2(inwardDirRaw, m.dirVecFromToRegs(r, nr))
+				}
+			}
+			// normalize inward dir
+			inwardDir := setMagnitude2(inwardDirRaw, 1)
+			var clockwise bool
+			clockwise = seedSupergroup[seed] == 1 || seedSupergroup[seed] == 2
+			var perpendicular [2]float64
+			if clockwise {
+				perpendicular = [2]float64{-inwardDir[1], inwardDir[0]}
+			} else {
+				perpendicular = [2]float64{inwardDir[1], -inwardDir[0]}
+			}
+			// since currents at gyre edges are a mess, we'll decrease their magnitude
+			// map.r_currents[r] = setMagnitude(perpendicular, 2*(1-distFromEdge[r]/maxDist))
+			r_currents[r] = perpendicular
+
+			// if(distFromEdge[r] === 0) map.r_currents[r] = setMagnitude(perpendicular, 0.4)
+		}
+	}
+
+	// TODO: Create a proper solution for ocean current vectors that
+	// doesn't affect vectors on land.
+	for i := 0; i < 4; i++ {
+		m.RegionToOceanVec = m.interpolateWindVecs(r_currents, 1)
+		// Reset all vectors that are not in the ocean
+		for r := 0; r < m.mesh.numRegions; r++ {
+			if m.Elevation[r] >= 0 {
+				m.RegionToOceanVec[r] = [2]float64{0, 0}
+			}
+		}
+		r_currents = m.RegionToOceanVec
+	}
+}
+
+// bfsMetaVoronoi is similar to distanceField, but instead of returning the distance to the closest seed, it returns the seed that is closest to the region.
+// TODO: Optimize, fix, maybe replace.
+func (m *BaseObject) bfsMetaVoronoi(seeds []int, includeCondition func(int) bool, forceIncludeIsolatedRegions bool) []int {
+	// Reset the random number generator.
+	m.resetRand()
+	rGroup := initRegionSlice(m.mesh.numRegions)
+	isSeed := make([]bool, m.mesh.numRegions)
+	for _, seed := range seeds {
+		isSeed[seed] = true
+	}
+
+	mesh := m.mesh
+	numRegions := mesh.numRegions
+
+	// Initialize the queue for the breadth first search with
+	// the seed regions.
+	queue := make([]int, len(seeds), numRegions)
+	for i, r := range seeds {
+		queue[i] = r
+		rGroup[r] = r
+	}
+
+	// Allocate a slice for the output of mesh.r_circulate_r.
+	outRegs := make([]int, 0, 6)
+
+	// Random search adapted from breadth first search.
+	// TODO: Improve the queue. Currently this is growing unchecked.
+	for queueOut := 0; queueOut < len(queue); queueOut++ {
+		pos := queueOut + m.rand.Intn(len(queue)-queueOut)
+		currentReg := queue[pos]
+		queue[pos] = queue[queueOut]
+		for _, nbReg := range mesh.r_circulate_r(outRegs, currentReg) {
+			if rGroup[nbReg] >= 0 || !includeCondition(nbReg) {
+				continue
+			}
+
+			// Grow the assigned region to the current region.
+			rGroup[nbReg] = rGroup[currentReg]
+			queue = append(queue, nbReg)
+		}
+
+		// If we have consumed over 1000000 elements in the queue,
+		// we reset the queue to the remaining elements.
+		if queueOut > 10000 {
+			n := copy(queue, queue[queueOut:])
+			queue = queue[:n]
+			queueOut = 0
+		}
+	}
+	return rGroup
+}
+
+func (m *Geo) getPreviousNeighbor(outregs []int, r int, vec [2]float64) int {
+	return m.getClosestNeighbor(outregs, r, [2]float64{-vec[0], -vec[1]})
 }

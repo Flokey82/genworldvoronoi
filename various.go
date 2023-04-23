@@ -170,33 +170,27 @@ func calcVecFromLatLong(lat1, lon1, lat2, lon2 float64) [2]float64 {
 
 	// Calculate the vector between two lat/long pairs using the bearing we calculate
 	// from the lat/long pairs.
-	bearing := calcBearing(lat1, lon1, lat2, lon2)
-
 	// Note that the bearing is 0 when facing north, and increases clockwise, so we need to
 	// convert it so that int is 0 when facing east, and increases counter-clockwise (and to radians).
-	bearing = degToRad(90 - bearing)
+	bearing := math.Pi/2 - calcBearingRad(lat1, lon1, lat2, lon2)
 
-	// Convert the bearing to a vector.
-	v := [2]float64{math.Cos(bearing), math.Sin(bearing)}
-
-	// Scale the vector to the distance between the two points.
+	// Convert the bearing to a vector and scale it to the distance between the two points.
 	dist := haversine(lat1, lon1, lat2, lon2)
-
-	return [2]float64{v[0] * dist, v[1] * dist}
+	return [2]float64{math.Cos(bearing) * dist, math.Sin(bearing) * dist}
 }
 
 // calcBearing calculates the bearing between two lat/long pairs.
-func calcBearing(lat1, lon1, lat2, lon2 float64) float64 {
+func calcBearingRad(lat1, lon1, lat2, lon2 float64) float64 {
 	// convert to radians
 	lat1 = degToRad(lat1)
 	lon1 = degToRad(lon1)
 	lat2 = degToRad(lat2)
 	lon2 = degToRad(lon2)
 
-	y := math.Sin(lon2-lon1) * math.Cos(lat2)
-	x := math.Cos(lat1)*math.Sin(lat2) - math.Sin(lat1)*math.Cos(lat2)*math.Cos(lon2-lon1)
-
-	return radToDeg(math.Atan2(y, x))
+	return math.Atan2(
+		math.Sin(lon2-lon1)*math.Cos(lat2),                                              // y
+		math.Cos(lat1)*math.Sin(lat2)-math.Sin(lat1)*math.Cos(lat2)*math.Cos(lon2-lon1), // x
+	)
 }
 
 // latLonToCartesian converts latitude and longitude to x, y, z coordinates.
