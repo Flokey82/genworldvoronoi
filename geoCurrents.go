@@ -623,16 +623,17 @@ func (m *Geo) assignOceanCurrents3() {
 	distFromEdge := initRegionSlice(m.mesh.numRegions)
 
 	frontier := make([]int, 0, m.mesh.numRegions)
-	groupmates := make([]int, 0, 100)
-	for _, seed := range seeds {
-		groupmates = groupmates[:0]
-		for r := range groups {
-			if groups[r] == seed {
-				groupmates = append(groupmates, r)
-			}
+	groupmates := make([][]int, m.mesh.numRegions)
+	for r, g := range groups {
+		if g != -1 {
+			groupmates[g] = append(groupmates[g], r)
 		}
+	}
+
+	for _, seed := range seeds {
 		frontier = frontier[:0]
-		for _, r := range groupmates {
+		groupmatesForSeed := groupmates[seed]
+		for _, r := range groupmatesForSeed {
 			for _, nr := range m.mesh.r_circulate_r(outRegs, r) {
 				if groups[nr] != groups[r] {
 					frontier = append(frontier, r)
@@ -644,7 +645,7 @@ func (m *Geo) assignOceanCurrents3() {
 
 		for fidx := 0; fidx < len(frontier); fidx++ {
 			curr := frontier[fidx]
-			//frontier = frontier[1:]
+			// frontier = frontier[1:]
 			for _, nr := range m.mesh.r_circulate_r(outRegs, curr) {
 				if distFromEdge[nr] < 0 {
 					distFromEdge[nr] = 9999
@@ -657,14 +658,14 @@ func (m *Geo) assignOceanCurrents3() {
 			}
 		}
 
-		//assign current vectors
+		// assign current vectors
 		var maxDist int
-		for _, r := range groupmates {
+		for _, r := range groupmatesForSeed {
 			if distFromEdge[r] > maxDist {
 				maxDist = distFromEdge[r]
 			}
 		}
-		for _, r := range groupmates {
+		for _, r := range groupmatesForSeed {
 			var inwardDirRaw [2]float64
 			for _, nr := range m.mesh.r_circulate_r(outRegs, r) {
 				// if this neighbor has a smaller distance to edge, or belongs to a different gyre, the inward dir points away from it (so we add dirFromTo(nr, r), aka the dir away from nr)
@@ -680,19 +681,18 @@ func (m *Geo) assignOceanCurrents3() {
 				}
 			}
 			// normalize inward dir
-			inwardDir := setMagnitude2(inwardDirRaw, 1)
-			var clockwise bool
-			clockwise = seedSupergroup[seed] == 1 || seedSupergroup[seed] == 2
-			var perpendicular [2]float64
-			if clockwise {
-				perpendicular = [2]float64{-inwardDir[1], inwardDir[0]}
-			} else {
-				perpendicular = [2]float64{inwardDir[1], -inwardDir[0]}
-			}
+			inwardDir := normal2(inwardDirRaw)
+
+			clockwise := seedSupergroup[seed] == 1 || seedSupergroup[seed] == 2
 			// since currents at gyre edges are a mess, we'll decrease their magnitude
 			// map.r_currents[r] = setMagnitude(perpendicular, 2*(1-distFromEdge[r]/maxDist))
-			r_currents[r] = perpendicular
-
+			if clockwise {
+				r_currents[r][0] = -inwardDir[1]
+				r_currents[r][1] = inwardDir[0]
+			} else {
+				r_currents[r][0] = inwardDir[1]
+				r_currents[r][1] = -inwardDir[0]
+			}
 			// if(distFromEdge[r] === 0) map.r_currents[r] = setMagnitude(perpendicular, 0.4)
 		}
 	}
@@ -704,7 +704,8 @@ func (m *Geo) assignOceanCurrents3() {
 		// Reset all vectors that are not in the ocean
 		for r := 0; r < m.mesh.numRegions; r++ {
 			if m.Elevation[r] >= 0 {
-				m.RegionToOceanVec[r] = [2]float64{0, 0}
+				m.RegionToOceanVec[r][0] = 0.0
+				m.RegionToOceanVec[r][1] = 0.0
 			}
 		}
 		r_currents = m.RegionToOceanVec
