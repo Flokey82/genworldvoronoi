@@ -24,6 +24,7 @@ type BaseObject struct {
 	Rainfall          []float64         // Point / region rainfall
 	Flux              []float64         // Point / region hydrology: throughflow of rainfall
 	Waterpool         []float64         // Point / region hydrology: water pool depth
+	OceanTemperature  []float64         // Ocean temperatures
 	Downhill          []int             // Point / region mapping to its lowest neighbor
 	Drainage          []int             // Point / region mapping of pool to its drainage region
 	Waterbodies       []int             // Point / region mapping of pool to waterbody ID
@@ -63,6 +64,7 @@ func newBaseObject(seed int64, sphere *SphereMesh) *BaseObject {
 		Flux:              make([]float64, mesh.numRegions),
 		Waterpool:         make([]float64, mesh.numRegions),
 		Rainfall:          make([]float64, mesh.numRegions),
+		OceanTemperature:  make([]float64, mesh.numRegions),
 		Downhill:          make([]int, mesh.numRegions),
 		Drainage:          make([]int, mesh.numRegions),
 		Waterbodies:       make([]int, mesh.numRegions),
@@ -307,7 +309,7 @@ func (m *BaseObject) dirVecFromToRegs(from, to int) [2]float64 {
 }
 
 // getClosestNeighbor returns the closest neighbor of r in the given direction.
-func (m *BaseObject) getClosestNeighbor(r int, vec [2]float64) int {
+func (m *BaseObject) getClosestNeighbor(outregs []int, r int, vec [2]float64) int {
 	if vec[0] == 0 && vec[1] == 0 {
 		return r
 	}
@@ -318,7 +320,7 @@ func (m *BaseObject) getClosestNeighbor(r int, vec [2]float64) int {
 	bestDist := math.Inf(1)
 	bestR := -1
 
-	neighbors := m.GetRegNeighbors(r)
+	neighbors := m.mesh.r_circulate_r(outregs, r)
 	for i := 0; i < len(neighbors); i++ {
 		latLon2 := m.LatLon[neighbors[i]]
 		dist := haversine(lat, lon, latLon2[0], latLon2[1])

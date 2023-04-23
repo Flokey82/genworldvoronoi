@@ -152,6 +152,39 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 			// Return the color.
 			return genColor(cb.At(val), math.Pow(val, 1/n))
 		}
+	case 21:
+		// Get a blue to red temperature gradient.
+
+		// Create the color gradient.
+		colorGrad := colorgrad.NewGradient()
+		colorGrad.Colors(
+			color.RGBA{0, 0, 255, 255},
+			color.RGBA{0, 255, 255, 255},
+			color.RGBA{0, 255, 0, 255},
+			color.RGBA{255, 255, 0, 255},
+			color.RGBA{255, 0, 0, 255},
+		)
+		cb, err := colorGrad.Build()
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// Cache all region temperatures.
+		// This is a bit greedy, but it helps with normalizing the temperature.
+		temp := make([]float64, m.mesh.numRegions)
+		if m.OceanTemperature != nil {
+			temp = m.OceanTemperature
+		}
+		// Get min and max temperature.
+		minTemp, maxTemp := minMax(temp)
+
+		// Create the color function.
+		colorFunc = func(i int, n float64) color.Color {
+			// Calculate the color of the region.
+			val := (temp[i] - minTemp) / (maxTemp - minTemp)
+			// Return the color.
+			return genColor(cb.At(val), math.Pow(val, 1/n))
+		}
 	default:
 		vals := m.Elevation
 		if displayMode == 1 {

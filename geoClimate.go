@@ -278,7 +278,7 @@ func (m *Geo) assignWindVectors() {
 		outRegs := make([]int, 0, 8)
 		for r, windDir := range regWindVec {
 			// slowdown/speedup according to elevation change
-			blowsPastReg := m.getClosestNeighbor(r, windDir)
+			blowsPastReg := m.getClosestNeighbor(outRegs, r, windDir)
 
 			// Elevation change is negative if the current region is higher than the region the wind blows past.
 			// This will result in wind slowing down if it blows towards a mountain and to speed up if it blows

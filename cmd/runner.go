@@ -23,7 +23,7 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	sp, err := genworldvoronoi.NewMap(1234, 25, 400000, 0.0)
+	sp, err := genworldvoronoi.NewMap(1234, 25, 200000, 0.0)
 	if err != nil {
 		log.Fatal(err)
 	}

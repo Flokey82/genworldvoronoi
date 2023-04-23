@@ -120,11 +120,12 @@ func (m *Geo) assignOceanCurrents3() {
 
 	// assign every region to the closest seed, accounting for obstacles (where land is an obstacle)
 	// a bunch of regions assigned to the same seed are called a group
-	groups := m.bfsMetaVoronoi(seeds, func(r int) bool { return m.Elevation[r] < 0 }, true)
+	groups := m.bfsMetaVoronoi(seeds, func(r int) bool { return m.Elevation[r] <= 0 }, true)
+	outRegs := make([]int, 0, 8)
 
 	// merge groups that are touching
 	for r := 0; r < m.mesh.numRegions; r++ {
-		for _, sr := range m.GetRegNeighbors(r) {
+		for _, sr := range m.mesh.r_circulate_r(outRegs, r) {
 			if groups[r] == groups[sr] {
 				continue
 			}
@@ -134,7 +135,7 @@ func (m *Geo) assignOceanCurrents3() {
 			if seedSupergroup[groups[r]] != seedSupergroup[groups[sr]] {
 				continue // if r and sr are in different "bands", aka supergroups, do not merge them
 			}
-			// assign all reigons belonging to the same group as sr, to the same group as r
+			// assign all regions belonging to the same group as sr, to the same group as r
 			for i := range groups {
 				if groups[i] == groups[sr] {
 					groups[i] = groups[r]
@@ -146,31 +147,30 @@ func (m *Geo) assignOceanCurrents3() {
 	// determine how close each region is to the edge of its group
 	distFromEdge := initRegionSlice(m.mesh.numRegions)
 
+	frontier := make([]int, 0, m.mesh.numRegions)
+	groupmates := make([]int, 0, 100)
 	for _, seed := range seeds {
-		var groupmates []int
+		groupmates = groupmates[:0]
 		for r := range groups {
 			if groups[r] == seed {
 				groupmates = append(groupmates, r)
 			}
 		}
-		var edge []int
+		frontier = frontier[:0]
 		for _, r := range groupmates {
-			for _, nr := range m.GetRegNeighbors(r) {
+			for _, nr := range m.mesh.r_circulate_r(outRegs, r) {
 				if groups[nr] != groups[r] {
-					edge = append(edge, r)
+					frontier = append(frontier, r)
+					distFromEdge[r] = 0
 					break
 				}
 			}
 		}
-		for _, r := range edge {
-			distFromEdge[r] = 0
-		}
 
-		frontier := edge
-		for len(frontier) > 0 {
-			curr := frontier[0]
-			frontier = frontier[1:]
-			for _, nr := range m.GetRegNeighbors(curr) {
+		for fidx := 0; fidx < len(frontier); fidx++ {
+			curr := frontier[fidx]
+			//frontier = frontier[1:]
+			for _, nr := range m.mesh.r_circulate_r(outRegs, curr) {
 				if distFromEdge[nr] < 0 {
 					distFromEdge[nr] = 9999
 				}
@@ -191,7 +191,7 @@ func (m *Geo) assignOceanCurrents3() {
 		}
 		for _, r := range groupmates {
 			var inwardDirRaw [2]float64
-			for _, nr := range m.GetRegNeighbors(r) {
+			for _, nr := range m.mesh.r_circulate_r(outRegs, r) {
 				// if this neighbor has a smaller distance to edge, or belongs to a different gyre, the inward dir points away from it (so we add dirFromTo(nr, r), aka the dir away from nr)
 				if groups[nr] != groups[r] {
 					inwardDirRaw = add2(inwardDirRaw, m.dirVecFromToRegs(nr, r))
@@ -221,50 +221,171 @@ func (m *Geo) assignOceanCurrents3() {
 			// if(distFromEdge[r] === 0) map.r_currents[r] = setMagnitude(perpendicular, 0.4)
 		}
 	}
-	m.RegionToOceanVec = m.interpolateWindVecs(r_currents, 4)
+
+	// TODO: Create a proper solution for ocean current vectors that
+	// doesn't affect vectors on land.
+	for i := 0; i < 4; i++ {
+		m.RegionToOceanVec = m.interpolateWindVecs(r_currents, 1)
+		// Reset all vectors that are not in the ocean
+		for r := 0; r < m.mesh.numRegions; r++ {
+			if m.Elevation[r] >= 0 {
+				m.RegionToOceanVec[r] = [2]float64{0, 0}
+			}
+		}
+		r_currents = m.RegionToOceanVec
+	}
+	m.assignRegionWaterTemperature(false)
 }
 
 // bfsMetaVoronoi is similar to distanceField, but instead of returning the distance to the closest seed, it returns the seed that is closest to the region.
 // TODO: Optimize, fix, maybe replace.
-func (m *Geo) bfsMetaVoronoi(seeds []int, includeCondition func(int) bool, forceIncludeIsolatedRegions bool) []int {
+func (m *BaseObject) bfsMetaVoronoi(seeds []int, includeCondition func(int) bool, forceIncludeIsolatedRegions bool) []int {
+	// Reset the random number generator.
+	m.resetRand()
 	rGroup := initRegionSlice(m.mesh.numRegions)
 	isSeed := make([]bool, m.mesh.numRegions)
 	for _, seed := range seeds {
 		isSeed[seed] = true
 	}
 
-	for r := 0; r < m.mesh.numRegions; r++ {
-		if includeCondition != nil && !includeCondition(r) {
-			continue
-		}
+	mesh := m.mesh
+	numRegions := mesh.numRegions
 
-		// bfs from r. first seed found is the one r gets assigned to
-		frontier := []int{r}
-		visited := make([]bool, m.mesh.numRegions)
-		for len(frontier) > 0 {
-			curr := frontier[0]
-			frontier = frontier[1:]
-			if isSeed[curr] {
-				rGroup[r] = curr
-				break
-			}
-			if visited[curr] || (includeCondition != nil && !includeCondition(curr)) {
+	// Initialize the queue for the breadth first search with
+	// the seed regions.
+	queue := make([]int, len(seeds), numRegions)
+	for i, r := range seeds {
+		queue[i] = r
+		rGroup[r] = r
+	}
+
+	// Allocate a slice for the output of mesh.r_circulate_r.
+	outRegs := make([]int, 0, 6)
+
+	// Random search adapted from breadth first search.
+	// TODO: Improve the queue. Currently this is growing unchecked.
+	for queueOut := 0; queueOut < len(queue); queueOut++ {
+		pos := queueOut + m.rand.Intn(len(queue)-queueOut)
+		currentReg := queue[pos]
+		queue[pos] = queue[queueOut]
+		for _, nbReg := range mesh.r_circulate_r(outRegs, currentReg) {
+			if rGroup[nbReg] >= 0 || !includeCondition(nbReg) {
 				continue
 			}
-			visited[curr] = true
 
-			for _, neighbor := range m.GetRegNeighbors(curr) {
-				if visited[neighbor] || (includeCondition != nil && !includeCondition(neighbor)) {
-					continue
-				}
-				frontier = append(frontier, neighbor)
-			}
+			// Grow the assigned region to the current region.
+			rGroup[nbReg] = rGroup[currentReg]
+			queue = append(queue, nbReg)
 		}
-		if rGroup[r] == 0 && forceIncludeIsolatedRegions {
-			rGroup[r] = r
+
+		// If we have consumed over 1000000 elements in the queue,
+		// we reset the queue to the remaining elements.
+		if queueOut > 10000 {
+			n := copy(queue, queue[queueOut:])
+			queue = queue[:n]
+			queueOut = 0
 		}
 	}
 	return rGroup
+}
+
+func (m *Geo) assignRegionWaterTemperature(isInit bool) {
+	prevTemperature := make([]float64, m.mesh.numRegions)
+	_, maxElev := minMax(m.Elevation)
+	newTemperature := make([]float64, m.mesh.numRegions)
+	baseTemperature := make([]float64, m.mesh.numRegions)
+	for r := 0; r < m.mesh.numRegions; r++ {
+		if m.Elevation[r] <= 0 {
+			prevTemperature[r] = m.getRegTemperature(r, maxElev)
+		} else {
+			newTemperature[r] = 0.5
+		}
+	}
+
+	outregs := make([]int, 0, 8)
+	for r := 0; r < m.mesh.numRegions; r++ {
+		if m.Elevation[r] <= 0 {
+			continue
+		}
+
+		// base
+		//lat := m.LatLon[r][0]
+		//absLat := math.Abs(lat)
+		//lon :=  m.LatLon[r][1]
+		//absLat := math.Abs(lat - m.getSunLattitude())
+		startTemp := prevTemperature[r]
+		newTemperature[r] = startTemp
+		baseTemperature[r] = startTemp
+
+		if isInit {
+			continue
+		}
+
+		// diffusion
+		neighbors := m.mesh.r_circulate_r(outregs, r)
+		neighborAverage := newTemperature[r]
+		neighborCount := 1
+		for i := 0; i < len(neighbors); i++ {
+			nr := neighbors[i]
+			if m.Elevation[nr] <= 0 {
+				neighborAverage += newTemperature[nr]
+				neighborCount++
+			}
+		}
+		neighborAverage /= float64(neighborCount)
+
+		newTemperature[r] = 0.75*newTemperature[r] + 0.25*neighborAverage
+
+		//newTemperature[r] = clamp(0, 1, newTemperature[r] - map.r_clouds[r]/2)
+	}
+
+	if !isInit {
+		const transferIn = 0.01
+		const transferOut = 1.0 - transferIn
+		for step := 0; step < 30; step++ {
+			movedTemp := make([][]float64, m.mesh.numRegions)
+			for r := 0; r < m.mesh.numRegions; r++ {
+				// add in the "pulled temp"
+				movedTemp[r] = append(movedTemp[r], newTemperature[r])
+
+				pr := m.getPreviousNeighbor(outregs, r, m.RegionToOceanVec[r])
+				if m.Elevation[pr] <= 0 {
+					movedTemp[r] = append(movedTemp[r], prevTemperature[pr])
+				}
+
+				// add in pushed temp
+				nr := m.getClosestNeighbor(outregs, r, m.RegionToOceanVec[r])
+				if nr == r || m.Elevation[nr] > 0 {
+					continue
+				}
+				//const heldHeat = newTemperature[r] - baseTemperature[r]
+				//const potentialHeat = newTemperature[r] - baseTemperature[nr]
+
+				//movedTemp[nr] = movedTemp[nr]? movedTemp[nr] : 0
+				//movedTemp[r] -= map.r_currents[r]*heldHeat
+				//movedTemp[nr] += map.r_currents[r]*potentialHeat
+				//movedTemp[nr] = movedTemp[nr]? movedTemp[nr] : []float64{}
+				movedTemp[nr] = append(movedTemp[nr], transferOut*prevTemperature[r]+transferIn*newTemperature[r])
+			}
+
+			for r := 0; r < m.mesh.numRegions; r++ {
+				//newTemperature[r] += movedTemp[r]
+				if movedTemp[r] != nil && len(movedTemp[r]) > 0 {
+					newTemperature[r] = movedTemp[r][0]
+					for i := 1; i < len(movedTemp[r]); i++ {
+						newTemperature[r] += movedTemp[r][i]
+					}
+					newTemperature[r] /= float64(len(movedTemp[r]))
+				}
+				//if (movedTemp[r] !== undefined && movedTemp[r].length > 0) newTemperature[r] = movedTemp[r].reduce((acc, temp) => acc + temp, 0) / movedTemp[r].length
+			}
+		}
+	}
+	m.OceanTemperature = newTemperature
+}
+
+func (m *Geo) getPreviousNeighbor(outregs []int, r int, vec [2]float64) int {
+	return m.getClosestNeighbor(outregs, r, [2]float64{-vec[0], -vec[1]})
 }
 
 func (m *Geo) assignOceanCurrentsInflowOutflow() {
