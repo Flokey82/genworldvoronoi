@@ -167,3 +167,34 @@ func MakeSphere(seed int64, numPoints int, jitter float64) (*SphereMesh, error) 
 		LatLon:       latLon,
 	}, nil
 }
+
+// MakeCoarseSphereMesh returns a triangle mesh generating from every n-th point of the sphere mesh.
+func (m *SphereMesh) MakeCoarseSphereMesh(n int) (*SphereMesh, error) {
+	// Convert the lat/lon coordinates to x,y,z. (skip the existing south pole)
+	var xyz []float64
+	for r := 0; r < len(m.LatLon)-1; r += n {
+		xyz = append(xyz, latLonToCartesian(m.LatLon[r][0], m.LatLon[r][1])...)
+	}
+
+	// Map the sphere on a plane using the stereographic projection.
+	xy := stereographicProjection(xyz)
+
+	// Create a Delaunay triangulation of the points.
+	pts := make([]delaunay.Point, 0, len(xy)/2)
+	for i := 0; i < len(xy); i += 2 {
+		pts = append(pts, delaunay.Point{X: xy[i], Y: xy[i+1]})
+	}
+	tri, err := delaunay.Triangulate(pts)
+	if err != nil {
+		return nil, err
+	}
+
+	// Close the hole at the south pole.
+	xyz = append(xyz, 0, 0, 1)
+	tri = addSouthPoleToMesh((len(xyz)/3)-1, tri)
+	return &SphereMesh{
+		TriangleMesh: NewTriangleMesh(len(m.LatLon), tri.Triangles, tri.Halfedges),
+		XYZ:          xyz,
+		LatLon:       m.LatLon,
+	}, nil
+}
