@@ -51,7 +51,6 @@ func main() {
 	router.HandleFunc("/geojson_cities/{z}/{la1}/{lo1}/{la2}/{lo2}", geoJSONCitiesHandler)
 	router.HandleFunc("/geojson_borders/{z}/{la1}/{lo1}/{la2}/{lo2}", geoJSONBorderHandler)
 	if useGlobe {
-		//router.PathPrefix("/").Handler(http.FileServer(http.Dir("static_globe")))
 		router.PathPrefix("/").Handler(http.FileServer(http.Dir("static_cesium")))
 	} else {
 		router.PathPrefix("/").Handler(http.FileServer(http.Dir("static")))

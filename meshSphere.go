@@ -172,8 +172,10 @@ func MakeSphere(seed int64, numPoints int, jitter float64) (*SphereMesh, error) 
 func (m *SphereMesh) MakeCoarseSphereMesh(n int) (*SphereMesh, error) {
 	// Convert the lat/lon coordinates to x,y,z. (skip the existing south pole)
 	var xyz []float64
+	var latLon [][2]float64
 	for r := 0; r < len(m.LatLon)-1; r += n {
 		xyz = append(xyz, latLonToCartesian(m.LatLon[r][0], m.LatLon[r][1])...)
+		latLon = append(latLon, m.LatLon[r])
 	}
 
 	// Map the sphere on a plane using the stereographic projection.
@@ -192,9 +194,13 @@ func (m *SphereMesh) MakeCoarseSphereMesh(n int) (*SphereMesh, error) {
 	// Close the hole at the south pole.
 	xyz = append(xyz, 0, 0, 1)
 	tri = addSouthPoleToMesh((len(xyz)/3)-1, tri)
+	latLon = append(latLon, [2]float64{-90.0, 45.0})
+
+	// TODO: Re-use the existing lat/lon and xyz arrays and simply provide means
+	// to map the new indices to the old ones.
 	return &SphereMesh{
 		TriangleMesh: NewTriangleMesh(len(m.LatLon), tri.Triangles, tri.Halfedges),
 		XYZ:          xyz,
-		LatLon:       m.LatLon,
+		LatLon:       latLon,
 	}, nil
 }
