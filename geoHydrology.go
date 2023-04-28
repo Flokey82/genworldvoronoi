@@ -17,6 +17,7 @@ const (
 func (m *Geo) assignHydrology() {
 	maxAttempts := 3
 	erosionAmount := 0.01 // Erode 1% of delta-h per pass.
+	outRegs := make([]int, 0, 8)
 
 	// HACK: Fill all sinks that are below sea level and a single region
 	// below sea level.
@@ -24,7 +25,7 @@ Loop:
 	for _, r := range m.GetSinks(false, false) {
 		// Check if all neighbors are above sea level.
 		lowest := math.Inf(0)
-		for _, nb := range m.GetRegNeighbors(r) {
+		for _, nb := range m.r_circulate_r(outRegs, r) {
 			if !m.isRegBelowOrAtSeaLevelOrPool(r) {
 				continue Loop
 			}

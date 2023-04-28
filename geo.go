@@ -128,7 +128,7 @@ func (m *Geo) generateGeology() {
 	log.Println("Done ocean currents in ", time.Since(start).String())
 
 	// Hacky: Generate temperatures.
-	transportTemp := false
+	transportTemp := true
 	start = time.Now()
 	// TODO: Do iterative steps since the water temperature will influence
 	// the air temperature and vice versa.

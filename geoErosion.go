@@ -32,6 +32,10 @@ func (m *Geo) Erode(amount float64) []float64 {
 	newh := make([]float64, m.SphereMesh.numRegions)
 
 	// Get the erosion rate for all regions.
+	// TODO: https://www.youtube.com/watch?v=UBivwxBgdPQ (How rivers move)
+	//
+	// Lane's balance (a) describes how changes in sediment load, sediment size,
+	// slope, and discharge determine whether a stream system will aggrade or incise.
 	var er []float64
 	if useAlternative {
 		er = m.GetErosionRate2()

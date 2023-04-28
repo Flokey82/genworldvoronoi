@@ -240,11 +240,19 @@ func (m *Geo) assignRainfallBasic() {
 		rainShadow:  0.9,
 		evaporation: 0.9,
 	}
+
+	// Factor for evaporation from rivers, sea and pools.
 	humidityFromRiver := 1.0
 	humidityFromSea := 1.0
 	humidityFromPool := 1.0
-	evaporateRivers := true
-	evaporatePools := false
+
+	// Sources of moisture.
+	evaporateRivers := true // Evaporate moisture from rivers.
+	evaporatePools := false // Evaporate moisture from water pools.
+
+	// Number of steps to perform.
+	stepsTransport := 2     // Number of moisture transport steps to perform.
+	stepsInterpolation := 2 // Number of interpolation steps to perform on the moisture and rainfall.
 
 	_, maxFlux := minMax(m.Flux)
 	_, maxPool := minMax(m.Waterpool)
@@ -309,19 +317,54 @@ func (m *Geo) assignRainfallBasic() {
 	// NOTE: Since we start and stop at +- 180° long, we need to run the code several times
 	// to ensure that moisture is pushed across the longitude wrap-around.
 	outRegs := make([]int, 0, 8)
-	for i := 0; i < 4; i++ {
+
+	// Cache the wind vectors and the dot product of the wind vector and the vector from the
+	// region to its neighbors. These values do not change here, so we can safely cache them.
+	//
+	// This will allow us to transport moisture from the regions up-wind to the regions
+	// quickly since we do not recalculate the wind vectors and the dot product for each
+	// region on each iteration.
+
+	// Calculate the wind vectors in lat/lon coordinates.
+	localWindVecWithLatLon := make([][2]float64, len(m.RegionToWindVecLocal))
+	for r := range localWindVecWithLatLon {
+		rL := m.LatLon[r]
+
+		// Calculate the "end" of the wind vector in lat/lon coordinates.
+		v2Lat, v2Lon := addVecToLatLong(rL[0], rL[1], regWindVec[r])
+		// Calculate the cartesian vector from the region to the end of the wind vector.
+		// ... which might just be the wind vector itself?
+		// TODO: Check if this is correct and if we might just be able to use the wind vector
+		// itself.
+		localWindVecWithLatLon[r] = normal2(calcVecFromLatLong(rL[0], rL[1], v2Lat, v2Lon))
+		// localWindVecWithLatLon[nbReg] = normal2(calcVecFromLatLong(nL[0], nL[1], nL[0]+regWindVec[nbReg][1], nL[1]+regWindVec[nbReg][0]))
+	}
+
+	// Calculate the dot product of the wind vector and the vector from the region to its
+	// neighbors.
+	dotToNeighbors := make([][]float64, len(m.RegionToWindVecLocal))
+	for r := range dotToNeighbors {
+		rL := m.LatLon[r]
+		for _, nbReg := range m.SphereMesh.r_circulate_r(outRegs, r) {
+			nL := m.LatLon[nbReg]
+
+			// TODO: Check dot product of wind vector (r) and neighbour->r.
+			vVec := localWindVecWithLatLon[nbReg]
+			nVec := normal2(calcVecFromLatLong(nL[0], nL[1], rL[0], rL[1]))
+			dotToNeighbors[r] = append(dotToNeighbors[r], dot2(vVec, nVec))
+		}
+	}
+
+	// Calculate the humidity for each region and transport it to the up-wind regions.
+	for i := 0; i < stepsTransport; i++ {
 		for _, r := range windOrderRegs {
+			// Calculate humidity.
 			var humidity float64
 
-			// Calculate humidity.
-			for _, nbReg := range m.SphereMesh.r_circulate_r(outRegs, r) {
-				rL := m.LatLon[r]
-				nL := m.LatLon[nbReg]
-
-				// TODO: Check dot product of wind vector (r) and neighbour->r.
-				vVec := normal2(calcVecFromLatLong(nL[0], nL[1], nL[0]+regWindVec[nbReg][1], nL[1]+regWindVec[nbReg][0]))
-				nVec := normal2(calcVecFromLatLong(nL[0], nL[1], rL[0], rL[1]))
-				dotV := dot2(vVec, nVec)
+			// Use the cached dot product of the wind vector and the vector from the region to its neighbors
+			// to determine how much moisture to transport from the neighbor regions.
+			for i, nbReg := range m.SphereMesh.r_circulate_r(outRegs, r) {
+				dotV := dotToNeighbors[r][i]
 
 				// Check if the neighbor region is up-wind (that the wind blows from neighbor_r to r) / dotV is positive.
 				if dotV > 0.0 {
@@ -347,7 +390,9 @@ func (m *Geo) assignRainfallBasic() {
 			m.Moisture[r] = humidity - rainfall
 		}
 	}
-	m.interpolateRainfallMoisture(5)
+
+	// Interpolate the rainfall and moisture values.
+	m.interpolateRainfallMoisture(stepsInterpolation)
 }
 
 func (m *Geo) interpolateRainfallMoisture(interpolationSteps int) {
