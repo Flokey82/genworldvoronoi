@@ -5,6 +5,7 @@ import (
 	"math"
 	"math/rand"
 	"sort"
+	"sync"
 
 	"github.com/Flokey82/go_gens/utils"
 	"github.com/Flokey82/go_gens/vectors"
@@ -547,4 +548,46 @@ func genColor(col color.Color, intensity float64) color.Color {
 	col2.B = uint8(float64(255) * float64(cb) / float64(0xffff))
 	col2.A = 255
 	return col2
+}
+
+func kickOffNChunkWorkers(n, totalItems int, fn func(start, end int)) {
+	var wg sync.WaitGroup
+	var chunkStart int
+	chunkSize := (totalItems / n) + 1
+	for i := 0; i < n; i++ {
+		curChunk := chunkSize
+		if rem := totalItems - chunkStart; rem < curChunk {
+			curChunk = rem
+		}
+		if curChunk <= 0 {
+			break
+		}
+		wg.Add(1)
+		go func(start, end int) {
+			fn(start, end)
+			wg.Done()
+		}(chunkStart, chunkStart+curChunk)
+		chunkStart += curChunk
+	}
+	wg.Wait()
+}
+
+// randPerm returns a random permutation of the given slice indices.
+// This works like rand.Perm, but it reuses the same slice.
+func (m *BaseObject) randPerm(perm []int, n int) []int {
+	perm = perm[:utils.Min(cap(perm), n)]
+	if diff := len(perm) - n; diff < 0 {
+		perm = append(perm, make([]int, -diff)...)
+	}
+	// In the following loop, the iteration when i=0 always swaps m[0] with m[0].
+	// A change to remove this useless iteration is to assign 1 to i in the init
+	// statement. But Perm also effects r. Making this change will affect
+	// the final state of r. So this change can't be made for compatibility
+	// reasons for Go 1.
+	for i := 0; i < n; i++ {
+		j := m.rand.Intn(i + 1)
+		perm[i] = perm[j]
+		perm[j] = i
+	}
+	return perm
 }

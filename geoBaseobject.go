@@ -616,6 +616,8 @@ func (m *BaseObject) FillSinks(randEpsilon bool) []float64 {
 	// Loop until no more changes are made.
 	var epsilon float64
 	outReg := make([]int, 0, 8)
+	outPermNbs := make([]int, 0, 8)
+	outPermRegs := make([]int, 0, len(m.Elevation))
 	for {
 		if randEpsilon {
 			// Variation.
@@ -632,7 +634,7 @@ func (m *BaseObject) FillSinks(randEpsilon bool) []float64 {
 
 		// By shuffling the order in which we parse regions,
 		// we ensure a more natural look.
-		for _, r := range m.rand.Perm(len(m.Elevation)) {
+		for _, r := range m.randPerm(outPermRegs, len(m.Elevation)) {
 			// Skip all regions that have the same elevation as in
 			// the current heightmap.
 			if newHeight[r] == m.Elevation[r] {
@@ -641,7 +643,7 @@ func (m *BaseObject) FillSinks(randEpsilon bool) []float64 {
 
 			// Iterate over all neighbors in a random order.
 			nbs := mesh.r_circulate_r(outReg, r)
-			for _, i := range m.rand.Perm(len(nbs)) {
+			for _, i := range m.randPerm(outPermNbs, len(nbs)) {
 				nb := nbs[i]
 				// Since we have set all inland regions to infinity,
 				// we will only succeed here if the newHeight of the neighbor
@@ -753,18 +755,18 @@ func (m *BaseObject) UpdateDistanceField(regDistance []float64, seedRegs []int, 
 	m.resetRand()
 	mesh := m.SphereMesh
 
-	var queue []int
+	queue := make([]int, len(seedRegs), len(regDistance))
 
 	// TODO: Also check if a seed point has "disappeared" .If so, we
 	// might need to recompute the distance field for all regions.
-	for _, r := range seedRegs {
+	for i, r := range seedRegs {
 		// Check if the region distance in the current field is not 0,
 		// which means that the region has not been previously used as
 		// a seed region. If the region distance is not 0, we set it
 		// to 0 and add it to the queue.
 		if regDistance[r] != 0 {
 			regDistance[r] = 0
-			queue = append(queue, r)
+			queue[i] = r
 		}
 	}
 

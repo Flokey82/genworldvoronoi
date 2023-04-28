@@ -1,6 +1,10 @@
 package genworldvoronoi
 
-import "math/rand"
+import (
+	"log"
+	"math/rand"
+	"time"
+)
 
 // Bio handles the generation of life on the map (plants, animals, etc.).
 type Bio struct {
@@ -65,7 +69,22 @@ func (b *Bio) generateBiology() {
 // during the growth period, which will influence the amount of
 // agricultural output.
 func (b *Bio) calcGrowthPeriod() {
-	for r := range b.GrowthDays {
+	start := time.Now()
+	useGoRoutines := true
+	// Use go routines to process a chunk of regions at a time.
+	if useGoRoutines {
+		numWorkers := 8
+		kickOffNChunkWorkers(numWorkers, b.SphereMesh.numRegions, b.calcGrowthPeriodChunk)
+	} else {
+		b.calcGrowthPeriodChunk(0, b.SphereMesh.numRegions)
+	}
+	log.Println("calcGrowthPeriod took", time.Since(start))
+}
+
+func (b *Bio) calcGrowthPeriodChunk(start, end int) {
+	// Calculate the duration of the potential growth period for each region.
+	for idx := range b.GrowthDays[start:end] {
+		r := start + idx
 		var growthDays int
 		var totalInsolation float64
 		for i := 0; i < 356; i++ {
