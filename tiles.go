@@ -89,12 +89,8 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 			valMois := m.Moisture[i] / maxMois
 			return getWhittakerModBiomeColor(rLat, valElev, valMois, math.Pow(val, 1/n))
 		}
-	case 19:
-		// Get a blue to red elevation gradient.
-		// Calculate the min and max elevation.
-		_, max := minMax(m.Elevation)
-
-		// Create the color gradient.
+	case 19, 20, 21: // Temperatures and elevation.
+		// Create a blue to red color gradient.
 		colorGrad := colorgrad.NewGradient()
 		colorGrad.Colors(
 			color.RGBA{0, 0, 255, 255},
@@ -108,73 +104,35 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 			log.Fatal(err)
 		}
 
-		// Create the color function.
-		colorFunc = func(i int, n float64) color.Color {
-			// Calculate the color of the region.
-			elev := m.Elevation[i]
-			val := elev / max
+		if displayMode == 19 { // Elevation.
+			_, max := minMax(m.Elevation)
 
-			// Return the color.
-			return genColor(cb.At(val), math.Pow(val, 1/n))
-		}
-	case 20:
-		// Get a blue to red temperature gradient.
+			// Create the color function.
+			colorFunc = func(i int, n float64) color.Color {
+				// Calculate the color of the region.
+				val := m.Elevation[i] / max
+				return genColor(cb.At(val), math.Pow(val, 1/n))
+			}
+		} else if displayMode == 20 { // Air temperature.
+			temp := m.AirTemperature
+			minTemp, maxTemp := minMax(temp)
 
-		// Create the color gradient.
-		colorGrad := colorgrad.NewGradient()
-		colorGrad.Colors(
-			color.RGBA{0, 0, 255, 255},
-			color.RGBA{0, 255, 255, 255},
-			color.RGBA{0, 255, 0, 255},
-			color.RGBA{255, 255, 0, 255},
-			color.RGBA{255, 0, 0, 255},
-		)
-		cb, err := colorGrad.Build()
-		if err != nil {
-			log.Fatal(err)
-		}
+			// Create the color function.
+			colorFunc = func(i int, n float64) color.Color {
+				// Calculate the color of the region.
+				val := (temp[i] - minTemp) / (maxTemp - minTemp)
+				return genColor(cb.At(val), math.Pow(val, 1/n))
+			}
+		} else if displayMode == 21 { // Ocean temperature.
+			temp := m.OceanTemperature
+			minTemp, maxTemp := minMax(temp)
 
-		// Cache all region temperatures.
-		temp := m.AirTemperature
-		// Get min and max temperature.
-		minTemp, maxTemp := minMax(temp)
-
-		// Create the color function.
-		colorFunc = func(i int, n float64) color.Color {
-			// Calculate the color of the region.
-			val := (temp[i] - minTemp) / (maxTemp - minTemp)
-			// Return the color.
-			return genColor(cb.At(val), math.Pow(val, 1/n))
-		}
-	case 21:
-		// Get a blue to red temperature gradient.
-
-		// Create the color gradient.
-		colorGrad := colorgrad.NewGradient()
-		colorGrad.Colors(
-			color.RGBA{0, 0, 255, 255},
-			color.RGBA{0, 255, 255, 255},
-			color.RGBA{0, 255, 0, 255},
-			color.RGBA{255, 255, 0, 255},
-			color.RGBA{255, 0, 0, 255},
-		)
-		cb, err := colorGrad.Build()
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		// Cache all region temperatures.
-		temp := m.OceanTemperature
-
-		// Get min and max temperature.
-		minTemp, maxTemp := minMax(temp)
-
-		// Create the color function.
-		colorFunc = func(i int, n float64) color.Color {
-			// Calculate the color of the region.
-			val := (temp[i] - minTemp) / (maxTemp - minTemp)
-			// Return the color.
-			return genColor(cb.At(val), math.Pow(val, 1/n))
+			// Create the color function.
+			colorFunc = func(i int, n float64) color.Color {
+				// Calculate the color of the region.
+				val := (temp[i] - minTemp) / (maxTemp - minTemp)
+				return genColor(cb.At(val), math.Pow(val, 1/n))
+			}
 		}
 	default:
 		vals := m.Elevation
@@ -232,7 +190,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 	x, y = wrapTileCoordinates(x, y, zoom)
 
 	// Calculate an approximation of the distance between regions.
-	distRegion := math.Sqrt(4 * math.Pi / float64(m.SphereMesh.numRegions))
+	distRegion := math.Sqrt(4 * math.Pi / float64(m.numRegions))
 
 	// Convert into degrees.
 	distRegionDeg := distRegion * 180 / math.Pi
@@ -284,11 +242,11 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 	gc.SetLineWidth(1)
 
 	for _, i := range inQuadTree {
-		//rLat := m.LatLon[i][0]
+		// rLat := m.LatLon[i][0]
 		rLon := m.LatLon[i][1]
 		// Draw the path that outlines the region.
 		var path [][2]float64
-		for _, j := range m.SphereMesh.r_circulate_t(out_t, i) {
+		for _, j := range m.r_circulate_t(out_t, i) {
 			tLat := m.TriLatLon[j][0]
 			tLon := m.TriLatLon[j][1]
 
@@ -347,7 +305,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 		gc.SetLineWidth(1)
 
 	Loop:
-		for i := 0; i < len(m.SphereMesh.Triangles); i += 3 {
+		for i := 0; i < len(m.Triangles); i += 3 {
 			// Hacky way to filter paths/triangles that wrap around the entire SVG.
 			triLat := m.TriLatLon[i/3][0]
 			triLon := m.TriLatLon[i/3][1]
@@ -360,7 +318,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 
 			// Draw the path that outlines the region.
 			var path [][2]float64
-			for _, j := range m.SphereMesh.t_circulate_r(out_t, i/3) {
+			for _, j := range m.t_circulate_r(out_t, i/3) {
 				rLat := m.LatLon[j][0]
 				rLon := m.LatLon[j][1]
 
@@ -398,7 +356,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 			}
 
 			// Get the 3 regions of the triangle.
-			regions := m.SphereMesh.t_circulate_r(out_t, i/3)
+			regions := m.t_circulate_r(out_t, i/3)
 
 			// Get the normal of the triangle.
 			normal := m.regTriNormal(i/3, regions)
@@ -872,7 +830,7 @@ func (m *Map) GetGeoJSONCities(la1, lo1, la2, lo2 float64, zoom int) ([]byte, er
 
 	// Get the last settled year.
 	_, maxSettled := minMax64(m.Settled)
-	distRegion := math.Sqrt(4 * math.Pi / float64(m.SphereMesh.numRegions))
+	distRegion := math.Sqrt(4 * math.Pi / float64(m.numRegions))
 
 	biomeFunc := m.getRegWhittakerModBiomeFunc()
 	_, maxElev := minMax(m.Elevation)
