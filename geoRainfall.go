@@ -326,30 +326,34 @@ func (m *Geo) assignRainfallBasic() {
 	// region on each iteration.
 
 	// Calculate the wind vectors in lat/lon coordinates.
-	localWindVecWithLatLon := make([][2]float64, len(m.RegionToWindVecLocal))
-	for r := range localWindVecWithLatLon {
-		rL := m.LatLon[r]
-
+	normalizedWindVecs := make([][2]float64, len(regWindVec))
+	// localWindVecWithLatLon := make([][2]float64, len(regWindVec))
+	for r := range normalizedWindVecs {
+		// rL := m.LatLon[r]
+		//
 		// Calculate the "end" of the wind vector in lat/lon coordinates.
-		v2Lat, v2Lon := addVecToLatLong(rL[0], rL[1], regWindVec[r])
+		// v2Lat, v2Lon := addVecToLatLong(rL[0], rL[1], regWindVec[r])
 		// Calculate the cartesian vector from the region to the end of the wind vector.
-		// ... which might just be the wind vector itself?
-		// TODO: Check if this is correct and if we might just be able to use the wind vector
-		// itself.
-		localWindVecWithLatLon[r] = normal2(calcVecFromLatLong(rL[0], rL[1], v2Lat, v2Lon))
+		// localWindVecWithLatLon[r] = normal2(calcVecFromLatLong(rL[0], rL[1], v2Lat, v2Lon))
+		//
+		// Old version:
 		// localWindVecWithLatLon[nbReg] = normal2(calcVecFromLatLong(nL[0], nL[1], nL[0]+regWindVec[nbReg][1], nL[1]+regWindVec[nbReg][0]))
+
+		// NOTE: The above vector is almost identical to the wind vector (dot product > 0.999)
+		// so we can just use the normalized wind vector instead.
+		normalizedWindVecs[r] = normal2(regWindVec[r])
 	}
 
 	// Calculate the dot product of the wind vector and the vector from the region to its
-	// neighbors.
-	dotToNeighbors := make([][]float64, len(m.RegionToWindVecLocal))
+	// neighbors for each region.
+	dotToNeighbors := make([][]float64, len(regWindVec))
 	for r := range dotToNeighbors {
 		rL := m.LatLon[r]
 		for _, nbReg := range m.SphereMesh.r_circulate_r(outRegs, r) {
 			nL := m.LatLon[nbReg]
 
 			// TODO: Check dot product of wind vector (r) and neighbour->r.
-			vVec := localWindVecWithLatLon[nbReg]
+			vVec := normalizedWindVecs[nbReg]
 			nVec := normal2(calcVecFromLatLong(nL[0], nL[1], rL[0], rL[1]))
 			dotToNeighbors[r] = append(dotToNeighbors[r], dot2(vVec, nVec))
 		}
