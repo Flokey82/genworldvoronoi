@@ -30,7 +30,7 @@ func (m *Geo) getRegPropertyFunc() func(int) RegProperty {
 	var oceanRegs, mountainRegs, volcanoRegs, riverRegs, faultlineRegs []int
 	stopMountain := make(map[int]bool)
 	stopOcean := make(map[int]bool)
-	for r := 0; r < m.mesh.numRegions; r++ {
+	for r := 0; r < m.SphereMesh.numRegions; r++ {
 		if m.Elevation[r] <= 0 {
 			oceanRegs = append(oceanRegs, r)
 			stopOcean[r] = true
@@ -111,18 +111,18 @@ func (m *Geo) getRegionFeatureTypeFunc() func(int) string {
 		}
 		if waterbodyID := m.Waterbodies[i]; waterbodyID >= 0 {
 			switch wbSize := m.WaterbodySize[waterbodyID]; {
-			case wbSize > m.mesh.numRegions/25:
+			case wbSize > m.SphereMesh.numRegions/25:
 				return FeatureTypeOcean
-			case wbSize > m.mesh.numRegions/100:
+			case wbSize > m.SphereMesh.numRegions/100:
 				return FeatureTypeSea
-			case wbSize > m.mesh.numRegions/500:
+			case wbSize > m.SphereMesh.numRegions/500:
 				return FeatureTypeGulf
 			default:
 				return FeatureTypeLake
 			}
 		}
 		if landmassID := m.Landmasses[i]; landmassID >= 0 {
-			if m.LandmassSize[landmassID] < m.mesh.numRegions/100 {
+			if m.LandmassSize[landmassID] < m.SphereMesh.numRegions/100 {
 				return FeatureTypeIsle
 			}
 			return FeatureTypeContinent
@@ -201,7 +201,7 @@ func (m *Geo) getRegCellTypes() []int {
 	regDistanceOcean := m.assignDistanceField(oceanRegs, make(map[int]bool))
 	regDistanceLand := m.assignDistanceField(landRegs, make(map[int]bool))
 
-	cellType := make([]int, m.mesh.numRegions)
+	cellType := make([]int, m.SphereMesh.numRegions)
 	for i := range cellType {
 		// Is it water?
 		if m.Elevation[i] <= 0.0 {

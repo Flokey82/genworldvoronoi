@@ -121,8 +121,8 @@ func (m *Geo) getEarthquakeChance() []float64 {
 	compression := m.propagateCompression(m.RegionCompression)
 
 	// Now get the chance of earthquake for each region.
-	earthquakeChance := make([]float64, m.mesh.numRegions)
-	for r := 0; r < m.mesh.numRegions; r++ {
+	earthquakeChance := make([]float64, m.SphereMesh.numRegions)
+	for r := 0; r < m.SphereMesh.numRegions; r++ {
 		earthquakeChance[r] = math.Abs(compression[r])
 	}
 	return earthquakeChance
@@ -130,10 +130,10 @@ func (m *Geo) getEarthquakeChance() []float64 {
 
 func (m *Geo) getFloodChance() []float64 {
 	// Now get the chance of flood for each region.
-	floodChance := make([]float64, m.mesh.numRegions)
+	floodChance := make([]float64, m.SphereMesh.numRegions)
 	_, maxFlux := minMax(m.Flux)
 	steepness := m.GetSteepness()
-	for r := 0; r < m.mesh.numRegions; r++ {
+	for r := 0; r < m.SphereMesh.numRegions; r++ {
 		// We use the flux of water and the steepness in the region
 		// to determine the chance of a flood.
 		// NOTE: This should also apply to lakes.
@@ -142,7 +142,7 @@ func (m *Geo) getFloodChance() []float64 {
 
 	// Normalize the flood chance.
 	_, maxFloodChance := minMax(floodChance)
-	for r := 0; r < m.mesh.numRegions; r++ {
+	for r := 0; r < m.SphereMesh.numRegions; r++ {
 		floodChance[r] /= maxFloodChance
 	}
 	return floodChance
@@ -162,8 +162,8 @@ func (m *Geo) getDownhillDisaster(origins map[int]bool, steepnessLimit float64) 
 
 	// Start at the origin regions and go downhill until the terrain is too
 	// flat or we reach the ocean.
-	chance := make([]float64, m.mesh.numRegions)
-	for r := 0; r < m.mesh.numRegions; r++ {
+	chance := make([]float64, m.SphereMesh.numRegions)
+	for r := 0; r < m.SphereMesh.numRegions; r++ {
 		if !origins[r] {
 			continue
 		}
@@ -192,7 +192,7 @@ func (m *Civ) getDisasterFunc() func(r int) []disaster {
 	var volcanoes, mountains, faultlines []int
 	isBigRiver := make(map[int]bool)
 	isFireDanger := make(map[int]bool)
-	for r := 0; r < m.mesh.numRegions; r++ {
+	for r := 0; r < m.SphereMesh.numRegions; r++ {
 		if m.RegionIsMountain[r] {
 			mountains = append(mountains, r)
 		}

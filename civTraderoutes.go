@@ -32,7 +32,7 @@ func (m *Civ) getTradeRoutes() ([][]int, [][]int) {
 
 	// linking will store which cities are linked through a trade route crossing
 	// the given region.
-	linking := make([][]int, m.mesh.numRegions)
+	linking := make([][]int, m.SphereMesh.numRegions)
 	var getNode func(i int) *TradeNode
 	getNode = func(i int) *TradeNode {
 		// Make sure we re-use pre-existing nodes.

@@ -117,7 +117,7 @@ func (m *Civ) calculateEconomicPotential() {
 	// of a sphere with radius 1 and dividing it by the number of regions.
 	// The square root will work as a somewhat sensible approximation of
 	// distance.
-	distRegion := math.Sqrt(4 * math.Pi / float64(m.mesh.numRegions))
+	distRegion := math.Sqrt(4 * math.Pi / float64(m.SphereMesh.numRegions))
 
 	// Calculate the base radius in which we can find trade partners.
 	var tradeRadius []float64
@@ -324,7 +324,7 @@ func (m *Civ) getFitnessCityDefault() func(int) float64 {
 
 		// Visit all neighbors and modify the score based on their properties.
 		var hasWaterBodyBonus bool
-		nbs := m.mesh.r_circulate_r(out_r, r)
+		nbs := m.SphereMesh.r_circulate_r(out_r, r)
 
 		// Initialize fitness score with the normalized flux value.
 		// This will favor placing cities along (and at the end of)

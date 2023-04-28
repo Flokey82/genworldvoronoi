@@ -28,8 +28,8 @@ func (m *Geo) fbmNoiseCustom(octaves int, persistence, mx, my, mz, dx, dy, dz fl
 // genFbmNoise returns the 'fractal bownian motion'-ish noise value for each region.
 func (m *Map) genFbmNoise() []float64 {
 	fn := m.fbmNoiseCustom(2, 1, 2, 2, 2, 0, 0, 0) // This should be a parameter.
-	n := make([]float64, m.mesh.numRegions)
-	for r := 0; r < m.mesh.numRegions; r++ {
+	n := make([]float64, m.SphereMesh.numRegions)
+	for r := 0; r < m.SphereMesh.numRegions; r++ {
 		n[r] = fn(r)
 	}
 	return n

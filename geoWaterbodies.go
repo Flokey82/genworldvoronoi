@@ -22,7 +22,7 @@ func (m *BaseObject) assignWaterbodies() {
 // a value of -2 is assigned.
 func (m *BaseObject) getWaterBodies() []int {
 	// Initialize the waterbody (ocean) mapping.
-	done := make([]int, m.mesh.numRegions)
+	done := make([]int, m.SphereMesh.numRegions)
 	for i := range done {
 		if m.Elevation[i] > 0 {
 			done[i] = -2 // Non-ocean regions above sealevel.

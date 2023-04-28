@@ -58,13 +58,13 @@ const (
 // by the topography / elevation changes. Please note that the code for local winds is incomplete.
 func (m *Geo) assignWindVectors() {
 	// Based on latitude of each region, we calculate the wind vector.
-	regWindVec := make([][2]float64, m.mesh.numRegions)
+	regWindVec := make([][2]float64, m.SphereMesh.numRegions)
 	for i := range regWindVec {
 		regWindVec[i] = getGlobalWindVector(m.LatLon[i][0])
 	}
 
 	// Local wind vectors.
-	regWindVecLocal := make([][2]float64, m.mesh.numRegions)
+	regWindVecLocal := make([][2]float64, m.SphereMesh.numRegions)
 	_, maxElev := minMax(m.Elevation)
 
 	calcMode := localWindModeMixed
@@ -83,7 +83,7 @@ func (m *Geo) assignWindVectors() {
 
 		// Determine all sea regions.
 		var seaRegs []int
-		for r := 0; r < m.mesh.numRegions; r++ {
+		for r := 0; r < m.SphereMesh.numRegions; r++ {
 			if m.Elevation[r] <= 0 {
 				seaRegs = append(seaRegs, r)
 			}
@@ -104,7 +104,7 @@ func (m *Geo) assignWindVectors() {
 				X: regVec[0],
 				Y: regVec[1],
 			})
-			for _, nb := range m.mesh.r_circulate_r(outRegs, r) {
+			for _, nb := range m.SphereMesh.r_circulate_r(outRegs, r) {
 				nbLat := m.LatLon[nb][0]
 				nbLon := m.LatLon[nb][1]
 				tempNb := getMeanAnnualTemp(nbLat) - getTempFalloffFromAltitude(maxAltitudeFactor*m.Elevation[nb]/maxElev)
@@ -154,7 +154,7 @@ func (m *Geo) assignWindVectors() {
 			// Calculate Vector between r and wind_r.
 			vb := vectors.Sub3(rwXYZ, regXYZ).Normalize()
 
-			for _, nbReg := range m.mesh.r_circulate_r(outRegs, r) {
+			for _, nbReg := range m.SphereMesh.r_circulate_r(outRegs, r) {
 				// if is_sea[neighbor_r] {
 				//	continue
 				// }
@@ -219,7 +219,7 @@ func (m *Geo) assignWindVectors() {
 			}
 
 			var acc [2]float64
-			for _, nr := range m.mesh.r_circulate_r(outRegs, r) {
+			for _, nr := range m.SphereMesh.r_circulate_r(outRegs, r) {
 				// Magnitude will be positive if the neighbor is warmer than the current region, which will
 				// result in a wind vector pointing towards the neighbor.
 				magnitude := (m.getRegTemperature(nr, maxElev) - m.getRegTemperature(r, maxElev))
@@ -248,14 +248,14 @@ func (m *Geo) interpolateWindVecs(in [][2]float64, steps int) [][2]float64 {
 	// Average wind vectors using neighbor vectors.
 	outRegs := make([]int, 0, 8)
 	for i := 0; i < steps; i++ {
-		regWindVecInterpolated := make([][2]float64, m.mesh.numRegions)
+		regWindVecInterpolated := make([][2]float64, m.SphereMesh.numRegions)
 		for r := range regWindVecInterpolated {
 			resVec := [2]float64{
 				in[r][0],
 				in[r][1],
 			}
 			var count int
-			for _, nbReg := range m.mesh.r_circulate_r(outRegs, r) {
+			for _, nbReg := range m.SphereMesh.r_circulate_r(outRegs, r) {
 				resVec[0] += in[nbReg][0]
 				resVec[1] += in[nbReg][1]
 				count++

@@ -100,10 +100,10 @@ func (m *Civ) regPlaceNTerritoriesCustom(seedPoints []int, weight func(o, u, v i
 
 	// 'terr' will hold a mapping of region to territory.
 	// The territory ID is the region number of the capital city.
-	terr := initRegionSlice(m.mesh.numRegions)
+	terr := initRegionSlice(m.SphereMesh.numRegions)
 	for i := 0; i < len(seedPoints); i++ {
 		terr[seedPoints[i]] = seedPoints[i]
-		for _, v := range m.mesh.r_circulate_r(outReg, seedPoints[i]) {
+		for _, v := range m.SphereMesh.r_circulate_r(outReg, seedPoints[i]) {
 			newdist := weight(seedPoints[i], seedPoints[i], v)
 			if newdist < 0 {
 				continue
@@ -123,7 +123,7 @@ func (m *Civ) regPlaceNTerritoriesCustom(seedPoints []int, weight func(o, u, v i
 			continue
 		}
 		terr[u.destination] = u.origin
-		for _, v := range m.mesh.r_circulate_r(outReg, u.destination) {
+		for _, v := range m.SphereMesh.r_circulate_r(outReg, u.destination) {
 			if terr[v] >= 0 {
 				continue
 			}
@@ -152,7 +152,7 @@ func (m *Civ) rRelaxTerritories(terr []int, n int) {
 			}
 			var nbCountOtherTerr, nbCountSameTerr int
 			otherTerr := -1
-			for _, v := range m.mesh.r_circulate_r(outReg, r) {
+			for _, v := range m.SphereMesh.r_circulate_r(outReg, r) {
 				if v < 0 {
 					continue
 				}
@@ -181,7 +181,7 @@ func (m *Civ) getTerritoryNeighbors(r int, r_terr []int) []int {
 		if rg != r {
 			continue
 		}
-		for _, nb := range m.mesh.r_circulate_r(outReg, i) {
+		for _, nb := range m.SphereMesh.r_circulate_r(outReg, i) {
 			// Determine territory ID.
 			terrID := r_terr[nb]
 			if terrID < 0 || terrID == r || seenTerritories[terrID] {

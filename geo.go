@@ -31,23 +31,19 @@ func newGeo(seed int64, numPlates, numPoints int, jitter float64) (*Geo, error) 
 	if err != nil {
 		return nil, err
 	}
-	mesh := result.TriangleMesh
-
-	m := &Geo{
+	return &Geo{
 		Calendar:             NewCalendar(),
 		PlateIsOcean:         make(map[int]bool),
 		BaseObject:           newBaseObject(seed, result),
-		Resources:            newResources(mesh.numRegions),
-		RegionToWindVec:      make([][2]float64, mesh.numRegions),
-		RegionToWindVecLocal: make([][2]float64, mesh.numRegions),
-		RegionToOceanVec:     make([][2]float64, mesh.numRegions),
+		Resources:            newResources(result.numRegions),
+		RegionToWindVec:      make([][2]float64, result.numRegions),
+		RegionToWindVecLocal: make([][2]float64, result.numRegions),
+		RegionToOceanVec:     make([][2]float64, result.numRegions),
 		NumPlates:            numPlates,
 		NumVolcanoes:         10, // TODO: Allow independent configuration.
 		NumPoints:            numPoints,
-		QuadGeom:             NewQuadGeometry(mesh),
-	}
-	m.generateTriCenters()
-	return m, nil
+		QuadGeom:             NewQuadGeometry(result.TriangleMesh),
+	}, nil
 }
 
 func (m *Geo) generateGeology() {
@@ -110,7 +106,7 @@ func (m *Geo) generateGeology() {
 	// This is really only useful for rendering the map but we don't
 	// really use this right now.
 	start = time.Now()
-	m.QuadGeom.setMap(m.mesh, m)
+	m.QuadGeom.setMap(m.SphereMesh.TriangleMesh, m)
 	log.Println("Done quadgeom in ", time.Since(start).String())
 
 	// Identify continents / landmasses.
@@ -159,16 +155,16 @@ func (m *Geo) Tick() {
 func (m *Geo) GetCustomContour(f func(idxA, idxB int) bool) [][]int {
 	var edges [][2]int
 	seen := make(map[[2]int]bool)
-	for i := 0; i < len(m.mesh.Halfedges); i++ {
-		idxA := m.mesh.s_begin_r(i)
-		idxB := m.mesh.s_end_r(i)
+	for i := 0; i < len(m.SphereMesh.Halfedges); i++ {
+		idxA := m.SphereMesh.s_begin_r(i)
+		idxB := m.SphereMesh.s_end_r(i)
 		var vx [2]int
 		if idxA > idxB {
-			vx[0] = m.mesh.s_outer_t(i)
-			vx[1] = m.mesh.s_inner_t(i)
+			vx[0] = m.SphereMesh.s_outer_t(i)
+			vx[1] = m.SphereMesh.s_inner_t(i)
 		} else {
-			vx[0] = m.mesh.s_inner_t(i)
-			vx[1] = m.mesh.s_outer_t(i)
+			vx[0] = m.SphereMesh.s_inner_t(i)
+			vx[1] = m.SphereMesh.s_outer_t(i)
 		}
 		if seen[vx] {
 			continue
@@ -185,9 +181,9 @@ func (m *Geo) GetCustomContour(f func(idxA, idxB int) bool) [][]int {
 // getVectorSortOrder returns a list of regions sorted by their vector order.
 // This allows us to sort regions "up wind" or "down wind", for example.
 func (m *Geo) getVectorSortOrder(vecs [][2]float64, reverse bool) ([]float64, []int) {
-	orderedRegs := make([]int, m.mesh.numRegions) // sorted regions
-	regSort := make([]float64, m.mesh.numRegions) // numeric sort order
-	for r := 0; r < m.mesh.numRegions; r++ {
+	orderedRegs := make([]int, m.SphereMesh.numRegions) // sorted regions
+	regSort := make([]float64, m.SphereMesh.numRegions) // numeric sort order
+	for r := 0; r < m.SphereMesh.numRegions; r++ {
 		lat := (m.LatLon[r][0]) * vecs[r][1] / math.Abs(vecs[r][1])
 		lon := (m.LatLon[r][1]) * vecs[r][0] / math.Abs(vecs[r][0])
 		regSort[r] = (lat + lon)

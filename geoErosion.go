@@ -17,7 +17,7 @@ func (m *Geo) Erode(amount float64) []float64 {
 
 	// Get downhill height diffs so we can ensure that we do not erode
 	// any more than that, which would produce sinks (which we try to avoid).
-	dhDiff := make([]float64, m.mesh.numRegions)
+	dhDiff := make([]float64, m.SphereMesh.numRegions)
 	for r, dhr := range m.GetDownhill(false) {
 		// Skip all sinks which have a downhill value of -1
 		if dhr < 0 {
@@ -29,7 +29,7 @@ func (m *Geo) Erode(amount float64) []float64 {
 	}
 
 	// This will hold our new heightmap.
-	newh := make([]float64, m.mesh.numRegions)
+	newh := make([]float64, m.SphereMesh.numRegions)
 
 	// Get the erosion rate for all regions.
 	var er []float64
@@ -75,7 +75,7 @@ func (m *Geo) GetErosionRate() []float64 {
 	slope := m.GetSlope()
 
 	// This will hold the erosion values for each region.
-	newh := make([]float64, m.mesh.numRegions)
+	newh := make([]float64, m.SphereMesh.numRegions)
 
 	// Get the max height value so we can normalize the elevation values.
 	_, maxH := minMax(m.Elevation) // TODO: Cache somewhere?
@@ -155,14 +155,14 @@ func (m *Geo) GetErosionRate2() []float64 {
 
 	// For now we set the maximum erosion distance to 'distRegions' times the distance
 	// between two regions. This is a bit arbitrary, but it seems to work well.
-	distRegion := math.Sqrt(4 * math.Pi / float64(m.mesh.numRegions))
+	distRegion := math.Sqrt(4 * math.Pi / float64(m.SphereMesh.numRegions))
 	maxErosionDistance := distRegions * distRegion
 
 	// Get the steepness of each region to its downhill neighbor.
 	steeps := m.GetSteepness()
 
 	// This will collect the erosion values for each region.
-	toE := make([]float64, m.mesh.numRegions)
+	toE := make([]float64, m.SphereMesh.numRegions)
 
 	// If true, we do not consider erosion below sea level.
 	erodeOnlyAboveSealevel := true

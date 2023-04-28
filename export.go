@@ -115,13 +115,13 @@ func (m *Map) ExportSVG(path string) error {
 		min, max := minMax(m.Elevation)
 		_, maxMois := minMax(m.Moisture)
 		out_t := make([]int, 0, 6)
-		for i := 0; i < em.mesh.numRegions; i++ {
+		for i := 0; i < em.SphereMesh.numRegions; i++ {
 			rLat := em.LatLon[i][0]
 			rLon := em.LatLon[i][1]
 			rX, rY := latLonToPixels(rLat, rLon, zoom)
 			var skip bool
-			for _, j := range em.mesh.r_circulate_t(out_t, i) {
-				x, y := latLonToPixels(em.triLatLon[j][0], em.triLatLon[j][1], zoom)
+			for _, j := range em.SphereMesh.r_circulate_t(out_t, i) {
+				x, y := latLonToPixels(em.TriLatLon[j][0], em.TriLatLon[j][1], zoom)
 				if dist2([2]float64{x, y}, [2]float64{rX, rY}) > filterPathDist {
 					skip = true
 					break
@@ -131,8 +131,8 @@ func (m *Map) ExportSVG(path string) error {
 				continue
 			}
 			var path [][2]float64
-			for _, j := range em.mesh.r_circulate_t(out_t, i) {
-				x, y := latLonToPixels(em.triLatLon[j][0], em.triLatLon[j][1], zoom)
+			for _, j := range em.SphereMesh.r_circulate_t(out_t, i) {
+				x, y := latLonToPixels(em.TriLatLon[j][0], em.TriLatLon[j][1], zoom)
 				path = append(path, [2]float64{x, y})
 			}
 			elev := em.Elevation[i]
@@ -153,14 +153,14 @@ func (m *Map) ExportSVG(path string) error {
 	} else {
 		min, max := minMax(m.triElevation)
 		_, maxMois := minMax(m.triMoisture)
-		for i := 0; i < len(em.mesh.Triangles); i += 3 {
+		for i := 0; i < len(em.SphereMesh.Triangles); i += 3 {
 			// Hacky way to filter paths/triangles that wrap around the entire SVG.
-			triLat := em.triLatLon[i/3][0]
-			triLon := em.triLatLon[i/3][1]
+			triLat := em.TriLatLon[i/3][0]
+			triLon := em.TriLatLon[i/3][1]
 			triX, triY := latLonToPixels(triLat, triLon, zoom)
 			var skip bool
 			var poolCount int
-			for _, j := range em.mesh.Triangles[i : i+3] {
+			for _, j := range em.SphereMesh.Triangles[i : i+3] {
 				if em.Waterpool[j] > 0 {
 					poolCount++
 				}
@@ -175,7 +175,7 @@ func (m *Map) ExportSVG(path string) error {
 			}
 
 			var path [][2]float64
-			for _, j := range em.mesh.Triangles[i : i+3] {
+			for _, j := range em.SphereMesh.Triangles[i : i+3] {
 				x, y := latLonToPixels(em.LatLon[j][0], em.LatLon[j][1], zoom)
 				path = append(path, [2]float64{x, y})
 			}
@@ -211,7 +211,7 @@ func (m *Map) ExportSVG(path string) error {
 	drawPath := func(paths [][]int, useTriangles bool, style ...string) {
 		latLon := m.LatLon
 		if useTriangles {
-			latLon = m.triLatLon
+			latLon = m.TriLatLon
 		}
 		for _, border := range paths {
 			var path [][2]float64
@@ -279,17 +279,17 @@ func (m *Map) ExportSVG(path string) error {
 
 	// Rivers (based on triangles)
 	if drawRiversB {
-		for i := 0; i < m.mesh.numSides; i++ {
+		for i := 0; i < m.SphereMesh.numSides; i++ {
 			if m.sideFlow[i] < 10000 {
 				continue
 			}
-			inner_t := m.mesh.s_inner_t(i)
-			outer_t := m.mesh.s_outer_t(i)
+			inner_t := m.SphereMesh.s_inner_t(i)
+			outer_t := m.SphereMesh.s_outer_t(i)
 			if m.triElevation[inner_t] < 0 && m.triElevation[outer_t] < 0 {
 				continue
 			}
-			x1, y1 := latLonToPixels(m.triLatLon[inner_t][0], m.triLatLon[inner_t][1], zoom)
-			x2, y2 := latLonToPixels(m.triLatLon[outer_t][0], m.triLatLon[outer_t][1], zoom)
+			x1, y1 := latLonToPixels(m.TriLatLon[inner_t][0], m.TriLatLon[inner_t][1], zoom)
+			x2, y2 := latLonToPixels(m.TriLatLon[outer_t][0], m.TriLatLon[outer_t][1], zoom)
 			if math.Abs(x1-x2) > float64(size)/2 || math.Abs(y1-y2) > float64(size)/2 {
 				continue
 			}
@@ -317,7 +317,7 @@ func (m *Map) ExportSVG(path string) error {
 	}
 
 	if drawWindDir {
-		windAng := make([]float64, m.mesh.numRegions)
+		windAng := make([]float64, m.SphereMesh.numRegions)
 		for i, vec := range m.RegionToWindVec {
 			windAng[i] = math.Atan2(vec[0], vec[1])
 		}
@@ -348,7 +348,7 @@ func (m *Map) ExportSVG(path string) error {
 		for _, r := range ocean_r {
 			drawCircle(m.LatLon[r][0], m.LatLon[r][1], 2, "fill: rgb(128, 128, 255)")
 		}
-		for r := 0; r < m.mesh.numSides; r++ {
+		for r := 0; r < m.SphereMesh.numSides; r++ {
 			if compression_r[r] != 0 {
 				col := genGreen((compression_r[r] - minComp) / (maxComp - minComp))
 				drawCircle(m.LatLon[r][0], m.LatLon[r][1], 1, fmt.Sprintf("fill: rgb(%d, %d, %d)", col.R, col.R, col.R))
@@ -529,7 +529,7 @@ func (m *Map) ExportSVG(path string) error {
 	}
 
 	if drawMountains {
-		for r := 0; r < m.mesh.numRegions; r++ {
+		for r := 0; r < m.SphereMesh.numRegions; r++ {
 			if m.RegionIsMountain[r] {
 				drawCircle(m.LatLon[r][0], m.LatLon[r][1], 1, "fill: rgb(0, 0, 0)")
 			}
@@ -537,7 +537,7 @@ func (m *Map) ExportSVG(path string) error {
 	}
 
 	if drawVolcanoes {
-		for r := 0; r < m.mesh.numRegions; r++ {
+		for r := 0; r < m.SphereMesh.numRegions; r++ {
 			if m.RegionIsVolcano[r] {
 				drawCircle(m.LatLon[r][0], m.LatLon[r][1], 2, "fill: rgb(235, 52, 155)")
 			}
@@ -623,7 +623,7 @@ func (m *Map) getImage(drawTerritories, drawSeasonalBiome bool) image.Image {
 	img := image.NewNRGBA(image.Rect(0, 0, size, size))
 	min, max := minMax(m.Elevation)
 	_, maxMois := minMax(m.Rainfall)
-	for r := 0; r < m.mesh.numRegions; r++ {
+	for r := 0; r < m.SphereMesh.numRegions; r++ {
 		lat := m.LatLon[r][0]
 		lon := m.LatLon[r][1]
 		// log.Println(lat, lon)
@@ -726,26 +726,26 @@ func (m *Map) ExportOBJ(path string) error {
 
 	// Triangle vertices
 	if drawPlates || drawRivers {
-		for i := 0; i < len(m.triXYZ); i += 3 {
-			ve := convToVec3(m.triXYZ[i:]).Mul(1.03 + 0.01*m.triElevation[i/3])
+		for i := 0; i < len(m.TriXYZ); i += 3 {
+			ve := convToVec3(m.TriXYZ[i:]).Mul(1.03 + 0.01*m.triElevation[i/3])
 			w.WriteString(fmt.Sprintf("v %f %f %f \n", ve.X, ve.Y, ve.Z))
 		}
 		w.Flush()
 	}
 
 	// Globe
-	for i := 0; i < len(m.mesh.Triangles); i += 3 {
-		w.WriteString(fmt.Sprintf("f %d %d %d \n", m.mesh.Triangles[i]+1, m.mesh.Triangles[i+1]+1, m.mesh.Triangles[i+2]+1))
+	for i := 0; i < len(m.SphereMesh.Triangles); i += 3 {
+		w.WriteString(fmt.Sprintf("f %d %d %d \n", m.SphereMesh.Triangles[i]+1, m.SphereMesh.Triangles[i+1]+1, m.SphereMesh.Triangles[i+2]+1))
 		w.Flush()
 	}
 	w.Flush()
 
 	// Rivers
 	if drawRivers {
-		for i := 0; i < m.mesh.numSides; i++ {
+		for i := 0; i < m.SphereMesh.numSides; i++ {
 			if m.sideFlow[i] > 1 {
-				inner_t := m.mesh.s_inner_t(i)
-				outer_t := m.mesh.s_outer_t(i)
+				inner_t := m.SphereMesh.s_inner_t(i)
+				outer_t := m.SphereMesh.s_outer_t(i)
 				if m.triElevation[inner_t] < 0 && m.triElevation[outer_t] < 0 {
 					continue
 				}
@@ -758,12 +758,12 @@ func (m *Map) ExportOBJ(path string) error {
 
 	// Plates
 	if drawPlates {
-		for s := 0; s < m.mesh.numSides; s++ {
-			begin_r := m.mesh.s_begin_r(s)
-			end_r := m.mesh.s_end_r(s)
+		for s := 0; s < m.SphereMesh.numSides; s++ {
+			begin_r := m.SphereMesh.s_begin_r(s)
+			end_r := m.SphereMesh.s_end_r(s)
 			if m.RegionToPlate[begin_r] != m.RegionToPlate[end_r] {
-				inner_t := m.mesh.s_inner_t(s)
-				outer_t := m.mesh.s_outer_t(s)
+				inner_t := m.SphereMesh.s_inner_t(s)
+				outer_t := m.SphereMesh.s_outer_t(s)
 				w.WriteString(fmt.Sprintf("l %d %d \n", (len(m.XYZ)/3)+inner_t+1, (len(m.XYZ)/3)+outer_t+1))
 			}
 			w.Flush()

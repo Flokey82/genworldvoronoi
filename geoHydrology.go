@@ -261,7 +261,7 @@ func (m *BaseObject) floodSinks() []float64 {
 			list.Remove(e)
 			reg := e.Value.(int)
 			poolParty = append(poolParty, reg)
-			for _, n := range m.mesh.r_circulate_r(outRegs, reg) {
+			for _, n := range m.SphereMesh.r_circulate_r(outRegs, reg) {
 				if poolIDs[n] == -1 && pool[n] > 0 {
 					poolIDs[n] = i
 					list.PushBack(n)
@@ -281,7 +281,7 @@ func (m *BaseObject) floodSinks() []float64 {
 		if len(poolParty) > 0 {
 			lowestRegDrainage := -1
 			for _, reg := range poolParty {
-				for _, n := range m.mesh.r_circulate_r(outRegs, reg) {
+				for _, n := range m.SphereMesh.r_circulate_r(outRegs, reg) {
 					if (lowestRegDrainage == -1 || filledSinks[n] < filledSinks[lowestRegDrainage]) && poolIDs[n] == -1 {
 						lowestRegDrainage = n
 					}
@@ -392,7 +392,7 @@ func (m *Geo) floodV1(r int, dVol float64) {
 	fail := 200
 
 	// Keep track of the regions we have visitad during a flood fill attempt.
-	tried := make([]bool, m.mesh.numRegions)
+	tried := make([]bool, m.SphereMesh.numRegions)
 	var drain int
 	var drainfound bool
 	var fill func(i int)
@@ -524,7 +524,7 @@ func (m *Geo) floodV2(r int, dVol float64) bool {
 	// Either try to find a closed set under this plane, which has a certain volume,
 	// or raise the plane till we find the correct closed set height.
 	// And only if it can't be found, re-emit the particle.
-	tried := make([]bool, m.mesh.numRegions)
+	tried := make([]bool, m.SphereMesh.numRegions)
 	boundary := make(map[int]float64)
 	var floodset []int
 	var drainfound bool

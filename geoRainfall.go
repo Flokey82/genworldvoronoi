@@ -35,8 +35,8 @@ func (m *Geo) assignRainfall(numSteps, transferMode, sortOrder int) {
 	// 1. Initialize
 	// 1.1. Determine all sea regions.
 	var seaRegs, landRegs []int
-	isSea := make([]bool, m.mesh.numRegions)
-	for r := 0; r < m.mesh.numRegions; r++ {
+	isSea := make([]bool, m.SphereMesh.numRegions)
+	for r := 0; r < m.SphereMesh.numRegions; r++ {
 		if m.Elevation[r] < 0 {
 			isSea[r] = true
 			seaRegs = append(seaRegs, r)
@@ -48,8 +48,8 @@ func (m *Geo) assignRainfall(numSteps, transferMode, sortOrder int) {
 	var sortOrderRegs []int
 	if sortOrder == moistOrderOther {
 		// 1.2. Sort all regions by distance to ocean. Lowest to highest.
-		distOrderRegs := make([]int, m.mesh.numRegions)
-		for r := 0; r < m.mesh.numRegions; r++ {
+		distOrderRegs := make([]int, m.SphereMesh.numRegions)
+		for r := 0; r < m.SphereMesh.numRegions; r++ {
 			distOrderRegs[r] = r
 		}
 		regDistanceSea := m.assignDistanceField(seaRegs, make(map[int]bool))
@@ -127,7 +127,7 @@ func (m *Geo) assignRainfall(numSteps, transferMode, sortOrder int) {
 
 				// Add wind vector to neighbor lat/lon to get the "wind vector lat long" or something like that..
 				regToWindVec3 := convToVec3(latLonToCartesian(regLat+regWindVec[r][1], regLon+regWindVec[r][0])).Normalize()
-				for _, nbReg := range m.mesh.r_circulate_r(outRegs, r) {
+				for _, nbReg := range m.SphereMesh.r_circulate_r(outRegs, r) {
 					if isSea[nbReg] {
 						continue
 					}
@@ -175,7 +175,7 @@ func (m *Geo) assignRainfall(numSteps, transferMode, sortOrder int) {
 				sum := 0.0
 				// Get XYZ Position of r as vector3
 				regVec3 := convToVec3(m.XYZ[r*3 : r*3+3])
-				for _, nbReg := range m.mesh.r_circulate_r(outRegs, r) {
+				for _, nbReg := range m.SphereMesh.r_circulate_r(outRegs, r) {
 					// Calculate dot product of wind vector to vector r -> neighbor_r.
 					// Get XYZ Position of r_neighbor.
 					regToNbVec3 := convToVec3(m.XYZ[nbReg*3 : nbReg*3+3])
@@ -314,7 +314,7 @@ func (m *Geo) assignRainfallBasic() {
 			var humidity float64
 
 			// Calculate humidity.
-			for _, nbReg := range m.mesh.r_circulate_r(outRegs, r) {
+			for _, nbReg := range m.SphereMesh.r_circulate_r(outRegs, r) {
 				rL := m.LatLon[r]
 				nL := m.LatLon[nbReg]
 
@@ -353,13 +353,13 @@ func (m *Geo) assignRainfallBasic() {
 func (m *Geo) interpolateRainfallMoisture(interpolationSteps int) {
 	outRegs := make([]int, 0, 8)
 	for i := 0; i < interpolationSteps; i++ {
-		regMoistureInterpol := make([]float64, m.mesh.numRegions)
-		regRainfallInterpol := make([]float64, m.mesh.numRegions)
+		regMoistureInterpol := make([]float64, m.SphereMesh.numRegions)
+		regRainfallInterpol := make([]float64, m.SphereMesh.numRegions)
 		for r := range regMoistureInterpol {
 			rMoist := m.Moisture[r]
 			rRain := m.Rainfall[r]
 			var count int
-			for _, nbReg := range m.mesh.r_circulate_r(outRegs, r) {
+			for _, nbReg := range m.SphereMesh.r_circulate_r(outRegs, r) {
 				// Gravity! Water moves downwards.
 				// This is not super-accurate since you'd have to take
 				// in account how steep the slope is etc.

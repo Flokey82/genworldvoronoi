@@ -81,10 +81,10 @@ func (b *Bio) expandSpecies2() map[SpeciesFamily][]int {
 	for i := 0; i < len(seedPoints); i++ {
 		s := originToSecies[seedPoints[i]]
 		if _, ok := terr[s.Family]; !ok {
-			terr[s.Family] = initRegionSlice(b.mesh.numRegions)
+			terr[s.Family] = initRegionSlice(b.SphereMesh.numRegions)
 		}
 		terr[s.Family][seedPoints[i]] = seedPoints[i]
-		for _, v := range b.mesh.r_circulate_r(outReg, seedPoints[i]) {
+		for _, v := range b.SphereMesh.r_circulate_r(outReg, seedPoints[i]) {
 			newdist := weight(seedPoints[i], seedPoints[i], v)
 			if newdist < 0 {
 				continue
@@ -105,7 +105,7 @@ func (b *Bio) expandSpecies2() map[SpeciesFamily][]int {
 			continue
 		}
 		terr[s.Family][u.destination] = u.origin
-		for _, v := range b.mesh.r_circulate_r(outReg, u.destination) {
+		for _, v := range b.SphereMesh.r_circulate_r(outReg, u.destination) {
 			if terr[s.Family][v] >= 0 {
 				continue
 			}

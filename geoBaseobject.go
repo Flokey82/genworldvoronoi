@@ -9,16 +9,13 @@ import (
 
 	"github.com/Flokey82/go_gens/geoquad"
 	"github.com/Flokey82/go_gens/vectors"
-	"github.com/fogleman/delaunay"
 )
 
 type BaseObject struct {
 	Seed              int64             // Seed for random number generators
 	rand              *rand.Rand        // Rand initialized with above seed
 	noise             *Noise            // Opensimplex noise initialized with above seed
-	mesh              *TriangleMesh     // Triangle mesh containing the sphere information
-	XYZ               []float64         // Point / region xyz coordinates
-	LatLon            [][2]float64      // Point / region latitude and longitude
+	*SphereMesh                         // Triangle mesh containing the sphere information
 	Elevation         []float64         // Point / region elevation
 	Moisture          []float64         // Point / region moisture
 	Rainfall          []float64         // Point / region rainfall
@@ -41,9 +38,7 @@ type BaseObject struct {
 	RegionCompression map[int]float64   // Point / region compression factor
 	triMoisture       []float64         // Triangle moisture
 	triElevation      []float64         // Triangle elevation
-	triXYZ            []float64         // Triangle xyz coordinates
 	triPool           []float64         // Triangle water pool depth
-	triLatLon         [][2]float64      // Triangle latitude and longitude
 	triFlow           []float64         // Triangle flow intensity (rainfall)
 	triDownflowSide   []int             // Triangle mapping to side through which water flows downhill.
 	orderTri          []int             // Triangles in uphill order of elevation.
@@ -51,15 +46,12 @@ type BaseObject struct {
 	regQuadTree       *geoquad.QuadTree // Quadtree for region lookup
 }
 
-func newBaseObject(seed int64, sphere *SphereMesh) *BaseObject {
-	mesh := sphere.TriangleMesh
+func newBaseObject(seed int64, mesh *SphereMesh) *BaseObject {
 	return &BaseObject{
 		Seed:              seed,
 		rand:              rand.New(rand.NewSource(seed)),
 		noise:             NewNoise(6, 2.0/3.0, seed),
-		mesh:              sphere.TriangleMesh,
-		XYZ:               sphere.XYZ,
-		LatLon:            sphere.LatLon,
+		SphereMesh:        mesh,
 		Elevation:         make([]float64, mesh.numRegions),
 		Moisture:          make([]float64, mesh.numRegions),
 		Flux:              make([]float64, mesh.numRegions),
@@ -87,7 +79,7 @@ func newBaseObject(seed int64, sphere *SphereMesh) *BaseObject {
 		orderTri:          make([]int, mesh.numTriangles),
 		triFlow:           make([]float64, mesh.numTriangles),
 		sideFlow:          make([]float64, mesh.numSides),
-		regQuadTree:       newQuadTreeFromLatLon(sphere.LatLon),
+		regQuadTree:       newQuadTreeFromLatLon(mesh.LatLon),
 	}
 }
 
@@ -116,32 +108,12 @@ func (m *BaseObject) pickRandomRegions(n int) []int {
 
 	// Pick n random regions.
 	res := make([]int, 0, n)
-	for len(res) < n && len(res) < m.mesh.numRegions {
-		res = append(res, m.rand.Intn(m.mesh.numRegions))
+	numRegs := m.SphereMesh.numRegions
+	for len(res) < n && len(res) < numRegs {
+		res = append(res, m.rand.Intn(numRegs))
 	}
 	sort.Ints(res)
 	return res
-}
-
-// generateTriCenters iterates through all triangles and generates the centroids for each.
-func (m *BaseObject) generateTriCenters() {
-	var tXYZ []float64
-	var tLatLon [][2]float64
-	for t := 0; t < m.mesh.numTriangles; t++ {
-		a := m.mesh.s_begin_r(3 * t)
-		b := m.mesh.s_begin_r(3*t + 1)
-		c := m.mesh.s_begin_r(3*t + 2)
-		v3 := getCentroidOfTriangle(
-			m.XYZ[3*a:3*a+3],
-			m.XYZ[3*b:3*b+3],
-			m.XYZ[3*c:3*c+3])
-		tXYZ = append(tXYZ, v3.X, v3.Y, v3.Z)
-		nla, nlo := latLonFromVec3(v3, 1.0)
-		tLatLon = append(tLatLon, [2]float64{nla, nlo})
-
-	}
-	m.triLatLon = tLatLon
-	m.triXYZ = tXYZ
 }
 
 // assignTriValues averages out the values of the mesh points / regions and assigns them
@@ -153,14 +125,15 @@ func (m *BaseObject) assignTriValues() {
 	tElevation := m.triElevation
 	tMoisture := m.triMoisture
 	tPool := m.triPool
-	numTriangles := m.mesh.numTriangles
+	mesh := m.SphereMesh
+	numTriangles := mesh.numTriangles
 
 	const tFraction = 1.0 / 3.0
 	for t := 0; t < numTriangles; t++ {
 		s0 := 3 * t
-		r1 := m.mesh.s_begin_r(s0)
-		r2 := m.mesh.s_begin_r(s0 + 1)
-		r3 := m.mesh.s_begin_r(s0 + 2)
+		r1 := mesh.s_begin_r(s0)
+		r2 := mesh.s_begin_r(s0 + 1)
+		r3 := mesh.s_begin_r(s0 + 2)
 		tPool[t] = tFraction * (rPool[r1] + rPool[r2] + rPool[r3])
 		tElevation[t] = tFraction * (rElevation[r1] + rElevation[r2] + rElevation[r3])
 		tMoisture[t] = tFraction * (rMoisture[r1] + rMoisture[r2] + rMoisture[r3])
@@ -172,7 +145,7 @@ func (m *BaseObject) assignTriValues() {
 		var moisture float64
 		for i := 0; i < 3; i++ {
 			s := 3*t + i
-			r := m.mesh.s_begin_r(s)
+			r := mesh.s_begin_r(s)
 			moisture += m.Rainfall[r] / 3
 		}
 		tMoisture[t] = moisture
@@ -195,7 +168,8 @@ func (m *BaseObject) assignDownhill(usePool bool) {
 // the water pool depth plus the elevation of the region.
 func (m *BaseObject) GetDownhill(usePool bool) []int {
 	// Here we will map each region to the lowest neighbor.
-	rDownhill := make([]int, m.mesh.numRegions)
+	mesh := m.SphereMesh
+	rDownhill := make([]int, mesh.numRegions)
 	outReg := make([]int, 0, 8)
 	for r := range rDownhill {
 		lowestRegion := -1
@@ -203,7 +177,7 @@ func (m *BaseObject) GetDownhill(usePool bool) []int {
 		if usePool {
 			lowestElevation += m.Waterpool[r]
 		}
-		for _, nbReg := range m.mesh.r_circulate_r(outReg, r) {
+		for _, nbReg := range mesh.r_circulate_r(outReg, r) {
 			elev := m.Elevation[nbReg]
 			if usePool {
 				elev += m.Waterpool[nbReg]
@@ -230,7 +204,8 @@ func (m *BaseObject) assignDownflow() {
 	// moving upwards using elevation as the priority, to visit all
 	// the land triangles.
 	queue := make(ascPriorityQueue, 0)
-	numTriangles := m.mesh.numTriangles
+	mesh := m.SphereMesh
+	numTriangles := mesh.numTriangles
 	queueIn := 0
 	for i := range m.triDownflowSide {
 		m.triDownflowSide[i] = -999
@@ -244,7 +219,7 @@ func (m *BaseObject) assignDownflow() {
 			bestElevation := m.triElevation[t]
 			for j := 0; j < 3; j++ {
 				side := 3*t + j
-				elevation := m.triElevation[m.mesh.s_outer_t(side)]
+				elevation := m.triElevation[mesh.s_outer_t(side)]
 				if elevation < bestElevation {
 					bestSide = side
 					bestElevation = elevation
@@ -266,9 +241,9 @@ func (m *BaseObject) assignDownflow() {
 		current_t := heap.Pop(&queue).(*queueEntry).destination
 		for j := 0; j < 3; j++ {
 			s := 3*current_t + j
-			neighbor_t := m.mesh.s_outer_t(s) // uphill from current_t
+			neighbor_t := mesh.s_outer_t(s) // uphill from current_t
 			if m.triDownflowSide[neighbor_t] == -999 && m.triElevation[neighbor_t] >= 0.0 {
-				m.triDownflowSide[neighbor_t] = m.mesh.s_opposite_s(s)
+				m.triDownflowSide[neighbor_t] = mesh.s_opposite_s(s)
 				m.orderTri[queueIn] = neighbor_t
 				queueIn++
 				heap.Push(&queue, &queueEntry{
@@ -288,7 +263,7 @@ func (m *BaseObject) GetDistance(r1, r2 int) float64 {
 
 // GetRegNeighbors returns the neighbor regions of a region.
 func (m *BaseObject) GetRegNeighbors(r int) []int {
-	return m.mesh.r_circulate_r(nil, r)
+	return m.SphereMesh.r_circulate_r(nil, r)
 }
 
 func (m *BaseObject) getLowestRegNeighbor(r int) int {
@@ -322,7 +297,7 @@ func (m *BaseObject) getClosestNeighbor(outregs []int, r int, vec [2]float64) in
 	bestDist := math.Inf(1)
 	bestR := -1
 
-	neighbors := m.mesh.r_circulate_r(outregs, r)
+	neighbors := m.SphereMesh.r_circulate_r(outregs, r)
 	for i := 0; i < len(neighbors); i++ {
 		latLon2 := m.LatLon[neighbors[i]]
 		dist := haversine(lat, lon, latLon2[0], latLon2[1])
@@ -339,7 +314,8 @@ func (m *BaseObject) getClosestNeighbor(outregs []int, r int, vec [2]float64) in
 // surface area of a unit sphere. :) Yay!
 func (m *BaseObject) TestAreas() {
 	var tot float64
-	for i := 0; i < m.mesh.numRegions; i++ {
+	numRegs := m.SphereMesh.numRegions
+	for i := 0; i < numRegs; i++ {
 		a := m.GetRegArea(i)
 		tot += a
 		log.Println(a)
@@ -350,18 +326,18 @@ func (m *BaseObject) TestAreas() {
 // GetRegArea returns the surface area of a region on a unit sphere.
 func (m *BaseObject) GetRegArea(r int) float64 {
 	regLatLon := m.LatLon[r]
-	tris := m.mesh.r_circulate_t(make([]int, 0, 6), r)
+	tris := m.SphereMesh.r_circulate_t(make([]int, 0, 6), r)
 	dists := make([]float64, len(tris))
 	for i, tri := range tris {
-		dLatLon := m.triLatLon[tri]
+		dLatLon := m.TriLatLon[tri]
 		dists[i] = haversine(regLatLon[0], regLatLon[1], dLatLon[0], dLatLon[1])
 	}
 	var area float64
 	for ti0, t0 := range tris {
 		ti1 := (ti0 + 1) % len(tris)
 		t1 := tris[ti1]
-		t0LatLon := m.triLatLon[t0]
-		t1LatLon := m.triLatLon[t1]
+		t0LatLon := m.TriLatLon[t0]
+		t1LatLon := m.TriLatLon[t1]
 		a := dists[ti0]
 		b := dists[ti1]
 		c := haversine(t0LatLon[0], t0LatLon[1], t1LatLon[0], t1LatLon[1])
@@ -378,7 +354,7 @@ func (m *BaseObject) GetRegArea(r int) float64 {
 //
 // See: https://github.com/mewo2/terrain
 func (m *BaseObject) GetSlope() []float64 {
-	slope := make([]float64, m.mesh.numRegions)
+	slope := make([]float64, m.SphereMesh.numRegions)
 	for r, dhReg := range m.GetDownhill(false) {
 		// Sinks have no slope, so we skip them.
 		if dhReg < 0 {
@@ -401,7 +377,7 @@ func (m *BaseObject) GetSlope() []float64 {
 // expressed as a value between 0.0 to 1.0 (representing an angle from 0° to 90°).
 func (m *BaseObject) GetSteepness() []float64 {
 	// This will collect the steepness for each region.
-	steeps := make([]float64, m.mesh.numRegions)
+	steeps := make([]float64, m.SphereMesh.numRegions)
 
 	// Get the downhill neighbors for all regions (ignoring water pools for now).
 	dh := m.GetDownhill(false)
@@ -502,8 +478,9 @@ func (m *BaseObject) regSlope(i int) [2]float64 {
 	// NOTE: This is way less accurate. In theory we'd need
 	// to calculate the normal of a polygon.
 	// See solution rSlope2.
-	for _, t := range m.mesh.r_circulate_t(outTri, i) {
-		slope := m.regTriSlope(t, m.mesh.t_circulate_r(outReg, t))
+	mesh := m.SphereMesh
+	for _, t := range mesh.r_circulate_t(outTri, i) {
+		slope := m.regTriSlope(t, mesh.t_circulate_r(outReg, t))
 		res[0] += slope[0]
 		res[1] += slope[1]
 		count++
@@ -567,7 +544,7 @@ func (m *BaseObject) regTriNormal(t int, nbs []int) vectors.Vec3 {
 
 	// Get the origin vector of the triangle center.
 	// We will rotate the points with this vector until the triangle is facing upwards.
-	center := convToVec3(m.triXYZ[t*3:]).Normalize()
+	center := convToVec3(m.TriXYZ[t*3:]).Normalize()
 
 	// Get the axis to rotate the 'center' vector to the global up vector.
 	axis := center.Cross(vectors.Up)
@@ -620,8 +597,9 @@ func (m *BaseObject) FillSinks(randEpsilon bool) []float64 {
 	m.resetRand()
 
 	inf := math.Inf(0)
-	baseEpsilon := 1.0 / (float64(m.mesh.numRegions) * 1000.0)
-	newHeight := make([]float64, m.mesh.numRegions)
+	mesh := m.SphereMesh
+	baseEpsilon := 1.0 / (float64(mesh.numRegions) * 1000.0)
+	newHeight := make([]float64, mesh.numRegions)
 	for i := range newHeight {
 		if m.Elevation[i] <= 0 {
 			// Set the elevation at or below sea level to the current
@@ -660,7 +638,7 @@ func (m *BaseObject) FillSinks(randEpsilon bool) []float64 {
 			}
 
 			// Iterate over all neighbors in a random order.
-			nbs := m.mesh.r_circulate_r(outReg, r)
+			nbs := mesh.r_circulate_r(outReg, r)
 			for _, i := range m.rand.Perm(len(nbs)) {
 				nb := nbs[i]
 				// Since we have set all inland regions to infinity,
@@ -714,7 +692,7 @@ func (m *BaseObject) assignDistanceField(seedRegs []int, stopReg map[int]bool) [
 	m.resetRand()
 
 	inf := math.Inf(0)
-	mesh := m.mesh
+	mesh := m.SphereMesh
 	numRegions := mesh.numRegions
 
 	// Initialize the distance values for all regions to +Inf.
@@ -771,7 +749,7 @@ func (m *BaseObject) assignDistanceField(seedRegs []int, stopReg map[int]bool) [
 func (m *BaseObject) UpdateDistanceField(regDistance []float64, seedRegs []int, stopReg map[int]bool) []float64 {
 	// Reset the random number generator.
 	m.resetRand()
-	mesh := m.mesh
+	mesh := m.SphereMesh
 
 	var queue []int
 
@@ -850,6 +828,8 @@ func (m *BaseObject) interpolate(regions []int) (*interpolated, error) {
 	regionCompression := make(map[int]float64)
 	outRegs := make([]int, 0, 6)
 
+	mesh := m.SphereMesh
+	var xyz []float64
 	for _, r := range regions {
 		if m.RegionIsMountain[r] {
 			regionIsMountain[ipl.numRegions] = true
@@ -866,7 +846,7 @@ func (m *BaseObject) interpolate(regions []int) (*interpolated, error) {
 
 		ipl.numRegions++
 		rxyz := m.XYZ[r*3 : (r*3)+3]
-		ipl.XYZ = append(ipl.XYZ, rxyz...)
+		xyz = append(xyz, rxyz...)
 		ipl.Moisture = append(ipl.Moisture, m.Moisture[r])
 		ipl.Rainfall = append(ipl.Rainfall, m.Rainfall[r])
 		ipl.Flux = append(ipl.Flux, m.Flux[r])
@@ -876,7 +856,7 @@ func (m *BaseObject) interpolate(regions []int) (*interpolated, error) {
 		ipl.AirTemperature = append(ipl.AirTemperature, m.AirTemperature[r])
 
 		// Circulate_r all points and add midpoints.
-		for _, nbReg := range m.mesh.r_circulate_r(outRegs, r) {
+		for _, nbReg := range mesh.r_circulate_r(outRegs, r) {
 			// Check if we already added a midpoint for this edge.
 			var check [2]int
 			if r < nbReg {
@@ -898,7 +878,7 @@ func (m *BaseObject) interpolate(regions []int) (*interpolated, error) {
 				(rxyz[1] + rnxyz[1]) / 2,
 				(rxyz[2] + rnxyz[2]) / 2,
 			}).Normalize()
-			ipl.XYZ = append(ipl.XYZ, mid.X, mid.Y, mid.Z)
+			xyz = append(xyz, mid.X, mid.Y, mid.Z)
 			ipl.numRegions++
 
 			// Calculate diff and use noise to add variation.
@@ -924,38 +904,31 @@ func (m *BaseObject) interpolate(regions []int) (*interpolated, error) {
 			ipl.AirTemperature = append(ipl.AirTemperature, m.AirTemperature[r]+(diffAirTemp*nvl))
 		}
 	}
-	for r := 0; r < len(ipl.XYZ); r += 3 {
+
+	// Convert the XYZ to lat/lon.
+	latLon := make([][2]float64, 0, len(xyz)/3)
+	for r := 0; r < len(xyz); r += 3 {
 		// HACKY! Fix this properly!
-		nla, nlo := latLonFromVec3(convToVec3(ipl.XYZ[r:r+3]).Normalize(), 1.0)
-		ipl.LatLon = append(ipl.LatLon, [2]float64{nla, nlo})
-	}
-	xy := stereographicProjection(ipl.XYZ)
-	var pts []delaunay.Point
-	for i := 0; i < len(xy); i += 2 {
-		pts = append(pts, delaunay.Point{X: xy[i], Y: xy[i+1]})
+		nla, nlo := latLonFromVec3(convToVec3(xyz[r:r+3]).Normalize(), 1.0)
+		latLon = append(latLon, [2]float64{nla, nlo})
 	}
 
-	// Delaunay to rebuild triangles, halfedges etc.
-	tri, err := delaunay.Triangulate(pts)
-	if err != nil {
-		return nil, err
-	}
-	mesh := NewTriangleMesh(ipl.numRegions, tri.Triangles, tri.Halfedges)
-	ipl.mesh = mesh
+	// Create the sphere mesh.
+	sphere := newSphereMesh(latLon, xyz, false)
+	ipl.SphereMesh = sphere
 	ipl.RegionIsMountain = regionIsMountain
 	ipl.RegionIsVolcano = regionIsVolcano
 	ipl.RegionIsWaterfall = regionIsWaterfall
 	ipl.RegionCompression = regionCompression
-	ipl.triPool = make([]float64, mesh.numTriangles)
-	ipl.triElevation = make([]float64, mesh.numTriangles)
-	ipl.triMoisture = make([]float64, mesh.numTriangles)
-	ipl.triDownflowSide = make([]int, mesh.numTriangles)
-	ipl.orderTri = make([]int, mesh.numTriangles)
-	ipl.triFlow = make([]float64, mesh.numTriangles)
-	ipl.sideFlow = make([]float64, mesh.numSides)
+	ipl.triPool = make([]float64, sphere.numTriangles)
+	ipl.triElevation = make([]float64, sphere.numTriangles)
+	ipl.triMoisture = make([]float64, sphere.numTriangles)
+	ipl.triDownflowSide = make([]int, sphere.numTriangles)
+	ipl.orderTri = make([]int, sphere.numTriangles)
+	ipl.triFlow = make([]float64, sphere.numTriangles)
+	ipl.sideFlow = make([]float64, sphere.numSides)
 	ipl.assignDownhill(true)
 	ipl.assignTriValues()
-	ipl.generateTriCenters()
 	ipl.assignDownflow()
 	ipl.assignFlow()
 	return &ipl, nil

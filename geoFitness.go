@@ -119,13 +119,13 @@ func (m *Geo) CalcFitnessScore(sf func(int) float64, distSeedFunc func() []int) 
 }
 
 func (m *Geo) CalcFitnessScoreWithDistanceField(sf func(int) float64, regDistanceC []float64) []float64 {
-	score := make([]float64, m.mesh.numRegions)
+	score := make([]float64, m.SphereMesh.numRegions)
 
 	// Get the max distance for normalizing the distance.
 	_, maxDistC := minMax(regDistanceC)
 
 	// Calculate the fitness score for each region
-	for i := 0; i < m.mesh.numRegions; i++ {
+	for i := 0; i < m.SphereMesh.numRegions; i++ {
 		score[i] = sf(i)
 
 		// Check if we have a valid score.

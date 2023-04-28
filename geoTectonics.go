@@ -13,7 +13,7 @@ import (
 // starting from those seeds in a random order.
 func (m *Geo) generatePlates() {
 	m.resetRand()
-	mesh := m.mesh
+	mesh := m.SphereMesh
 	regPlate := make([]int, mesh.numRegions)
 	for i := range regPlate {
 		regPlate[i] = -1
@@ -99,7 +99,7 @@ func (m *Geo) findCollisions() ([]int, []int, []int, map[int]float64) {
 	plateIsOcean := m.PlateIsOcean
 	regPlate := m.RegionToPlate
 	plateVectors := m.PlateToVector
-	numRegions := m.mesh.numRegions
+	numRegions := m.SphereMesh.numRegions
 	compressionReg := make(map[int]float64)
 
 	// Initialize the compression measure to either the largest or smallest
@@ -122,7 +122,7 @@ func (m *Geo) findCollisions() ([]int, []int, []int, map[int]float64) {
 	for currentReg := 0; currentReg < numRegions; currentReg++ {
 		bestCompression = inf
 		bestReg = -1
-		rOut = m.mesh.r_circulate_r(rOut, currentReg)
+		rOut = m.SphereMesh.r_circulate_r(rOut, currentReg)
 		for _, nbReg := range rOut {
 			if regPlate[currentReg] != regPlate[nbReg] {
 				// sometimes I regret storing xyz in a compact array...
@@ -218,7 +218,7 @@ func (m *BaseObject) propagateCompression(compression map[int]float64) []float64
 	// normalize the compression value, also we need to copy
 	// the compression values into a slice so that we can
 	// modify them and queue them up.
-	cmp := make([]float64, m.mesh.numRegions)
+	cmp := make([]float64, m.SphereMesh.numRegions)
 	var cmpSeeds []int
 	for r, comp := range compression {
 		cmp[r] = comp
@@ -248,7 +248,7 @@ func (m *BaseObject) propagateCompression(compression map[int]float64) []float64
 	for queue.Len() > 0 {
 		currentReg := queue.Remove(queue.Front()).(int)
 		currentComp := cmp[currentReg]
-		for _, nbReg := range m.mesh.r_circulate_r(outRegs, currentReg) {
+		for _, nbReg := range m.SphereMesh.r_circulate_r(outRegs, currentReg) {
 			// The compression value diminishes over distance.
 			// This should be using the inverse square law, but
 			// we use a linear function instead.
@@ -352,7 +352,7 @@ func (m *Geo) assignRegionElevation() {
 	na := 1.0 / 1.0
 	nb := 1.0 / 1.0
 	nc := 1.0 / 1.0
-	for r := 0; r < m.mesh.numRegions; r++ {
+	for r := 0; r < m.SphereMesh.numRegions; r++ {
 		a := math.Pow(rDistanceA[r], na) + epsilon // Distance from mountains
 		b := math.Pow(rDistanceB[r], nb) + epsilon // Distance from oceans
 		c := math.Pow(rDistanceC[r], nc) + epsilon // Distance from coastline

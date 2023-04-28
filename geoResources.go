@@ -76,7 +76,7 @@ func (res *Resources) sumRegion(r int) int {
 }
 
 func (m *Geo) resourceFitness() []float64 {
-	fitness := make([]float64, m.mesh.numRegions)
+	fitness := make([]float64, m.SphereMesh.numRegions)
 	f := m.getFitnessSteepMountains()
 	for r := range fitness {
 		fitness[r] = f(r)
@@ -182,7 +182,7 @@ func (m *Geo) placeMetals() {
 	metals := make([]byte, len(steepness))
 
 	// TODO: Use noise intersection instead of rand.
-	for r := 0; r < m.mesh.numRegions; r++ {
+	for r := 0; r < m.SphereMesh.numRegions; r++ {
 		if fm(r) > 0.9 {
 			switch rv := math.Abs(m.rand.NormFloat64() * fn(r)); {
 			case rv < chancePlatinum:
@@ -287,7 +287,7 @@ func (m *Geo) placeGems() {
 	)
 
 	gems := make([]byte, len(steepness))
-	for r := 0; r < m.mesh.numRegions; r++ {
+	for r := 0; r < m.SphereMesh.numRegions; r++ {
 		if steepness[r] > 0.9 && m.Elevation[r] > 0.5 {
 			switch rv := math.Abs(m.rand.NormFloat64()); {
 			case rv < chanceDiamond:
@@ -394,7 +394,7 @@ func (m *Geo) placeStones() {
 	// will be placed near mountain ranges.
 
 	// Initialize the stone map.
-	stones := make([]byte, m.mesh.numRegions)
+	stones := make([]byte, m.SphereMesh.numRegions)
 
 	biomeFunc := m.getRegWhittakerModBiomeFunc()
 	steepness := m.GetSteepness()
@@ -403,7 +403,7 @@ func (m *Geo) placeStones() {
 	var volcanoes, mountains, faultlines []int
 	stopSea := make(map[int]bool)
 	isBeach := make(map[int]bool)
-	for r := 0; r < m.mesh.numRegions; r++ {
+	for r := 0; r < m.SphereMesh.numRegions; r++ {
 		if m.RegionIsVolcano[r] {
 			volcanoes = append(volcanoes, r)
 		}
@@ -432,7 +432,7 @@ func (m *Geo) placeStones() {
 
 	// Loop through all the regions and place stones based on the region's
 	// properties.
-	for r := 0; r < m.mesh.numRegions; r++ {
+	for r := 0; r < m.SphereMesh.numRegions; r++ {
 		// Skip water regions.
 		if m.Elevation[r] <= 0.0 {
 			continue
@@ -520,10 +520,10 @@ func variousToString(v int) string {
 }
 
 func (m *Geo) placeVarious() {
-	varRes := make([]byte, m.mesh.numRegions)
+	varRes := make([]byte, m.SphereMesh.numRegions)
 	biomeFunc := m.getRegWhittakerModBiomeFunc()
 	steepness := m.GetSteepness()
-	for r := 0; r < m.mesh.numRegions; r++ {
+	for r := 0; r < m.SphereMesh.numRegions; r++ {
 		if m.Elevation[r] <= 0.0 {
 			continue
 		}
@@ -594,8 +594,8 @@ func (m *Geo) placeForests() {
 	biomeFunc := m.getRegWhittakerModBiomeFunc()
 	//steepness := m.GetSteepness()
 
-	wood := make([]byte, m.mesh.numRegions)
-	for r := 0; r < m.mesh.numRegions; r++ {
+	wood := make([]byte, m.SphereMesh.numRegions)
+	for r := 0; r < m.SphereMesh.numRegions; r++ {
 		if m.Elevation[r] <= 0.0 {
 			continue
 		}

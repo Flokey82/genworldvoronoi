@@ -232,7 +232,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 	x, y = wrapTileCoordinates(x, y, zoom)
 
 	// Calculate an approximation of the distance between regions.
-	distRegion := math.Sqrt(4 * math.Pi / float64(m.mesh.numRegions))
+	distRegion := math.Sqrt(4 * math.Pi / float64(m.SphereMesh.numRegions))
 
 	// Convert into degrees.
 	distRegionDeg := distRegion * 180 / math.Pi
@@ -288,9 +288,9 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 		rLon := m.LatLon[i][1]
 		// Draw the path that outlines the region.
 		var path [][2]float64
-		for _, j := range m.mesh.r_circulate_t(out_t, i) {
-			tLat := m.triLatLon[j][0]
-			tLon := m.triLatLon[j][1]
+		for _, j := range m.SphereMesh.r_circulate_t(out_t, i) {
+			tLat := m.TriLatLon[j][0]
+			tLon := m.TriLatLon[j][1]
 
 			// Check if we have wrapped around the world.
 			if tLon-rLon > 120 {
@@ -347,10 +347,10 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 		gc.SetLineWidth(1)
 
 	Loop:
-		for i := 0; i < len(m.mesh.Triangles); i += 3 {
+		for i := 0; i < len(m.SphereMesh.Triangles); i += 3 {
 			// Hacky way to filter paths/triangles that wrap around the entire SVG.
-			triLat := m.triLatLon[i/3][0]
-			triLon := m.triLatLon[i/3][1]
+			triLat := m.TriLatLon[i/3][0]
+			triLon := m.TriLatLon[i/3][1]
 
 			// Check if we are within the tile with a small margin, taking
 			// into account that we might have wrapped around the world.
@@ -360,7 +360,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 
 			// Draw the path that outlines the region.
 			var path [][2]float64
-			for _, j := range m.mesh.t_circulate_r(out_t, i/3) {
+			for _, j := range m.SphereMesh.t_circulate_r(out_t, i/3) {
 				rLat := m.LatLon[j][0]
 				rLon := m.LatLon[j][1]
 
@@ -398,7 +398,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 			}
 
 			// Get the 3 regions of the triangle.
-			regions := m.mesh.t_circulate_r(out_t, i/3)
+			regions := m.SphereMesh.t_circulate_r(out_t, i/3)
 
 			// Get the normal of the triangle.
 			normal := m.regTriNormal(i/3, regions)
@@ -872,7 +872,7 @@ func (m *Map) GetGeoJSONCities(la1, lo1, la2, lo2 float64, zoom int) ([]byte, er
 
 	// Get the last settled year.
 	_, maxSettled := minMax64(m.Settled)
-	distRegion := math.Sqrt(4 * math.Pi / float64(m.mesh.numRegions))
+	distRegion := math.Sqrt(4 * math.Pi / float64(m.SphereMesh.numRegions))
 
 	biomeFunc := m.getRegWhittakerModBiomeFunc()
 	_, maxElev := minMax(m.Elevation)
@@ -1029,8 +1029,8 @@ func (m *Map) GetGeoJSONBorders(la1, lo1, la2, lo2 float64, zoom, displayMode in
 		var borderLatLons [][]float64
 		for _, p := range border {
 			// Get the lat lon coordinates of the point.
-			la := m.triLatLon[p][0]
-			lo := m.triLatLon[p][1]
+			la := m.TriLatLon[p][0]
+			lo := m.TriLatLon[p][1]
 
 			// Check if we have crossed the 180 degree longitude line.
 			// If so, we stop here, add the border to the GeoJSON and start a new one.
@@ -1172,7 +1172,7 @@ func (m *BaseObject) getBoundingBoxRegions(lat1, lon1, lat2, lon2 float64) *boun
 		}
 		r.Regions = append(r.Regions, i)
 	}
-	for i, ll := range m.triLatLon {
+	for i, ll := range m.TriLatLon {
 		if l0, l1 := ll[0], ll[1]; l0 < lat1 || l0 >= lat2 || l1 < lon1 || l1 >= lon2 {
 			continue
 		}

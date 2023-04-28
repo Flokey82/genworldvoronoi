@@ -27,8 +27,8 @@ func (m *Geo) getFlux(skipBelowSea bool) []float64 {
 	variant := FluxVolVariantBasic
 
 	// Initialize flux values with r_rainfall.
-	regFlux := make([]float64, m.mesh.numRegions)
-	for i := 0; i < m.mesh.numRegions; i++ {
+	regFlux := make([]float64, m.SphereMesh.numRegions)
+	for i := 0; i < m.SphereMesh.numRegions; i++ {
 		if m.Elevation[i] >= 0 || !skipBelowSea {
 			regFlux[i] = m.Rainfall[i]
 		}
@@ -62,7 +62,7 @@ func (m *Geo) getFlux(skipBelowSea bool) []float64 {
 		// Basic variant copying the flux to the downhill neighbor or the drainage.
 		// Initialize map for identifying drains and populate initial state of sorted index.
 		drains := make(map[int]bool)
-		idxs := make([]int, m.mesh.numRegions)
+		idxs := make([]int, m.SphereMesh.numRegions)
 		for i := range idxs {
 			if m.Drainage[i] >= 0 {
 				drains[m.Drainage[i]] = true
@@ -101,7 +101,7 @@ func (m *Geo) getFlux(skipBelowSea bool) []float64 {
 		// if a drainage point is set.
 		// I put in a quick fix as I type this, but I didn't test the
 		// result, so no guarantees.
-		regFluxTmp := make([]float64, m.mesh.numRegions)
+		regFluxTmp := make([]float64, m.SphereMesh.numRegions)
 		for j, fl := range regFlux {
 			seen := make(map[int]bool)
 			drain := m.Drainage[j]
@@ -132,7 +132,7 @@ func (m *Geo) getFlux(skipBelowSea bool) []float64 {
 	case FluxVolVariantWalk2:
 		// This variant will walk downhill for each region until we
 		// can't find neither a downhill neighbor nor a drainage point.
-		regFluxTmp := make([]float64, m.mesh.numRegions)
+		regFluxTmp := make([]float64, m.SphereMesh.numRegions)
 		for j, fl := range regFlux {
 			// Seen will keep track of the regions that we have
 			// already visited for this region. This will prevent
@@ -207,7 +207,7 @@ func (m *BaseObject) assignFlow() {
 
 	// Set the flux value for each triangle above sealevel to
 	// half of its moisture squared as its initial state.
-	numTriangles := m.mesh.numTriangles
+	numTriangles := m.SphereMesh.numTriangles
 	for t := 0; t < numTriangles; t++ {
 		if triElevation[t] >= 0.0 {
 			triFlow[t] = 0.5 * triMoisture[t] * triMoisture[t]
@@ -220,7 +220,7 @@ func (m *BaseObject) assignFlow() {
 	// the moisture of all tributaries while descending.
 	orderTris := m.orderTri
 	triDownflowSide := m.triDownflowSide
-	halfedges := m.mesh.Halfedges
+	halfedges := m.SphereMesh.Halfedges
 	for i := len(orderTris) - 1; i >= 0; i-- {
 		// TODO: Describe what's going on here.
 		tributaryTri := orderTris[i]
@@ -322,7 +322,7 @@ func (m *BaseObject) getRiverSegments(limit float64) [][2]int {
 
 	// Find all link segments that have a high enough flux value.
 	var links [][2]int
-	for r := 0; r < m.mesh.numRegions; r++ {
+	for r := 0; r < m.SphereMesh.numRegions; r++ {
 		// Skip all regions that are sinks / have no downhill neighbor or
 		// regions below sea level.
 		if dh[r] < 0 || m.Elevation[r] < 0 {
@@ -351,7 +351,7 @@ func (m *BaseObject) getRiverSegments(limit float64) [][2]int {
 // getRiverIndices returns a mapping from regions to river ID.
 func (m *Geo) getRiverIndices(limit float64) []int {
 	// Set up defaults.
-	rivers := make([]int, m.mesh.numRegions)
+	rivers := make([]int, m.SphereMesh.numRegions)
 	for i := range rivers {
 		rivers[i] = -1 // -1 means no river
 	}

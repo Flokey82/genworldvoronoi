@@ -63,7 +63,7 @@ func (m *Geo) GetSolarRadiation(lat float64) float64 {
 // calcMinMaxTemperature calculates the minimum and maximum temperature for
 // every region on the current day of the year.
 func (m *Geo) calcMinMaxTemperature() [][2]float64 {
-	res := make([][2]float64, m.mesh.numRegions)
+	res := make([][2]float64, m.SphereMesh.numRegions)
 	for i := range res {
 		lat := m.LatLon[i][0]
 		res[i][0], res[i][1] = m.GetMinMaxTemperature(lat)
@@ -129,13 +129,9 @@ func (m *Geo) getMinMaxTemperatureOfDay(lat float64, dayOfYear int) (min, max fl
 // https://github.com/willbeason/worldproc/blob/28fd3f0188082ade001110a6a73edda4b987ccdd/pkg/climate/temperature.go
 
 func (m *Geo) calcSolarRadiation(dayOfYear int) []float64 {
-	res := make([]float64, m.mesh.numRegions)
+	res := make([]float64, m.SphereMesh.numRegions)
 	for i := range res {
-		if math.Abs(m.LatLon[i][0]) > 90 {
-			panic(m.LatLon[i][0])
-		}
-		latRad := degToRad(m.LatLon[i][0])
-		res[i] = calcSolarRadiation(latRad, dayOfYear)
+		res[i] = calcSolarRadiation(degToRad(m.LatLon[i][0]), dayOfYear)
 	}
 	return res
 }

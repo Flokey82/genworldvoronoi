@@ -120,12 +120,6 @@ func stereographicProjection(xyz []float64) []float64 {
 	return xy
 }
 
-type SphereMesh struct {
-	*TriangleMesh
-	XYZ    []float64    // Region coordinates
-	LatLon [][2]float64 // Region latitude and longitude
-}
-
 func MakeSphere(seed int64, numPoints int, jitter float64) (*SphereMesh, error) {
 	// Generate a Fibonacci sphere.
 	latlong := generateFibonacciSphere(seed, numPoints, jitter)
@@ -141,7 +135,18 @@ func MakeSphere(seed int64, numPoints int, jitter float64) (*SphereMesh, error) 
 		// This calculates x,y,z from the spherical coordinates lat,lon.
 		xyz = append(xyz, latLonToCartesian(latlong[r], latlong[r+1])...)
 	}
+	return newSphereMesh(latLon, xyz, true), nil
+}
 
+type SphereMesh struct {
+	*TriangleMesh
+	XYZ       []float64    // Region coordinates
+	LatLon    [][2]float64 // Region latitude and longitude
+	TriXYZ    []float64    // Triangle xyz coordinates
+	TriLatLon [][2]float64 // Triangle latitude and longitude
+}
+
+func newSphereMesh(latLon [][2]float64, xyz []float64, addSouthPole bool) *SphereMesh {
 	// Map the sphere on a plane using the stereographic projection.
 	xy := stereographicProjection(xyz)
 
@@ -152,23 +157,46 @@ func MakeSphere(seed int64, numPoints int, jitter float64) (*SphereMesh, error) 
 	}
 	tri, err := delaunay.Triangulate(pts)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 
-	// Close the hole at the south pole.
-	// TODO: rotate an existing point into this spot instead of creating one.
-	xyz = append(xyz, 0, 0, 1)
-	latLon = append(latLon, [2]float64{-90.0, 45.0})
-	tri = addSouthPoleToMesh((len(xyz)/3)-1, tri)
+	// Close the hole at the south pole if requested.
+	if addSouthPole {
+		// TODO: rotate an existing point into this spot instead of creating one.
+		xyz = append(xyz, 0, 0, 1)
+		latLon = append(latLon, [2]float64{-90.0, 45.0})
+		tri = addSouthPoleToMesh((len(xyz)/3)-1, tri)
+	}
 
-	return &SphereMesh{
-		TriangleMesh: NewTriangleMesh(numPoints+1, tri.Triangles, tri.Halfedges),
+	// Create a mesh from the triangulation.
+	m := &SphereMesh{
+		TriangleMesh: NewTriangleMesh(len(latLon), tri.Triangles, tri.Halfedges),
 		XYZ:          xyz,
 		LatLon:       latLon,
-	}, nil
+	}
+
+	// Iterate over all triangles and generates the centroids for each.
+	tXYZ := make([]float64, 0, m.numTriangles*3)
+	tLatLon := make([][2]float64, 0, m.numTriangles)
+	for t := 0; t < m.numTriangles; t++ {
+		a := m.s_begin_r(3 * t)
+		b := m.s_begin_r(3*t + 1)
+		c := m.s_begin_r(3*t + 2)
+		v3 := getCentroidOfTriangle(
+			m.XYZ[3*a:3*a+3],
+			m.XYZ[3*b:3*b+3],
+			m.XYZ[3*c:3*c+3])
+		tXYZ = append(tXYZ, v3.X, v3.Y, v3.Z)
+		nla, nlo := latLonFromVec3(v3, 1.0)
+		tLatLon = append(tLatLon, [2]float64{nla, nlo})
+	}
+	m.TriLatLon = tLatLon
+	m.TriXYZ = tXYZ
+
+	return m
 }
 
-// MakeCoarseSphereMesh returns a triangle mesh generating from every n-th point of the sphere mesh.
+// MakeCoarseSphereMesh returns a sphere mesh generating from every n-th point of the sphere mesh.
 func (m *SphereMesh) MakeCoarseSphereMesh(n int) (*SphereMesh, error) {
 	// Convert the lat/lon coordinates to x,y,z. (skip the existing south pole)
 	var xyz []float64
@@ -178,29 +206,7 @@ func (m *SphereMesh) MakeCoarseSphereMesh(n int) (*SphereMesh, error) {
 		latLon = append(latLon, m.LatLon[r])
 	}
 
-	// Map the sphere on a plane using the stereographic projection.
-	xy := stereographicProjection(xyz)
-
-	// Create a Delaunay triangulation of the points.
-	pts := make([]delaunay.Point, 0, len(xy)/2)
-	for i := 0; i < len(xy); i += 2 {
-		pts = append(pts, delaunay.Point{X: xy[i], Y: xy[i+1]})
-	}
-	tri, err := delaunay.Triangulate(pts)
-	if err != nil {
-		return nil, err
-	}
-
-	// Close the hole at the south pole.
-	xyz = append(xyz, 0, 0, 1)
-	tri = addSouthPoleToMesh((len(xyz)/3)-1, tri)
-	latLon = append(latLon, [2]float64{-90.0, 45.0})
-
 	// TODO: Re-use the existing lat/lon and xyz arrays and simply provide means
 	// to map the new indices to the old ones.
-	return &SphereMesh{
-		TriangleMesh: NewTriangleMesh(len(m.LatLon), tri.Triangles, tri.Halfedges),
-		XYZ:          xyz,
-		LatLon:       latLon,
-	}, nil
+	return newSphereMesh(latLon, xyz, true), nil
 }

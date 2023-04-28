@@ -47,23 +47,23 @@ func (m *Geo) getRegTemperature(r int, maxElev float64) float64 {
 // getRTemperature returns the average yearly temperature of the given triangle at the surface.
 func (m *Geo) getTriTemperature(t int, maxElev float64) float64 {
 	// TODO: Fix maxElev caching!!!
-	return getMeanAnnualTemp(m.triLatLon[t][0]) - getTempFalloffFromAltitude(maxAltitudeFactor*m.triElevation[t]/maxElev)
+	return getMeanAnnualTemp(m.TriLatLon[t][0]) - getTempFalloffFromAltitude(maxAltitudeFactor*m.triElevation[t]/maxElev)
 }
 
 func (m *Geo) initRegionAirTemperature() {
 	_, maxElev := minMax(m.Elevation)
-	for r := 0; r < m.mesh.numRegions; r++ {
+	for r := 0; r < m.SphereMesh.numRegions; r++ {
 		m.AirTemperature[r] = m.getRegTemperature(r, maxElev)
 	}
 }
 
 func (m *Geo) assignRegionAirTemperature() {
 	// TODO: Deduplicate this code with assignRegionWaterTemperature.
-	newTemperature := make([]float64, m.mesh.numRegions)
-	baseTemperature := make([]float64, m.mesh.numRegions)
+	newTemperature := make([]float64, m.SphereMesh.numRegions)
+	baseTemperature := make([]float64, m.SphereMesh.numRegions)
 
 	outregs := make([]int, 0, 8)
-	for r := 0; r < m.mesh.numRegions; r++ {
+	for r := 0; r < m.SphereMesh.numRegions; r++ {
 		// base
 		// lat := m.LatLon[r][0]
 		// absLat := math.Abs(lat)
@@ -74,7 +74,7 @@ func (m *Geo) assignRegionAirTemperature() {
 		baseTemperature[r] = startTemp
 
 		// diffusion
-		neighbors := m.mesh.r_circulate_r(outregs, r)
+		neighbors := m.SphereMesh.r_circulate_r(outregs, r)
 		neighborAverage := newTemperature[r]
 		neighborCount := 1
 		for i := 0; i < len(neighbors); i++ {
@@ -95,8 +95,8 @@ func (m *Geo) assignRegionAirTemperature() {
 		numSteps    = 5
 	)
 	for step := 0; step < numSteps; step++ {
-		movedTemp := make([][]float64, m.mesh.numRegions)
-		for r := 0; r < m.mesh.numRegions; r++ {
+		movedTemp := make([][]float64, m.SphereMesh.numRegions)
+		for r := 0; r < m.SphereMesh.numRegions; r++ {
 			// add in the "pulled temp"
 			movedTemp[r] = append(movedTemp[r], newTemperature[r])
 
@@ -118,7 +118,7 @@ func (m *Geo) assignRegionAirTemperature() {
 			movedTemp[nr] = append(movedTemp[nr], transferOut*m.AirTemperature[r]+transferIn*newTemperature[r])
 		}
 
-		for r := 0; r < m.mesh.numRegions; r++ {
+		for r := 0; r < m.SphereMesh.numRegions; r++ {
 			// newTemperature[r] += movedTemp[r]
 			if movedTemp[r] != nil && len(movedTemp[r]) > 0 {
 				newTemperature[r] = movedTemp[r][0]
@@ -136,7 +136,7 @@ func (m *Geo) assignRegionAirTemperature() {
 
 func (m *Geo) initRegionWaterTemperature() {
 	_, maxElev := minMax(m.Elevation)
-	for r := 0; r < m.mesh.numRegions; r++ {
+	for r := 0; r < m.SphereMesh.numRegions; r++ {
 		if m.Elevation[r] <= 0 {
 			m.OceanTemperature[r] = m.getRegTemperature(r, maxElev)
 		}
@@ -145,16 +145,16 @@ func (m *Geo) initRegionWaterTemperature() {
 
 func (m *Geo) transportRegionWaterTemperature() {
 	// TODO: Deduplicate this code with assignRegionAirTemperature.
-	newTemperature := make([]float64, m.mesh.numRegions)
-	baseTemperature := make([]float64, m.mesh.numRegions)
-	for r := 0; r < m.mesh.numRegions; r++ {
+	newTemperature := make([]float64, m.SphereMesh.numRegions)
+	baseTemperature := make([]float64, m.SphereMesh.numRegions)
+	for r := 0; r < m.SphereMesh.numRegions; r++ {
 		if m.Elevation[r] > 0 {
 			newTemperature[r] = 0.5
 		}
 	}
 
 	outregs := make([]int, 0, 8)
-	for r := 0; r < m.mesh.numRegions; r++ {
+	for r := 0; r < m.SphereMesh.numRegions; r++ {
 		if m.Elevation[r] > 0 {
 			continue
 		}
@@ -169,7 +169,7 @@ func (m *Geo) transportRegionWaterTemperature() {
 		baseTemperature[r] = startTemp
 
 		// diffusion
-		neighbors := m.mesh.r_circulate_r(outregs, r)
+		neighbors := m.SphereMesh.r_circulate_r(outregs, r)
 		neighborAverage := newTemperature[r]
 		neighborCount := 1
 		for i := 0; i < len(neighbors); i++ {
@@ -192,8 +192,8 @@ func (m *Geo) transportRegionWaterTemperature() {
 		numSteps    = 30
 	)
 	for step := 0; step < numSteps; step++ {
-		movedTemp := make([][]float64, m.mesh.numRegions)
-		for r := 0; r < m.mesh.numRegions; r++ {
+		movedTemp := make([][]float64, m.SphereMesh.numRegions)
+		for r := 0; r < m.SphereMesh.numRegions; r++ {
 			// add in the "pulled temp"
 			movedTemp[r] = append(movedTemp[r], newTemperature[r])
 
@@ -217,7 +217,7 @@ func (m *Geo) transportRegionWaterTemperature() {
 			movedTemp[nr] = append(movedTemp[nr], transferOut*m.OceanTemperature[r]+transferIn*newTemperature[r])
 		}
 
-		for r := 0; r < m.mesh.numRegions; r++ {
+		for r := 0; r < m.SphereMesh.numRegions; r++ {
 			// newTemperature[r] += movedTemp[r]
 			if movedTemp[r] != nil && len(movedTemp[r]) > 0 {
 				newTemperature[r] = movedTemp[r][0]

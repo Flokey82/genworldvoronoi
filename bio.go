@@ -17,9 +17,9 @@ type Bio struct {
 func newBio(geo *Geo) *Bio {
 	return &Bio{
 		Geo:                    geo,
-		GrowthDays:             make([]int, geo.mesh.numRegions),
-		GrowthInsolation:       make([]float64, geo.mesh.numRegions),
-		SpeciesRegions:         make([]int, geo.mesh.numRegions),
+		GrowthDays:             make([]int, geo.SphereMesh.numRegions),
+		GrowthInsolation:       make([]float64, geo.SphereMesh.numRegions),
+		SpeciesRegions:         make([]int, geo.SphereMesh.numRegions),
 		SpeciesFamilyToRegions: make(map[SpeciesFamily][]int),
 		NumSpecies:             100,
 		rand:                   rand.New(rand.NewSource(geo.Seed)),

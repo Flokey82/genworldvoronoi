@@ -21,7 +21,7 @@ func (m *Geo) assignLandmasses() {
 // A landmass is a connected number of regions above sealevel.
 func (m *Geo) IdentifyLandmasses() []int {
 	// NOTE: this is still in need of refinement.
-	landMasses := initRegionSlice(m.mesh.numRegions)
+	landMasses := initRegionSlice(m.SphereMesh.numRegions)
 	for r := range landMasses {
 		// Skip everything that is ocean.
 		if m.Elevation[r] <= 0 {
@@ -48,7 +48,7 @@ func (m *Geo) IdentifyLandmasses() []int {
 			}
 			landMasses[r] = landID // Assign current landID to the region.
 			currentLandSize++      // Increase size of known landmass.
-			for _, nb := range m.mesh.r_circulate_r(outReg, r) {
+			for _, nb := range m.SphereMesh.r_circulate_r(outReg, r) {
 				// Skip if the neighbor region has already been allocated
 				// or is below sealevel.
 				if landMasses[nb] != -1 {

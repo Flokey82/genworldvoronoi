@@ -223,7 +223,7 @@ func (m *Civ) relocateFromCity(c *City, population int) {
 	// Calculate the analog of distance between regions by taking the surface
 	// of a sphere with radius 1 and dividing it by the number of regions.
 	// The square root will work as a somewhat sensible approximation of distance.
-	distRegion := math.Sqrt(4 * math.Pi / float64(m.mesh.numRegions))
+	distRegion := math.Sqrt(4 * math.Pi / float64(m.SphereMesh.numRegions))
 
 	// Per distRegion, the chance of death is 2%.
 	const chanceDeath = 0.02
