@@ -228,7 +228,8 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 	dest := image.NewRGBA(image.Rect(0, 0, tileSize, tileSize))
 	gc := draw2dimg.NewGraphicContext(dest)
 
-	var inQuadTree []int
+	// Get all regions that are within the tile bounds.
+	var inQuadTreeRegs []int
 	qds := m.regQuadTree.FindPointsInRect(geoquad.Rect{
 		MinLat: la1Margin,
 		MaxLat: la2Margin,
@@ -236,12 +237,14 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 		MaxLon: lo2Margin,
 	})
 	for _, qd := range qds {
-		inQuadTree = append(inQuadTree, qd.Data.(int))
+		inQuadTreeRegs = append(inQuadTreeRegs, qd.Data.(int))
 	}
+
+	// Draw the regions.
 	out_t := make([]int, 0, 6)
 	gc.SetLineWidth(1)
 
-	for _, i := range inQuadTree {
+	for _, i := range inQuadTreeRegs {
 		// rLat := m.LatLon[i][0]
 		rLon := m.LatLon[i][1]
 		// Draw the path that outlines the region.
@@ -298,6 +301,18 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 	}
 
 	if drawShadows {
+		// Get all triangles that are within the tile bounds.
+		var inQuadTreeTris []int
+		qds = m.triQuadTree.FindPointsInRect(geoquad.Rect{
+			MinLat: la1Margin,
+			MaxLat: la2Margin,
+			MinLon: lo1Margin,
+			MaxLon: lo2Margin,
+		})
+		for _, qd := range qds {
+			inQuadTreeTris = append(inQuadTreeTris, qd.Data.(int))
+		}
+
 		// Set the global light direction (upper left when looking at the map)
 		lightDir := vectors.Vec3{X: -1.0, Y: 1.0, Z: 1.0}.Normalize()
 
@@ -305,10 +320,10 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 		gc.SetLineWidth(1)
 
 	Loop:
-		for i := 0; i < len(m.Triangles); i += 3 {
+		for _, i := range inQuadTreeTris {
 			// Hacky way to filter paths/triangles that wrap around the entire SVG.
-			triLat := m.TriLatLon[i/3][0]
-			triLon := m.TriLatLon[i/3][1]
+			triLat := m.TriLatLon[i][0]
+			triLon := m.TriLatLon[i][1]
 
 			// Check if we are within the tile with a small margin, taking
 			// into account that we might have wrapped around the world.
@@ -318,7 +333,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 
 			// Draw the path that outlines the region.
 			var path [][2]float64
-			for _, j := range m.t_circulate_r(out_t, i/3) {
+			for _, j := range m.t_circulate_r(out_t, i) {
 				rLat := m.LatLon[j][0]
 				rLon := m.LatLon[j][1]
 
@@ -356,10 +371,10 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 			}
 
 			// Get the 3 regions of the triangle.
-			regions := m.t_circulate_r(out_t, i/3)
+			regions := m.t_circulate_r(out_t, i)
 
 			// Get the normal of the triangle.
-			normal := m.regTriNormal(i/3, regions)
+			normal := m.regTriNormal(i, regions)
 
 			// Now take the dot product of the slope and our global light
 			// direction to get the amount of light on the triangle.
@@ -552,7 +567,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 		// Set the color and line width of the wind vectors.
 		gc.SetStrokeColor(color.NRGBA{0, 0, 0, 255})
 		gc.SetLineWidth(1)
-		for _, i := range inQuadTree {
+		for _, i := range inQuadTreeRegs {
 			rLat := m.LatLon[i][0]
 			rLon := m.LatLon[i][1]
 

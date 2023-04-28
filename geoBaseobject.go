@@ -44,6 +44,7 @@ type BaseObject struct {
 	orderTri          []int             // Triangles in uphill order of elevation.
 	sideFlow          []float64         // Flow intensity through sides
 	regQuadTree       *geoquad.QuadTree // Quadtree for region lookup
+	triQuadTree       *geoquad.QuadTree // Quadtree for triangle lookup
 }
 
 func newBaseObject(seed int64, mesh *SphereMesh) *BaseObject {
@@ -80,6 +81,7 @@ func newBaseObject(seed int64, mesh *SphereMesh) *BaseObject {
 		triFlow:           make([]float64, mesh.numTriangles),
 		sideFlow:          make([]float64, mesh.numSides),
 		regQuadTree:       newQuadTreeFromLatLon(mesh.LatLon),
+		triQuadTree:       newQuadTreeFromLatLon(mesh.TriLatLon),
 	}
 }
 
@@ -916,6 +918,12 @@ func (m *BaseObject) interpolate(regions []int) (*interpolated, error) {
 	// Create the sphere mesh.
 	sphere := newSphereMesh(latLon, xyz, false)
 	ipl.SphereMesh = sphere
+
+	// Update quadtrees.
+	ipl.regQuadTree = newQuadTreeFromLatLon(ipl.SphereMesh.LatLon)
+	ipl.triQuadTree = newQuadTreeFromLatLon(ipl.SphereMesh.TriLatLon)
+
+	// Assign all the values.
 	ipl.RegionIsMountain = regionIsMountain
 	ipl.RegionIsVolcano = regionIsVolcano
 	ipl.RegionIsWaterfall = regionIsWaterfall
@@ -931,5 +939,6 @@ func (m *BaseObject) interpolate(regions []int) (*interpolated, error) {
 	ipl.assignTriValues()
 	ipl.assignDownflow()
 	ipl.assignFlow()
+
 	return &ipl, nil
 }
