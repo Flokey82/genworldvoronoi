@@ -596,24 +596,19 @@ func (m *Geo) assignOceanCurrents3() {
 	outRegs := make([]int, 0, 8)
 
 	// merge groups that are touching
-	for r := 0; r < m.SphereMesh.numRegions; r++ {
-		if m.Elevation[r] > 0 {
+	for r, rgr := range groups {
+		if rgr == -1 || m.Elevation[r] > 0 {
 			continue
 		}
 		for _, sr := range m.SphereMesh.r_circulate_r(outRegs, r) {
-			if groups[r] == groups[sr] {
-				continue
-			}
-			if groups[r] == -1 || groups[sr] == -1 {
-				continue
-			}
-			if seedSupergroup[groups[r]] != seedSupergroup[groups[sr]] {
+			sgr := groups[sr]
+			if sgr == -1 || rgr == sgr || seedSupergroup[rgr] != seedSupergroup[sgr] {
 				continue // if r and sr are in different "bands", aka supergroups, do not merge them
 			}
 			// assign all regions belonging to the same group as sr, to the same group as r
-			for i := range groups {
-				if groups[i] == groups[sr] {
-					groups[i] = groups[r]
+			for i, g := range groups {
+				if g == sgr {
+					groups[i] = rgr
 				}
 			}
 		}
