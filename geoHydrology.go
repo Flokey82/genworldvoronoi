@@ -15,8 +15,8 @@ const (
 // assignHydrology will calculate river systems and fill sinks instead of trying to generate
 // water pools.
 func (m *Geo) assignHydrology() {
-	maxAttempts := 3
-	erosionAmount := 0.01 // Erode 1% of delta-h per pass.
+	maxAttempts := 1
+	erosionAmount := 0.03 // Erode 1% of delta-h per pass.
 	outRegs := make([]int, 0, 8)
 
 	// HACK: Fill all sinks that are below sea level and a single region
@@ -41,25 +41,26 @@ Loop:
 
 	// Try to flood all sinks.
 	var attempts int
-	m.BaseObject.assignDownhill(true)
-	m.assignFlux(false)
 	for {
 		// Abort if we have no more sinks or ran out of attempts.
 		if attempts > maxAttempts {
 			m.Elevation = m.FillSinks(true)
 
-			// Regenerate downhill.
-			m.BaseObject.assignDownhill(true)
-
-			// Regenerate flux.
-			m.assignFlux(true)
+			// Regenerate winds.
+			// m.assignWindVectors()
 
 			// TODO: Diffuse flux and pool.
 			m.assignRainfallBasic()
-			// TODO: Fill remaining sinks and re-generate downhill and flux.
+
+			// Regenerate downhill.
+			m.assignDownhill(true)
+
+			// Regenerate flux.
+			m.assignFlux(true)
 			break
 		}
 		attempts++
+
 		// Reset drains.
 		for i := range m.Drainage {
 			m.Drainage[i] = -1
@@ -69,13 +70,18 @@ Loop:
 		for i := range m.Waterpool {
 			m.Waterpool[i] = 0
 		}
+
+		// Fill sinks.
 		m.Elevation = m.FillSinks(true)
+
+		// Regenerate winds.
+		// m.assignWindVectors()
 
 		// TODO: Diffuse flux and pool.
 		m.assignRainfallBasic()
 
 		// Regenerate downhill.
-		m.BaseObject.assignDownhill(true)
+		m.assignDownhill(true)
 
 		// Regenerate flux.
 		m.assignFlux(false)

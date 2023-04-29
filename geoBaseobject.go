@@ -11,37 +11,47 @@ import (
 )
 
 type BaseObject struct {
-	Seed              int64           // Seed for random number generators
-	rand              *rand.Rand      // Rand initialized with above seed
-	noise             *Noise          // Opensimplex noise initialized with above seed
-	*SphereMesh                       // Triangle mesh containing the sphere information
+	Seed        int64      // Seed for random number generators
+	rand        *rand.Rand // Rand initialized with above seed
+	noise       *Noise     // Opensimplex noise initialized with above seed
+	*SphereMesh            // Triangle mesh containing the sphere information
+
+	// Elevation related stuff
 	Elevation         []float64       // Point / region elevation
-	Moisture          []float64       // Point / region moisture
-	Rainfall          []float64       // Point / region rainfall
-	Flux              []float64       // Point / region hydrology: throughflow of rainfall
-	Waterpool         []float64       // Point / region hydrology: water pool depth
-	OceanTemperature  []float64       // Ocean temperatures (yearly average)
-	AirTemperature    []float64       // Air temperatures (yearly average)
-	Downhill          []int           // Point / region mapping to its lowest neighbor
-	Drainage          []int           // Point / region mapping of pool to its drainage region
-	Waterbodies       []int           // Point / region mapping of pool to waterbody ID
-	WaterbodySize     map[int]int     // Waterbody ID to size mapping
-	BiomeRegions      []int           // Point / region mapping of regions with the same biome
-	BiomeRegionSize   map[int]int     // Biome region ID to size mapping
-	Landmasses        []int           // Point / region mapping of regions that are part of the same landmass
-	LandmassSize      map[int]int     // Landmass ID to size mapping
-	LakeSize          map[int]int     // Lake ID to size mapping
-	RegionIsMountain  map[int]bool    // Point / region is a mountain
-	RegionIsVolcano   map[int]bool    // Point / region is a volcano
-	RegionIsWaterfall map[int]bool    // Point / region is a waterfall
 	RegionCompression map[int]float64 // Point / region compression factor
-	triMoisture       []float64       // Triangle moisture
-	triElevation      []float64       // Triangle elevation
-	triPool           []float64       // Triangle water pool depth
-	triFlow           []float64       // Triangle flow intensity (rainfall)
-	triDownflowSide   []int           // Triangle mapping to side through which water flows downhill.
-	orderTri          []int           // Triangles in uphill order of elevation.
-	sideFlow          []float64       // Flow intensity through sides
+
+	// Derived elevation related stuff
+	Downhill         []int        // Point / region mapping to its lowest neighbor
+	Landmasses       []int        // Point / region mapping of regions that are part of the same landmass
+	LandmassSize     map[int]int  // Landmass ID to size mapping
+	RegionIsMountain map[int]bool // Point / region is a mountain
+	RegionIsVolcano  map[int]bool // Point / region is a volcano
+
+	// Moisture related stuff
+	Moisture          []float64    // Point / region moisture
+	Rainfall          []float64    // Point / region rainfall
+	Flux              []float64    // Point / region hydrology: throughflow of rainfall
+	Waterpool         []float64    // Point / region hydrology: water pool depth
+	Drainage          []int        // Point / region mapping of pool to its drainage region
+	Waterbodies       []int        // Point / region mapping of pool to waterbody ID
+	WaterbodySize     map[int]int  // Waterbody ID to size mapping
+	LakeSize          map[int]int  // Lake ID to size mapping
+	RegionIsWaterfall map[int]bool // Point / region is a waterfall
+
+	// Temperature related stuff
+	OceanTemperature []float64   // Ocean temperatures (yearly average)
+	AirTemperature   []float64   // Air temperatures (yearly average)
+	BiomeRegions     []int       // Point / region mapping of regions with the same biome
+	BiomeRegionSize  map[int]int // Biome region ID to size mapping
+
+	// Triangle stuff (purely derived from regions)
+	triElevation    []float64 // Triangle elevation
+	triMoisture     []float64 // Triangle moisture
+	triPool         []float64 // Triangle water pool depth
+	triFlow         []float64 // Triangle flow intensity (rainfall)
+	triDownflowSide []int     // Triangle mapping to side through which water flows downhill.
+	orderTri        []int     // Triangles in uphill order of elevation.
+	sideFlow        []float64 // Flow intensity through sides
 }
 
 func newBaseObject(seed int64, mesh *SphereMesh) *BaseObject {
@@ -51,6 +61,7 @@ func newBaseObject(seed int64, mesh *SphereMesh) *BaseObject {
 		noise:             NewNoise(6, 2.0/3.0, seed),
 		SphereMesh:        mesh,
 		Elevation:         make([]float64, mesh.numRegions),
+		RegionCompression: make(map[int]float64),
 		Moisture:          make([]float64, mesh.numRegions),
 		Flux:              make([]float64, mesh.numRegions),
 		Waterpool:         make([]float64, mesh.numRegions),
@@ -69,7 +80,6 @@ func newBaseObject(seed int64, mesh *SphereMesh) *BaseObject {
 		RegionIsMountain:  make(map[int]bool),
 		RegionIsVolcano:   make(map[int]bool),
 		RegionIsWaterfall: make(map[int]bool),
-		RegionCompression: make(map[int]float64),
 		triPool:           make([]float64, mesh.numTriangles),
 		triElevation:      make([]float64, mesh.numTriangles),
 		triMoisture:       make([]float64, mesh.numTriangles),
@@ -154,24 +164,36 @@ func (m *BaseObject) GetDownhill(usePool bool) []int {
 	// Here we will map each region to the lowest neighbor.
 	mesh := m.SphereMesh
 	rDownhill := make([]int, mesh.numRegions)
-	outReg := make([]int, 0, 8)
-	for r := range rDownhill {
-		lowestRegion := -1
-		lowestElevation := m.Elevation[r]
-		if usePool {
-			lowestElevation += m.Waterpool[r]
-		}
-		for _, nbReg := range mesh.r_circulate_r(outReg, r) {
-			elev := m.Elevation[nbReg]
+
+	chunkProcessor := func(start, end int) {
+		outReg := make([]int, 0, 8)
+		for r := start; r < end; r++ {
+			lowestRegion := -1
+			lowestElevation := m.Elevation[r]
 			if usePool {
-				elev += m.Waterpool[nbReg]
+				lowestElevation += m.Waterpool[r]
 			}
-			if elev < lowestElevation {
-				lowestElevation = elev
-				lowestRegion = nbReg
+			for _, nbReg := range mesh.r_circulate_r(outReg, r) {
+				elev := m.Elevation[nbReg]
+				if usePool {
+					elev += m.Waterpool[nbReg]
+				}
+				if elev < lowestElevation {
+					lowestElevation = elev
+					lowestRegion = nbReg
+				}
 			}
+			rDownhill[r] = lowestRegion
 		}
-		rDownhill[r] = lowestRegion
+	}
+
+	useGoRoutines := true
+	if useGoRoutines {
+		// Use goroutines to process the regions in chunks.
+		kickOffChunkWorkers(mesh.numRegions, chunkProcessor)
+	} else {
+		// Process the regions in a single chunk.
+		chunkProcessor(0, mesh.numRegions)
 	}
 	return rDownhill
 }
@@ -184,16 +206,17 @@ func (m *BaseObject) GetDownhill(usePool bool) []int {
 // He uses triangle centroids for his river generation, where I prefer to use the regions
 // directly.
 func (m *BaseObject) assignDownflow() {
+	mesh := m.SphereMesh
+	numTriangles := mesh.numTriangles
+
+	// Initialize the triangle downflow sides to -1.
+	m.triDownflowSide = initRegionSlice(numTriangles)
+
 	// Use a priority queue, starting with the ocean triangles and
 	// moving upwards using elevation as the priority, to visit all
 	// the land triangles.
 	queue := make(ascPriorityQueue, 0)
-	mesh := m.SphereMesh
-	numTriangles := mesh.numTriangles
 	queueIn := 0
-	for i := range m.triDownflowSide {
-		m.triDownflowSide[i] = -999
-	}
 	heap.Init(&queue)
 
 	// Part 1: ocean triangles get downslope assigned to the lowest neighbor.
@@ -209,9 +232,9 @@ func (m *BaseObject) assignDownflow() {
 					bestElevation = elevation
 				}
 			}
+			m.triDownflowSide[t] = bestSide
 			m.orderTri[queueIn] = t
 			queueIn++
-			m.triDownflowSide[t] = bestSide
 			heap.Push(&queue, &queueEntry{
 				destination: t,
 				score:       m.triElevation[t],
@@ -226,7 +249,7 @@ func (m *BaseObject) assignDownflow() {
 		for j := 0; j < 3; j++ {
 			s := 3*current_t + j
 			neighbor_t := mesh.s_outer_t(s) // uphill from current_t
-			if m.triDownflowSide[neighbor_t] == -999 && m.triElevation[neighbor_t] >= 0.0 {
+			if m.triDownflowSide[neighbor_t] < 0 && m.triElevation[neighbor_t] >= 0.0 {
 				m.triDownflowSide[neighbor_t] = mesh.s_opposite_s(s)
 				m.orderTri[queueIn] = neighbor_t
 				queueIn++
@@ -338,19 +361,37 @@ func (m *BaseObject) GetRegArea(r int) float64 {
 //
 // See: https://github.com/mewo2/terrain
 func (m *BaseObject) GetSlope() []float64 {
+	// This will collect the slope for each region.
 	slope := make([]float64, m.SphereMesh.numRegions)
-	for r, dhReg := range m.GetDownhill(false) {
-		// Sinks have no slope, so we skip them.
-		if dhReg < 0 {
-			continue
-		}
 
-		// Get the slope vector.
-		// The slope value we want is the length of the vector returned by rPolySlope.
-		// NOTE: We use improved poly-slope code, which uses all neighbors for
-		// the slope calculation.
-		s := m.regPolySlope(r)
-		slope[r] = math.Sqrt(s[0]*s[0] + s[1]*s[1])
+	// Get the downhill neighbors for all regions (ignoring water pools for now).
+	dh := m.GetDownhill(false)
+
+	chunkProcessor := func(start, end int) {
+		outRegs := make([]int, 0, 8)
+		for r := start; r < end; r++ {
+			dhReg := dh[r]
+			// Sinks have no slope, so we skip them.
+			if dhReg < 0 {
+				continue
+			}
+
+			// Get the slope vector.
+			// The slope value we want is the length of the vector returned by rPolySlope.
+			// NOTE: We use improved poly-slope code, which uses all neighbors for
+			// the slope calculation.
+			s := m.regPolySlope(outRegs, r)
+			slope[r] = math.Sqrt(s[0]*s[0] + s[1]*s[1])
+		}
+	}
+
+	useGoRoutines := true
+	if useGoRoutines {
+		// Use goroutines to process the regions in chunks.
+		kickOffChunkWorkers(m.SphereMesh.numRegions, chunkProcessor)
+	} else {
+		// Process all regions in a single chunk.
+		chunkProcessor(0, m.SphereMesh.numRegions)
 	}
 	return slope
 }
@@ -414,7 +455,7 @@ func (m *BaseObject) GetSteepness() []float64 {
 }
 
 // regPolySlope calculates the slope of a region, taking in account all neighbors (which form a polygon).
-func (m *BaseObject) regPolySlope(i int) [2]float64 {
+func (m *BaseObject) regPolySlope(outRegs []int, i int) [2]float64 {
 	// See: https://www.khronos.org/opengl/wiki/Calculating_a_Surface_Normal
 	//
 	// Begin Function CalculateSurfaceNormal (Input Polygon) Returns Vector
@@ -443,7 +484,7 @@ func (m *BaseObject) regPolySlope(i int) [2]float64 {
 	angle := math.Acos(vectors.Up.Dot(center) / (vectors.Up.Len() * center.Len()))
 
 	var normal vectors.Vec3
-	nbs := m.GetRegNeighbors(i)
+	nbs := m.r_circulate_r(outRegs, i)
 	for j, r := range nbs {
 		jNext := nbs[(j+1)%len(nbs)]
 		// Get the current and next vertex and scale the vector by the height factor

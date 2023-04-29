@@ -107,7 +107,7 @@ func (m *Civ) expandCityStates() {
 	for _, c := range m.CityStates {
 		// Loop through all cities and gather all that
 		// are within the current city state.
-		c.Cities = nil
+		c.Cities = c.Cities[:0]
 		for _, ct := range m.Cities {
 			if m.RegionToCityState[ct.ID] == c.ID {
 				c.Cities = append(c.Cities, ct)
@@ -116,7 +116,7 @@ func (m *Civ) expandCityStates() {
 
 		// Collect all regions that are part of the
 		// current territory.
-		c.Regions = nil
+		c.Regions = c.Regions[:0]
 		for r, terr := range m.RegionToCityState {
 			if terr == c.ID {
 				c.Regions = append(c.Regions, r)

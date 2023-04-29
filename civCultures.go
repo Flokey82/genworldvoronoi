@@ -3,7 +3,6 @@ package genworldvoronoi
 import (
 	"log"
 	"math"
-	"sort"
 
 	"github.com/Flokey82/genbiome"
 	"github.com/Flokey82/go_gens/genlanguage"
@@ -71,6 +70,7 @@ func (m *Civ) placeNCultures(n int) {
 		}
 		return cultureSeeds
 	}
+
 	// Place n cities of the given type.
 	for i := 0; i < n; i++ {
 		c := m.PlaceCulture(regCultureFunc, scoreFunc, distSeedFunc)
@@ -82,7 +82,7 @@ func (m *Civ) placeNCultures(n int) {
 // terrain preference, and distance to other cultures.
 func (m *Civ) ExpandCultures() {
 	// The cultural centers will be the seed points for the expansion.
-	var seeds []int
+	seeds := make([]int, 0, len(m.Cultures))
 	originToCulture := make(map[int]*Culture)
 	for _, c := range m.Cultures {
 		seeds = append(seeds, c.ID)
@@ -116,7 +116,10 @@ func (m *Civ) ExpandCultures() {
 	// Update the cultures with the new regions.
 	for _, c := range m.Cultures {
 		// Collect all regions that are part of the current culture.
-		c.Regions = nil
+		c.Regions = c.Regions[:0]
+
+		// TODO: Maybe avoid repeatedly iterating over the regions and
+		// do it only once for all cultures.
 		for r, cu := range m.RegionToCulture {
 			if cu == c.ID {
 				c.Regions = append(c.Regions, r)
@@ -124,138 +127,9 @@ func (m *Civ) ExpandCultures() {
 		}
 		c.Stats = m.getStats(c.Regions)
 	}
-	m.genCultureSpecialties()
-}
 
-func (m *Civ) genCultureSpecialties() {
-	// Now re-evaluate the specialities of each culture, based on the
-	// resources they have access to.
-
-	// NOTE: Someone smarter should come up with the rules for this...
-	// and maybe this should also be more generalized so it can be
-	// evaluated for all other things that occupy multiple regions like
-	// religions, monestaries, city-states, etc. !!!!!!!!!!
-
-	// We calculate the ratio of resources to number of regions, then
-	// we assign the specialties based on the highest ratio for each
-	// resource per culture.
-	// For all resource groups and types, then sort the cultures
-	// by the ratio of the resource to the number of regions.
-	// The top 3 cultures will get the specialty for that resource?
-
-	// Specialities should give some advantage or bonus for the culture.
-	// For example, a culture with the seafaring specialty should get
-	// a bonus to naval combat, or a bonus to trade with coastal regions,
-	// giving them access to exotic goods.
-	// A culture with the survival specialty should get a bonus to
-	// survival skills, or a bonus to exploration.
-
-	log.Println("re-evaluating culture specialties... (just a placeholder for now)")
-
-	// Copy the cultures to a slice.
-	cultureCopy := make([]*Culture, len(m.Cultures))
-	copy(cultureCopy, m.Cultures)
-
-	specialtyMap := make(map[*Culture][]string)
-
-	for _, c := range m.Cultures {
-		// Add the default speciality/-ies based on the culture type.
-		// TODO: Depending on the culture, there should be several options
-		// to select from, also based on the statistics of the regions the
-		// culture has access to. (randomized?)
-		// For example, naval cultures should only get the seafaring
-		// specialty if they have access to a wide coastal regions.
-		// Highland cultures should be able to get different survival
-		// skills based on the climate of the highlands.
-		switch c.Type {
-		case CultureTypeWildland:
-			specialtyMap[c] = append(specialtyMap[c], "survival")
-		case CultureTypeGeneric:
-			specialtyMap[c] = append(specialtyMap[c], "generic")
-		case CultureTypeRiver:
-			// Other possible specialities or bonuses:
-			// - hydro power
-			// - trading via rivers (?)
-			specialtyMap[c] = append(specialtyMap[c], "river navigation")
-		case CultureTypeLake:
-			specialtyMap[c] = append(specialtyMap[c], "fishery")
-		case CultureTypeNaval:
-			// Other possible specialities or bonuses:
-			// - trade via sea
-			specialtyMap[c] = append(specialtyMap[c], "seafaring")
-		case CultureTypeNomadic:
-			// Other possible specialities or bonuses:
-			// - survival
-			// - domestication / cattle breeding?
-			specialtyMap[c] = append(specialtyMap[c], "nomadic")
-		case CultureTypeHunting:
-			// Other possible specialities or bonuses:
-			// - riding
-			specialtyMap[c] = append(specialtyMap[c], "hunting")
-		case CultureTypeHighland:
-			// Other possible specialities or bonuses:
-			// - lower penalty for crossing mountains
-			// - mining (?)
-			specialtyMap[c] = append(specialtyMap[c], "climbing")
-		}
-	}
-
-	// Metals.
-	for res := 0; res < ResMaxMetals; res++ {
-		sort.Slice(cultureCopy, func(i, j int) bool {
-			return float64(cultureCopy[i].Stats.ResMetal[res])/float64(len(cultureCopy[i].Regions)) > float64(cultureCopy[j].Stats.ResMetal[res])/float64(len(cultureCopy[j].Regions))
-		})
-		for i, c := range cultureCopy {
-			if i >= 3 {
-				break
-			}
-			specialtyMap[c] = append(specialtyMap[c], metalToString(res))
-		}
-	}
-
-	// Gems.
-	for res := 0; res < ResMaxGems; res++ {
-		sort.Slice(cultureCopy, func(i, j int) bool {
-			return float64(cultureCopy[i].Stats.ResGems[res])/float64(len(cultureCopy[i].Regions)) > float64(cultureCopy[j].Stats.ResGems[res])/float64(len(cultureCopy[j].Regions))
-		})
-		for i, c := range cultureCopy {
-			if i >= 3 {
-				break
-			}
-			specialtyMap[c] = append(specialtyMap[c], gemToString(res))
-		}
-	}
-
-	// Stones.
-	for res := 0; res < ResMaxStones; res++ {
-		sort.Slice(cultureCopy, func(i, j int) bool {
-			return float64(cultureCopy[i].Stats.ResStones[res])/float64(len(cultureCopy[i].Regions)) > float64(cultureCopy[j].Stats.ResStones[res])/float64(len(cultureCopy[j].Regions))
-		})
-		for i, c := range cultureCopy {
-			if i >= 3 {
-				break
-			}
-			specialtyMap[c] = append(specialtyMap[c], stoneToString(res))
-		}
-	}
-
-	// Woods.
-	for res := 0; res < ResMaxWoods; res++ {
-		sort.Slice(cultureCopy, func(i, j int) bool {
-			return float64(cultureCopy[i].Stats.ResWood[res])/float64(len(cultureCopy[i].Regions)) > float64(cultureCopy[j].Stats.ResWood[res])/float64(len(cultureCopy[j].Regions))
-		})
-		for i, c := range cultureCopy {
-			if i >= 3 {
-				break
-			}
-			specialtyMap[c] = append(specialtyMap[c], woodToString(res))
-		}
-	}
-
-	// Log for each culture their specialties.
-	for _, c := range m.Cultures {
-		log.Println(c.Name, "specialties:", specialtyMap[c])
-	}
+	// TODO: Move this somewhere else or improve how it is handled.
+	// m.genCultureSkills()
 }
 
 // Culture represents a culture.

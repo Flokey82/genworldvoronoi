@@ -222,8 +222,19 @@ func (b *Bio) newSpecies(r int, t SpeciesKingdom, tf func(int) SpeciesTolerances
 func (b *Bio) getSpeciesScores(s *Species) []float64 {
 	scores := make([]float64, b.SphereMesh.numRegions)
 	tsf := b.getToleranceScoreFunc(s.SpeciesTolerances)
-	for i := range scores {
-		scores[i] = tsf(i)
+	chunkProcessor := func(start, end int) {
+		for i := start; i < end; i++ {
+			scores[i] = tsf(i)
+		}
+	}
+
+	useGoRoutines := true
+	if useGoRoutines {
+		// Use goroutines to process the chunks.
+		kickOffChunkWorkers(b.SphereMesh.numRegions, chunkProcessor)
+	} else {
+		// Use the main thread to process the chunks.
+		chunkProcessor(0, b.SphereMesh.numRegions)
 	}
 	return scores
 }

@@ -125,7 +125,7 @@ func (m *Civ) expandEmpires() {
 	for _, e := range m.Empires {
 		// Loop through all cities and gather all that
 		// are within the current territory.
-		e.Cities = nil
+		e.Cities = e.Cities[:0]
 		for _, c := range m.Cities {
 			if m.RegionToEmpire[c.ID] == e.ID {
 				// TODO: If we just conquered this city, there might be a chance
@@ -136,7 +136,7 @@ func (m *Civ) expandEmpires() {
 
 		// Collect all regions that are part of the
 		// current territory.
-		e.Regions = nil
+		e.Regions = e.Regions[:0]
 		for r, terr := range m.RegionToEmpire {
 			if terr == e.ID {
 				e.Regions = append(e.Regions, r)
