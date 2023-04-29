@@ -9,31 +9,52 @@ I draw further inspiration from various other projects such as https://github.co
 
 ... if you haven't noticed yet, this is a placeholder for when I feel less lazy and add more information :D
 
+# Dev notes
+
+This thing needs a use, and I think the major drawback right now is the time that it takes to generate a reasonably complex planet with enough detail to be interesting. So here are tne following important points that need to be addressed:
+
+* Generation speed
+  * Use concurrency where sensible
+* Export / import of generated data
+  * Separate generation steps into
+    * Geology, Climate
+    * Biology, Species, Survivability
+    * Civilization, Cities, Empires
+  * Binary format for writing to / reading from disk
+* Simulation
+  * Seasons, Weather, Disasters
+  * Biology, Species, Migrations
+  * Population Growth, Migrations
+  * Wars, Diplomacy
+  * Founding, Development, Abandonment, Fall of Cities, Empires, Religions
+  * Written History, Legends
+  
 ## TODO
 
 * Use cached temperature instead of getRegTemperature every single time
-* Climate is surprisingly humid along equator?
-  * Note: That is actually correct... the dryest climate is around +30° latitude, which is the subtropical desert. The equator is not dry at all.
+* Climate
   * Add desert oases that are fed from underground aquifers. Look at these examples: https://www.google.com/maps/d/viewer?mid=1BvY10l3yzWt48IwCXqDcyeuawpA&hl=en&ll=26.715853962142784%2C28.408963168787885&z=6
-  * Climate seems too wet (too many wetlands?)
+  * Climate seems too wet at times (too many wetlands?)
   * Seasonal forests should not be at the equator, where there are no seasons.
 * Elevation
-  * The heightmap is currently generated as a linear interpolation of three distance fields. This results in relative unrealistic elevation distribution.
+  * Move away from linear interpolation
+  * Add improved noise
 * Winds
-  * Make winds push temperature around, not just humidity
+  * Push temperature around [DONE]
+  * Push dry air around, not just humid air
   * Re-evaluate rainfall and moisture distribution
-  * Check if we also push dry air around, not just humid air
 * Civilization
   * Industry and trade
-    * Improve trade routes
     * Introduce industry
+    * Introduce production / harvesting of goods
+    * Improve trade routes
   * Cities
-    * Add better city fitness functions
+    * Better city fitness functions
     * Separate world generation better from everything else
     * Assign goods and resources to cities (for trade)
   * Empires
-    * Provide simpler means to query information over an empire
-    * Introduce empires with capitals
+    * Introduce empires with capitals [DONE]
+    * Provide simpler means to query information on an empire
   * Cultures
     * Add fitness function for "natural" population density estimates
 * Resources
@@ -43,6 +64,7 @@ I draw further inspiration from various other projects such as https://github.co
   * Add more resource types
 * Species
   * Allow for overlapping populations
+  * Allow for species migration
 
 Here some old pictures what it does...
 
