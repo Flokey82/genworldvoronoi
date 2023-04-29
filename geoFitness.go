@@ -124,40 +124,13 @@ func (m *Geo) CalcFitnessScoreWithDistanceField(sf func(int) float64, regDistanc
 	// Get the max distance for normalizing the distance.
 	_, maxDistC := minMax(regDistanceC)
 
-	useGoRoutines := true
-	if useGoRoutines {
-		numWorkers := 8
-		kickOffNChunkWorkers(numWorkers, m.SphereMesh.numRegions, func(start, end int) {
-			for i := start; i < end; i++ {
-				score[i] = sf(i)
-
-				// Check if we have a valid score.
-				if score[i] == -1.0 {
-					continue
-				}
-
-				// Penalty for proximity / bonus for higher distance to other seed regions.
-				//
-				// We multiply the score by the distance to other seed regions, amplifying
-				// positive scores.
-				//
-				// NOTE: Originally this was done with some constant values, which might be better
-				// since we are here dependent on the current score we have assigned and cannot
-				// recover an initially bad score caused by a low water flux.
-				if math.IsInf(regDistanceC[i], 0) {
-					continue
-				}
-				dist := (regDistanceC[i] / maxDistC)
-				score[i] *= dist // originally
-			}
-		})
-	} else {
+	chunkProcessor := func(start, end int) {
 		// Calculate the fitness score for each region
-		for i := 0; i < m.SphereMesh.numRegions; i++ {
-			score[i] = sf(i)
+		for r := start; r < end; r++ {
+			score[r] = sf(r)
 
 			// Check if we have a valid score.
-			if score[i] == -1.0 {
+			if score[r] == -1.0 {
 				continue
 			}
 
@@ -169,12 +142,19 @@ func (m *Geo) CalcFitnessScoreWithDistanceField(sf func(int) float64, regDistanc
 			// NOTE: Originally this was done with some constant values, which might be better
 			// since we are here dependent on the current score we have assigned and cannot
 			// recover an initially bad score caused by a low water flux.
-			if math.IsInf(regDistanceC[i], 0) {
+			if math.IsInf(regDistanceC[r], 0) {
 				continue
 			}
-			dist := (regDistanceC[i] / maxDistC)
-			score[i] *= dist // originally: -= 0.02 / (float64(r_distance_c[i]) + 1e-9)
+			dist := (regDistanceC[r] / maxDistC)
+			score[r] *= dist // originally
 		}
+	}
+
+	useGoRoutines := true
+	if useGoRoutines {
+		kickOffChunkWorkers(m.SphereMesh.numRegions, chunkProcessor)
+	} else {
+		chunkProcessor(0, m.SphereMesh.numRegions)
 	}
 	return score
 }

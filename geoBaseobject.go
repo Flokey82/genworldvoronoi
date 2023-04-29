@@ -7,44 +7,41 @@ import (
 	"math/rand"
 	"sort"
 
-	"github.com/Flokey82/go_gens/geoquad"
 	"github.com/Flokey82/go_gens/vectors"
 )
 
 type BaseObject struct {
-	Seed              int64             // Seed for random number generators
-	rand              *rand.Rand        // Rand initialized with above seed
-	noise             *Noise            // Opensimplex noise initialized with above seed
-	*SphereMesh                         // Triangle mesh containing the sphere information
-	Elevation         []float64         // Point / region elevation
-	Moisture          []float64         // Point / region moisture
-	Rainfall          []float64         // Point / region rainfall
-	Flux              []float64         // Point / region hydrology: throughflow of rainfall
-	Waterpool         []float64         // Point / region hydrology: water pool depth
-	OceanTemperature  []float64         // Ocean temperatures (yearly average)
-	AirTemperature    []float64         // Air temperatures (yearly average)
-	Downhill          []int             // Point / region mapping to its lowest neighbor
-	Drainage          []int             // Point / region mapping of pool to its drainage region
-	Waterbodies       []int             // Point / region mapping of pool to waterbody ID
-	WaterbodySize     map[int]int       // Waterbody ID to size mapping
-	BiomeRegions      []int             // Point / region mapping of regions with the same biome
-	BiomeRegionSize   map[int]int       // Biome region ID to size mapping
-	Landmasses        []int             // Point / region mapping of regions that are part of the same landmass
-	LandmassSize      map[int]int       // Landmass ID to size mapping
-	LakeSize          map[int]int       // Lake ID to size mapping
-	RegionIsMountain  map[int]bool      // Point / region is a mountain
-	RegionIsVolcano   map[int]bool      // Point / region is a volcano
-	RegionIsWaterfall map[int]bool      // Point / region is a waterfall
-	RegionCompression map[int]float64   // Point / region compression factor
-	triMoisture       []float64         // Triangle moisture
-	triElevation      []float64         // Triangle elevation
-	triPool           []float64         // Triangle water pool depth
-	triFlow           []float64         // Triangle flow intensity (rainfall)
-	triDownflowSide   []int             // Triangle mapping to side through which water flows downhill.
-	orderTri          []int             // Triangles in uphill order of elevation.
-	sideFlow          []float64         // Flow intensity through sides
-	regQuadTree       *geoquad.QuadTree // Quadtree for region lookup
-	triQuadTree       *geoquad.QuadTree // Quadtree for triangle lookup
+	Seed              int64           // Seed for random number generators
+	rand              *rand.Rand      // Rand initialized with above seed
+	noise             *Noise          // Opensimplex noise initialized with above seed
+	*SphereMesh                       // Triangle mesh containing the sphere information
+	Elevation         []float64       // Point / region elevation
+	Moisture          []float64       // Point / region moisture
+	Rainfall          []float64       // Point / region rainfall
+	Flux              []float64       // Point / region hydrology: throughflow of rainfall
+	Waterpool         []float64       // Point / region hydrology: water pool depth
+	OceanTemperature  []float64       // Ocean temperatures (yearly average)
+	AirTemperature    []float64       // Air temperatures (yearly average)
+	Downhill          []int           // Point / region mapping to its lowest neighbor
+	Drainage          []int           // Point / region mapping of pool to its drainage region
+	Waterbodies       []int           // Point / region mapping of pool to waterbody ID
+	WaterbodySize     map[int]int     // Waterbody ID to size mapping
+	BiomeRegions      []int           // Point / region mapping of regions with the same biome
+	BiomeRegionSize   map[int]int     // Biome region ID to size mapping
+	Landmasses        []int           // Point / region mapping of regions that are part of the same landmass
+	LandmassSize      map[int]int     // Landmass ID to size mapping
+	LakeSize          map[int]int     // Lake ID to size mapping
+	RegionIsMountain  map[int]bool    // Point / region is a mountain
+	RegionIsVolcano   map[int]bool    // Point / region is a volcano
+	RegionIsWaterfall map[int]bool    // Point / region is a waterfall
+	RegionCompression map[int]float64 // Point / region compression factor
+	triMoisture       []float64       // Triangle moisture
+	triElevation      []float64       // Triangle elevation
+	triPool           []float64       // Triangle water pool depth
+	triFlow           []float64       // Triangle flow intensity (rainfall)
+	triDownflowSide   []int           // Triangle mapping to side through which water flows downhill.
+	orderTri          []int           // Triangles in uphill order of elevation.
+	sideFlow          []float64       // Flow intensity through sides
 }
 
 func newBaseObject(seed int64, mesh *SphereMesh) *BaseObject {
@@ -80,22 +77,7 @@ func newBaseObject(seed int64, mesh *SphereMesh) *BaseObject {
 		orderTri:          make([]int, mesh.numTriangles),
 		triFlow:           make([]float64, mesh.numTriangles),
 		sideFlow:          make([]float64, mesh.numSides),
-		regQuadTree:       newQuadTreeFromLatLon(mesh.LatLon),
-		triQuadTree:       newQuadTreeFromLatLon(mesh.TriLatLon),
 	}
-}
-
-func newQuadTreeFromLatLon(latLon [][2]float64) *geoquad.QuadTree {
-	var points []geoquad.Point
-	for i := range latLon {
-		ll := latLon[i]
-		points = append(points, geoquad.Point{
-			Lat:  ll[0],
-			Lon:  ll[1],
-			Data: i,
-		})
-	}
-	return geoquad.NewQuadTree(points)
 }
 
 // resetRand resets the random number generator to its initial state.
@@ -383,37 +365,50 @@ func (m *BaseObject) GetSteepness() []float64 {
 
 	// Get the downhill neighbors for all regions (ignoring water pools for now).
 	dh := m.GetDownhill(false)
-	for r, dhReg := range dh {
-		if dhReg < 0 {
-			continue // Skip all sinks.
+
+	chunkProcessor := func(start, end int) {
+		for r := start; r < end; r++ {
+			dhReg := dh[r]
+			if dhReg < 0 {
+				continue // Skip all sinks.
+			}
+
+			// In order to calculate the steepness value, we get the great arc distance
+			// of each region and its downhill neighbor, as well as the elevation change.
+			//
+			//     __r            r
+			//     | |\            \
+			//     | | \            \
+			// height|  \            \
+			//     | |   \            \
+			//     |_|____\dh[r]   ____\dh[r] <- we want to calculate this angle
+			//       |dist|
+			//
+			// We calculate the angle (in radians) as follows:
+			// angle = atan(height/dist)
+			//
+			// Finally, to get the steepness in a range of 0.0 ... 1.0:
+			// steepness = angle * 2 / Pi
+
+			// Calculate height difference between r and dh[r].
+			hDiff := m.Elevation[r] - m.Elevation[dhReg]
+
+			// Great arc distance between the lat/lon coordinates of r and dh[r].
+			regLatLon := m.LatLon[r]
+			dhRegLatLon := m.LatLon[dhReg]
+			dist := haversine(regLatLon[0], regLatLon[1], dhRegLatLon[0], dhRegLatLon[1])
+
+			// Calculate the the angle (0°-90°) expressed as range from 0.0 to 1.0.
+			steeps[r] = math.Atan(hDiff/dist) * 2 / math.Pi
 		}
-		// In order to calculate the steepness value, we get the great arc distance
-		// of each region and its downhill neighbor, as well as the elevation change.
-		//
-		//     __r            r
-		//     | |\            \
-		//     | | \            \
-		// height|  \            \
-		//     | |   \            \
-		//     |_|____\dh[r]   ____\dh[r] <- we want to calculate this angle
-		//       |dist|
-		//
-		// We calculate the angle (in radians) as follows:
-		// angle = atan(height/dist)
-		//
-		// Finally, to get the steepness in a range of 0.0 ... 1.0:
-		// steepness = angle * 2 / Pi
+	}
 
-		// Calculate height difference between r and dh[r].
-		hDiff := m.Elevation[r] - m.Elevation[dhReg]
-
-		// Great arc distance between the lat/lon coordinates of r and dh[r].
-		regLatLon := m.LatLon[r]
-		dhRegLatLon := m.LatLon[dhReg]
-		dist := haversine(regLatLon[0], regLatLon[1], dhRegLatLon[0], dhRegLatLon[1])
-
-		// Calculate the the angle (0°-90°) expressed as range from 0.0 to 1.0.
-		steeps[r] = math.Atan(hDiff/dist) * 2 / math.Pi
+	useGoRoutines := true
+	// Use go routines to process a chunk of regions at a time.
+	if useGoRoutines {
+		kickOffChunkWorkers(m.SphereMesh.numRegions, chunkProcessor)
+	} else {
+		chunkProcessor(0, m.SphereMesh.numRegions)
 	}
 	return steeps
 }

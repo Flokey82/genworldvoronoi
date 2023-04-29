@@ -550,11 +550,13 @@ func genColor(col color.Color, intensity float64) color.Color {
 	return col2
 }
 
-func kickOffNChunkWorkers(n, totalItems int, fn func(start, end int)) {
+func kickOffChunkWorkers(totalItems int, fn func(start, end int)) {
+	numWorkers := 8
+
 	var wg sync.WaitGroup
 	var chunkStart int
-	chunkSize := (totalItems / n) + 1
-	for i := 0; i < n; i++ {
+	chunkSize := (totalItems / numWorkers) + 1
+	for i := 0; i < numWorkers; i++ {
 		curChunk := chunkSize
 		if rem := totalItems - chunkStart; rem < curChunk {
 			curChunk = rem

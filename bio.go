@@ -73,8 +73,7 @@ func (b *Bio) calcGrowthPeriod() {
 	useGoRoutines := true
 	// Use go routines to process a chunk of regions at a time.
 	if useGoRoutines {
-		numWorkers := 8
-		kickOffNChunkWorkers(numWorkers, b.SphereMesh.numRegions, b.calcGrowthPeriodChunk)
+		kickOffChunkWorkers(b.SphereMesh.numRegions, b.calcGrowthPeriodChunk)
 	} else {
 		b.calcGrowthPeriodChunk(0, b.SphereMesh.numRegions)
 	}
@@ -83,8 +82,7 @@ func (b *Bio) calcGrowthPeriod() {
 
 func (b *Bio) calcGrowthPeriodChunk(start, end int) {
 	// Calculate the duration of the potential growth period for each region.
-	for idx := range b.GrowthDays[start:end] {
-		r := start + idx
+	for r := start; r < end; r++ {
 		var growthDays int
 		var totalInsolation float64
 		for i := 0; i < 356; i++ {

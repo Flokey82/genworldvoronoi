@@ -4,6 +4,7 @@ import (
 	"math"
 	"math/rand"
 
+	"github.com/Flokey82/go_gens/geoquad"
 	"github.com/fogleman/delaunay"
 )
 
@@ -140,10 +141,12 @@ func MakeSphere(seed int64, numPoints int, jitter float64) (*SphereMesh, error) 
 
 type SphereMesh struct {
 	*TriangleMesh
-	XYZ       []float64    // Region coordinates
-	LatLon    [][2]float64 // Region latitude and longitude
-	TriXYZ    []float64    // Triangle xyz coordinates
-	TriLatLon [][2]float64 // Triangle latitude and longitude
+	XYZ         []float64         // Region coordinates
+	LatLon      [][2]float64      // Region latitude and longitude
+	TriXYZ      []float64         // Triangle xyz coordinates
+	TriLatLon   [][2]float64      // Triangle latitude and longitude
+	regQuadTree *geoquad.QuadTree // Quadtree for region lookup
+	triQuadTree *geoquad.QuadTree // Quadtree for triangle lookup
 }
 
 func newSphereMesh(latLon [][2]float64, xyz []float64, addSouthPole bool) *SphereMesh {
@@ -193,7 +196,26 @@ func newSphereMesh(latLon [][2]float64, xyz []float64, addSouthPole bool) *Spher
 	m.TriLatLon = tLatLon
 	m.TriXYZ = tXYZ
 
+	// Create a quadtree for region lookup.
+	m.regQuadTree = newQuadTreeFromLatLon(m.LatLon)
+
+	// Create a quadtree for triangle lookup.
+	m.triQuadTree = newQuadTreeFromLatLon(m.TriLatLon)
+
 	return m
+}
+
+func newQuadTreeFromLatLon(latLon [][2]float64) *geoquad.QuadTree {
+	var points []geoquad.Point
+	for i := range latLon {
+		ll := latLon[i]
+		points = append(points, geoquad.Point{
+			Lat:  ll[0],
+			Lon:  ll[1],
+			Data: i,
+		})
+	}
+	return geoquad.NewQuadTree(points)
 }
 
 // MakeCoarseSphereMesh returns a sphere mesh generating from every n-th point of the sphere mesh.

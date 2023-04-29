@@ -348,36 +348,25 @@ func (m *Geo) assignRainfallBasic() {
 	// neighbors for each region.
 	dotToNeighbors := make([][]float64, len(regWindVec))
 
-	useGoRoutines := true
-	if useGoRoutines {
-		numWorkers := 8
-		kickOffNChunkWorkers(numWorkers, len(dotToNeighbors), func(start, end int) {
-			outRegs := make([]int, 0, 8)
-			for idx := range dotToNeighbors[start:end] {
-				r := start + idx
-				rL := m.LatLon[r]
-				for _, nbReg := range m.SphereMesh.r_circulate_r(outRegs, r) {
-					nL := m.LatLon[nbReg]
-
-					// TODO: Check dot product of wind vector (r) and neighbour->r.
-					vVec := normalizedWindVecs[nbReg]
-					nVec := normal2(calcVecFromLatLong(nL[0], nL[1], rL[0], rL[1]))
-					dotToNeighbors[r] = append(dotToNeighbors[r], dot2(vVec, nVec))
-				}
-			}
-		})
-	} else {
-		for r := range dotToNeighbors {
+	dotChunkProcessor := func(start, end int) {
+		outRegs := make([]int, 0, 8)
+		for r := start; r < end; r++ {
 			rL := m.LatLon[r]
 			for _, nbReg := range m.SphereMesh.r_circulate_r(outRegs, r) {
 				nL := m.LatLon[nbReg]
-
 				// TODO: Check dot product of wind vector (r) and neighbour->r.
 				vVec := normalizedWindVecs[nbReg]
 				nVec := normal2(calcVecFromLatLong(nL[0], nL[1], rL[0], rL[1]))
 				dotToNeighbors[r] = append(dotToNeighbors[r], dot2(vVec, nVec))
 			}
 		}
+	}
+
+	useGoRoutines := true
+	if useGoRoutines {
+		kickOffChunkWorkers(len(dotToNeighbors), dotChunkProcessor)
+	} else {
+		dotChunkProcessor(0, len(dotToNeighbors))
 	}
 
 	// Calculate the humidity for each region and transport it to the up-wind regions.
