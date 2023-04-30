@@ -94,14 +94,19 @@ func (m *Geo) assignRegionAirTemperature() {
 		transferOut = 1.0 - transferIn
 		numSteps    = 5
 	)
+
+	// Initialize the movedTemp slice.
+	movedTemp := make([]float64, m.SphereMesh.numRegions)
+	movedCount := make([]int, m.SphereMesh.numRegions)
 	for step := 0; step < numSteps; step++ {
-		movedTemp := make([][]float64, m.SphereMesh.numRegions)
-		for r := 0; r < m.SphereMesh.numRegions; r++ {
+		for r, nt := range newTemperature {
 			// add in the "pulled temp"
-			movedTemp[r] = append(movedTemp[r], newTemperature[r])
+			movedTemp[r] += nt
+			movedCount[r]++
 
 			pr := m.getPreviousNeighbor(outregs, r, m.RegionToWindVecLocal[r])
-			movedTemp[r] = append(movedTemp[r], m.AirTemperature[pr])
+			movedTemp[r] += m.AirTemperature[pr]
+			movedCount[r]++
 
 			// add in pushed temp
 			nr := m.getClosestNeighbor(outregs, r, m.RegionToWindVecLocal[r])
@@ -115,17 +120,16 @@ func (m *Geo) assignRegionAirTemperature() {
 			// movedTemp[r] -= map.r_currents[r]*heldHeat
 			// movedTemp[nr] += map.r_currents[r]*potentialHeat
 			// movedTemp[nr] = movedTemp[nr]? movedTemp[nr] : []float64{}
-			movedTemp[nr] = append(movedTemp[nr], transferOut*m.AirTemperature[r]+transferIn*newTemperature[r])
+			movedTemp[nr] += transferOut*m.AirTemperature[r] + transferIn*nt
+			movedCount[nr]++
 		}
 
-		for r := 0; r < m.SphereMesh.numRegions; r++ {
-			// newTemperature[r] += movedTemp[r]
-			if movedTemp[r] != nil && len(movedTemp[r]) > 0 {
-				newTemperature[r] = movedTemp[r][0]
-				for i := 1; i < len(movedTemp[r]); i++ {
-					newTemperature[r] += movedTemp[r][i]
-				}
-				newTemperature[r] /= float64(len(movedTemp[r]))
+		for r, mc := range movedCount {
+			if mc > 0 {
+				newTemperature[r] = movedTemp[r] / float64(mc)
+				// Reset movedTemp after every step for the next step.
+				movedTemp[r] = 0
+				movedCount[r] = 0
 			}
 			// if (movedTemp[r] !== undefined && movedTemp[r].length > 0) newTemperature[r] = movedTemp[r].reduce((acc, temp) => acc + temp, 0) / movedTemp[r].length
 		}
@@ -189,17 +193,22 @@ func (m *Geo) transportRegionWaterTemperature() {
 	const (
 		transferIn  = 0.001
 		transferOut = 1.0 - transferIn
-		numSteps    = 30
+		numSteps    = 5
 	)
+
+	// Initialize the movedTemp slice.
+	movedTemp := make([]float64, m.SphereMesh.numRegions)
+	movedCount := make([]int, m.SphereMesh.numRegions)
 	for step := 0; step < numSteps; step++ {
-		movedTemp := make([][]float64, m.SphereMesh.numRegions)
-		for r := 0; r < m.SphereMesh.numRegions; r++ {
+		for r, nt := range newTemperature {
 			// add in the "pulled temp"
-			movedTemp[r] = append(movedTemp[r], newTemperature[r])
+			movedTemp[r] += nt
+			movedCount[r]++
 
 			pr := m.getPreviousNeighbor(outregs, r, m.RegionToOceanVec[r])
 			if m.Elevation[pr] <= 0 {
-				movedTemp[r] = append(movedTemp[r], m.OceanTemperature[pr])
+				movedTemp[r] += m.OceanTemperature[pr]
+				movedCount[r]++
 			}
 
 			// add in pushed temp
@@ -214,17 +223,16 @@ func (m *Geo) transportRegionWaterTemperature() {
 			// movedTemp[r] -= map.r_currents[r]*heldHeat
 			// movedTemp[nr] += map.r_currents[r]*potentialHeat
 			// movedTemp[nr] = movedTemp[nr]? movedTemp[nr] : []float64{}
-			movedTemp[nr] = append(movedTemp[nr], transferOut*m.OceanTemperature[r]+transferIn*newTemperature[r])
+			movedTemp[nr] += transferOut*m.OceanTemperature[r] + transferIn*nt
+			movedCount[nr]++
 		}
 
-		for r := 0; r < m.SphereMesh.numRegions; r++ {
-			// newTemperature[r] += movedTemp[r]
-			if movedTemp[r] != nil && len(movedTemp[r]) > 0 {
-				newTemperature[r] = movedTemp[r][0]
-				for i := 1; i < len(movedTemp[r]); i++ {
-					newTemperature[r] += movedTemp[r][i]
-				}
-				newTemperature[r] /= float64(len(movedTemp[r]))
+		for r, mc := range movedCount {
+			if mc > 0 {
+				newTemperature[r] = movedTemp[r] / float64(mc)
+				// Reset movedTemp after every step for the next step.
+				movedTemp[r] = 0
+				movedCount[r] = 0
 			}
 			// if (movedTemp[r] !== undefined && movedTemp[r].length > 0) newTemperature[r] = movedTemp[r].reduce((acc, temp) => acc + temp, 0) / movedTemp[r].length
 		}

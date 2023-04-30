@@ -20,6 +20,18 @@ import (
 
 // GetTile returns the image of the tile at the given coordinates and zoom level.
 func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawLakes, drawShadows, aspectShading bool) image.Image {
+	// NOTE:
+	//
+	// For now we don't use the LOD logic until we have figured out how to handle triangles.
+	// While regions simply have n*step as their ID, triangles aren't stable as they are
+	// generated from the voronoi diagram from scratch. This means their order changes...
+	// Which also means we can't easily re-use the pre-computed triangle values from the
+	// primary mesh.
+	//
+	// mesh, step := m.getCoarseForZoom(zoom)
+	mesh := m.SphereMesh
+	step := 1
+
 	var colorFunc func(int, float64) color.Color
 	switch displayMode {
 	case 14, 15, 16, 17, 18:
@@ -230,7 +242,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 
 	// Get all regions that are within the tile bounds.
 	var inQuadTreeRegs []int
-	qds := m.regQuadTree.FindPointsInRect(geoquad.Rect{
+	qds := mesh.regQuadTree.FindPointsInRect(geoquad.Rect{
 		MinLat: la1Margin,
 		MaxLat: la2Margin,
 		MinLon: lo1Margin,
@@ -246,12 +258,12 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 
 	for _, i := range inQuadTreeRegs {
 		// rLat := m.LatLon[i][0]
-		rLon := m.LatLon[i][1]
+		rLon := mesh.LatLon[i][1]
 		// Draw the path that outlines the region.
 		var path [][2]float64
-		for _, j := range m.r_circulate_t(out_t, i) {
-			tLat := m.TriLatLon[j][0]
-			tLon := m.TriLatLon[j][1]
+		for _, j := range mesh.r_circulate_t(out_t, i) {
+			tLat := mesh.TriLatLon[j][0]
+			tLon := mesh.TriLatLon[j][1]
 
 			// Check if we have wrapped around the world.
 			if tLon-rLon > 120 {
@@ -278,7 +290,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 		}
 
 		// Calculate the color of the region.
-		col := colorFunc(i, 1.0)
+		col := colorFunc(i*step, 1.0)
 
 		// If the path is empty, we can skip it.
 		if len(path) == 0 {

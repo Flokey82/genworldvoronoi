@@ -86,9 +86,9 @@ func (m *Geo) GetErosionRate() []float64 {
 
 	// erodeRegion sets the erosion rate for the given region and
 	// traverses the neighbor graph up to the remaining depth (rem).
-	var erodeRegion func(r, rem int, toErode float64)
+	var erodeRegion func(out_r []int, r, rem int, toErode float64)
 
-	erodeRegion = func(r, rem int, toErode float64) {
+	erodeRegion = func(out_r []int, r, rem int, toErode float64) {
 		// If we have erosion below sea level, skip this region.
 		if erodeOnlyAboveSealevel && m.Elevation[r] < 0 {
 			return
@@ -112,12 +112,19 @@ func (m *Geo) GetErosionRate() []float64 {
 		// Additionally visit all neighbors and erode them by a certain
 		// fraction of the given erosion value.
 		toErode *= nbErosionFactor
-		for _, nb := range m.GetRegNeighbors(r) {
-			erodeRegion(nb, rem, toErode)
+
+		// Instantiate new re-usable slices for the sequential recursive call in the children.
+		out_rc := make([]int, 0, 8)
+
+		// Circulate through the neighbors of the current region using the out_r slice
+		// to avoid allocating a new slice for each recursive call from the parent.
+		for _, nb := range m.r_circulate_r(out_r, r) {
+			erodeRegion(out_rc, nb, rem, toErode)
 		}
 	}
 
 	// Traverse all regions and calculate the erosion rate.
+	out_r := make([]int, 0, 8)
 	for r, rSlope := range slope {
 		// NOTE: This was directly taken from mewo2's code.
 		//
@@ -142,7 +149,7 @@ func (m *Geo) GetErosionRate() []float64 {
 
 		// Traverse the neighbor-graph up to the determined depth and calculate
 		// the remaining erosion affecting them given their distance to r.
-		erodeRegion(r, erodeNbs, total)
+		erodeRegion(out_r, r, erodeNbs, total)
 	}
 	return newh
 }

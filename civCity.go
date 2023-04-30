@@ -319,12 +319,18 @@ func (m *Civ) relocateFromCity(c *City, population int) {
 	seenRegions := make(map[int]bool)
 
 	// Traverse the neighbors of the current region.
-	var traverseNeighbors func(id int, depth int)
-	traverseNeighbors = func(id int, depth int) {
+	out_r := make([]int, 0, 8)
+	var traverseNeighbors func(out_r []int, id int, depth int)
+	traverseNeighbors = func(out_r []int, id int, depth int) {
 		if depth >= maxDepth {
 			return
 		}
-		for _, nb := range m.GetRegNeighbors(id) {
+		// Instantiate new re-usable slices for the sequential recursive call in the children.
+		out_rc := make([]int, 0, 8)
+
+		// Circulate through the neighbors of the current region using the out_r slice
+		// to avoid allocating a new slice for each recursive call from the parent.
+		for _, nb := range m.r_circulate_r(out_r, id) {
 			if seenRegions[nb] {
 				continue
 			}
@@ -334,10 +340,10 @@ func (m *Civ) relocateFromCity(c *City, population int) {
 				bestScore = attr
 				bestReg = nb
 			}
-			traverseNeighbors(nb, depth+1)
+			traverseNeighbors(out_rc, nb, depth+1)
 		}
 	}
-	traverseNeighbors(c.ID, 0)
+	traverseNeighbors(out_r, c.ID, 0)
 
 	// If we didn't find a suitable region, panic.
 	// TODO: Handle this case better.

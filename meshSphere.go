@@ -136,7 +136,7 @@ func MakeSphere(seed int64, numPoints int, jitter float64) (*SphereMesh, error) 
 		// This calculates x,y,z from the spherical coordinates lat,lon.
 		xyz = append(xyz, latLonToCartesian(latlong[r], latlong[r+1])...)
 	}
-	return newSphereMesh(latLon, xyz, true), nil
+	return newSphereMesh(latLon, xyz, true)
 }
 
 type SphereMesh struct {
@@ -149,7 +149,7 @@ type SphereMesh struct {
 	triQuadTree *geoquad.QuadTree // Quadtree for triangle lookup
 }
 
-func newSphereMesh(latLon [][2]float64, xyz []float64, addSouthPole bool) *SphereMesh {
+func newSphereMesh(latLon [][2]float64, xyz []float64, addSouthPole bool) (*SphereMesh, error) {
 	// Map the sphere on a plane using the stereographic projection.
 	xy := stereographicProjection(xyz)
 
@@ -160,7 +160,7 @@ func newSphereMesh(latLon [][2]float64, xyz []float64, addSouthPole bool) *Spher
 	}
 	tri, err := delaunay.Triangulate(pts)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	// Close the hole at the south pole if requested.
@@ -202,7 +202,7 @@ func newSphereMesh(latLon [][2]float64, xyz []float64, addSouthPole bool) *Spher
 	// Create a quadtree for triangle lookup.
 	m.triQuadTree = newQuadTreeFromLatLon(m.TriLatLon)
 
-	return m
+	return m, nil
 }
 
 func newQuadTreeFromLatLon(latLon [][2]float64) *geoquad.QuadTree {
@@ -218,17 +218,16 @@ func newQuadTreeFromLatLon(latLon [][2]float64) *geoquad.QuadTree {
 	return geoquad.NewQuadTree(points)
 }
 
-// MakeCoarseSphereMesh returns a sphere mesh generating from every n-th point of the sphere mesh.
-func (m *SphereMesh) MakeCoarseSphereMesh(n int) (*SphereMesh, error) {
+// MakeCoarseSphereMesh returns a sphere mesh with 1/step density.
+func (m *SphereMesh) MakeCoarseSphereMesh(step int) (*SphereMesh, error) {
 	// Convert the lat/lon coordinates to x,y,z. (skip the existing south pole)
 	var xyz []float64
 	var latLon [][2]float64
-	for r := 0; r < len(m.LatLon)-1; r += n {
-		xyz = append(xyz, latLonToCartesian(m.LatLon[r][0], m.LatLon[r][1])...)
+	for r := 0; r < len(m.LatLon)-1; r += step {
+		xyz = append(xyz, m.XYZ[3*r:3*r+3]...)
 		latLon = append(latLon, m.LatLon[r])
 	}
 
-	// TODO: Re-use the existing lat/lon and xyz arrays and simply provide means
-	// to map the new indices to the old ones.
-	return newSphereMesh(latLon, xyz, true), nil
+	// Now adjust the indices of the triangles
+	return newSphereMesh(latLon, xyz, true)
 }

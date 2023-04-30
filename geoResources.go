@@ -403,6 +403,8 @@ func (m *Geo) placeStones() {
 	var volcanoes, mountains, faultlines []int
 	stopSea := make(map[int]bool)
 	isBeach := make(map[int]bool)
+
+	out_r := make([]int, 0, 8)
 	for r := 0; r < m.SphereMesh.numRegions; r++ {
 		if m.RegionIsVolcano[r] {
 			volcanoes = append(volcanoes, r)
@@ -417,7 +419,7 @@ func (m *Geo) placeStones() {
 			stopSea[r] = true
 		} else {
 			// Check if the region is a beach.
-			for _, n := range m.GetRegNeighbors(r) {
+			for _, n := range m.r_circulate_r(out_r, r) {
 				if m.Elevation[n] <= 0.0 {
 					isBeach[r] = true
 					break

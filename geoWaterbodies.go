@@ -31,6 +31,7 @@ func (m *BaseObject) getWaterBodies() []int {
 		}
 	}
 
+	out_r := make([]int, 0, 8)
 	for r := range done {
 		// Skip regions that have already been visited or that are
 		// non-ocean / above sealevel.
@@ -47,9 +48,10 @@ func (m *BaseObject) getWaterBodies() []int {
 		// TODO: Maybe use a queue instead... we might exceed Go's
 		// stack size calling this recursively regardless of how deep
 		// the execution stack might go.
-		var diveDeeper func(rd int)
-		diveDeeper = func(rd int) {
-			for _, nbs := range m.GetRegNeighbors(rd) {
+		var diveDeeper func(out_r []int, rd int)
+		diveDeeper = func(out_r []int, rd int) {
+			out_rc := make([]int, 0, 8)
+			for _, nbs := range m.r_circulate_r(out_r, rd) {
 				// If we have reached land or already visited nbs, skip.
 				if m.Elevation[nbs] > 0 || done[nbs] != -1 {
 					continue
@@ -58,14 +60,14 @@ func (m *BaseObject) getWaterBodies() []int {
 				done[nbs] = r
 
 				// Visit neighbors of nbs.
-				diveDeeper(nbs)
+				diveDeeper(out_rc, nbs)
 			}
 		}
 
 		// Recursively assign the waterbody ID / region index (r)
 		// to all suitable neighbor regions and their neighbors,
 		// and so on.
-		diveDeeper(r)
+		diveDeeper(out_r, r)
 	}
 	return done
 }

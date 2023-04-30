@@ -122,15 +122,14 @@ func (m *BaseObject) assignTriValues() {
 	mesh := m.SphereMesh
 	numTriangles := mesh.numTriangles
 
-	const tFraction = 1.0 / 3.0
 	for t := 0; t < numTriangles; t++ {
 		s0 := 3 * t
 		r1 := mesh.s_begin_r(s0)
 		r2 := mesh.s_begin_r(s0 + 1)
 		r3 := mesh.s_begin_r(s0 + 2)
-		tPool[t] = tFraction * (rPool[r1] + rPool[r2] + rPool[r3])
-		tElevation[t] = tFraction * (rElevation[r1] + rElevation[r2] + rElevation[r3])
-		tMoisture[t] = tFraction * (rMoisture[r1] + rMoisture[r2] + rMoisture[r3])
+		tPool[t] = (rPool[r1] + rPool[r2] + rPool[r3]) / 3
+		tElevation[t] = (rElevation[r1] + rElevation[r2] + rElevation[r3]) / 3
+		tMoisture[t] = (rMoisture[r1] + rMoisture[r2] + rMoisture[r3]) / 3
 	}
 
 	// This averages out rainfall to calculate moisture for triangles.
@@ -206,17 +205,16 @@ func (m *BaseObject) GetDownhill(usePool bool) []int {
 // He uses triangle centroids for his river generation, where I prefer to use the regions
 // directly.
 func (m *BaseObject) assignDownflow() {
-	mesh := m.SphereMesh
-	numTriangles := mesh.numTriangles
-
-	// Initialize the triangle downflow sides to -1.
-	m.triDownflowSide = initRegionSlice(numTriangles)
-
 	// Use a priority queue, starting with the ocean triangles and
 	// moving upwards using elevation as the priority, to visit all
 	// the land triangles.
 	queue := make(ascPriorityQueue, 0)
+	mesh := m.SphereMesh
+	numTriangles := mesh.numTriangles
 	queueIn := 0
+	for i := range m.triDownflowSide {
+		m.triDownflowSide[i] = -999
+	}
 	heap.Init(&queue)
 
 	// Part 1: ocean triangles get downslope assigned to the lowest neighbor.
@@ -232,9 +230,9 @@ func (m *BaseObject) assignDownflow() {
 					bestElevation = elevation
 				}
 			}
-			m.triDownflowSide[t] = bestSide
 			m.orderTri[queueIn] = t
 			queueIn++
+			m.triDownflowSide[t] = bestSide
 			heap.Push(&queue, &queueEntry{
 				destination: t,
 				score:       m.triElevation[t],
@@ -249,7 +247,7 @@ func (m *BaseObject) assignDownflow() {
 		for j := 0; j < 3; j++ {
 			s := 3*current_t + j
 			neighbor_t := mesh.s_outer_t(s) // uphill from current_t
-			if m.triDownflowSide[neighbor_t] < 0 && m.triElevation[neighbor_t] >= 0.0 {
+			if m.triDownflowSide[neighbor_t] == -999 && m.triElevation[neighbor_t] >= 0.0 {
 				m.triDownflowSide[neighbor_t] = mesh.s_opposite_s(s)
 				m.orderTri[queueIn] = neighbor_t
 				queueIn++
@@ -652,7 +650,6 @@ func (m *BaseObject) FillSinks(randEpsilon bool) []float64 {
 	// Loop until no more changes are made.
 	var epsilon float64
 	outReg := make([]int, 0, 8)
-	outPermNbs := make([]int, 0, 8)
 	outPermRegs := make([]int, 0, len(m.Elevation))
 	for {
 		if randEpsilon {
@@ -677,10 +674,10 @@ func (m *BaseObject) FillSinks(randEpsilon bool) []float64 {
 				continue
 			}
 
-			// Iterate over all neighbors in a random order.
-			nbs := mesh.r_circulate_r(outReg, r)
-			for _, i := range m.randPerm(outPermNbs, len(nbs)) {
-				nb := nbs[i]
+			// Iterate over all neighbors.
+			// NOTE: This used to be in a random order, but that
+			// had a high cost, so I dropped it for now.
+			for _, nb := range mesh.r_circulate_r(outReg, r) {
 				// Since we have set all inland regions to infinity,
 				// we will only succeed here if the newHeight of the neighbor
 				// is either below sea level or if the newHeight has already
@@ -772,7 +769,7 @@ func (m *BaseObject) assignDistanceField(seedRegs []int, stopReg map[int]bool) [
 
 		// If we have consumed over 1000000 elements in the queue,
 		// we reset the queue to the remaining elements.
-		if queueOut > 10000 {
+		if queueOut >= numRegions {
 			n := copy(queue, queue[queueOut:])
 			queue = queue[:n]
 			queueOut = 0
@@ -790,8 +787,8 @@ func (m *BaseObject) UpdateDistanceField(regDistance []float64, seedRegs []int, 
 	// Reset the random number generator.
 	m.resetRand()
 	mesh := m.SphereMesh
-
-	queue := make([]int, len(seedRegs), len(regDistance))
+	numRegions := mesh.numRegions
+	queue := make([]int, len(seedRegs), numRegions)
 
 	// TODO: Also check if a seed point has "disappeared" .If so, we
 	// might need to recompute the distance field for all regions.
@@ -833,7 +830,7 @@ func (m *BaseObject) UpdateDistanceField(regDistance []float64, seedRegs []int, 
 
 		// If we have consumed over 1000000 elements in the queue,
 		// we reset the queue to the remaining elements.
-		if queueOut > 10000 {
+		if queueOut >= numRegions {
 			n := copy(queue, queue[queueOut:])
 			queue = queue[:n]
 			queueOut = 0
@@ -954,7 +951,10 @@ func (m *BaseObject) interpolate(regions []int) (*interpolated, error) {
 	}
 
 	// Create the sphere mesh.
-	sphere := newSphereMesh(latLon, xyz, false)
+	sphere, err := newSphereMesh(latLon, xyz, false)
+	if err != nil {
+		return nil, err
+	}
 	ipl.SphereMesh = sphere
 
 	// Update quadtrees.

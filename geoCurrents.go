@@ -533,6 +533,8 @@ func (m *Geo) genOceanCurrents2() {
 }
 
 func (m *Geo) assignOceanCurrents3() {
+	useGoRoutines := true
+
 	// Adapted from:
 	// https://github.com/FreezeDriedMangos/realistic-planet-generation-and-simulation/blob/main/src/Generate_Weather.js
 
@@ -606,10 +608,19 @@ func (m *Geo) assignOceanCurrents3() {
 				continue // if r and sr are in different "bands", aka supergroups, do not merge them
 			}
 			// assign all regions belonging to the same group as sr, to the same group as r
-			for i, g := range groups {
-				if g == sgr {
-					groups[i] = rgr
+			chunkProcessor := func(start, end int) {
+				for i := start; i < end; i++ {
+					if groups[i] == sgr {
+						groups[i] = rgr
+					}
 				}
+			}
+			if useGoRoutines {
+				// use goroutines
+				kickOffChunkWorkers(len(groups), chunkProcessor)
+			} else {
+				// do not use goroutines
+				chunkProcessor(0, len(groups))
 			}
 		}
 	}
@@ -660,35 +671,45 @@ func (m *Geo) assignOceanCurrents3() {
 				maxDist = distFromEdge[r]
 			}
 		}
-		for _, r := range groupmatesForSeed {
-			var inwardDirRaw [2]float64
-			for _, nr := range m.SphereMesh.r_circulate_r(outRegs, r) {
-				// if this neighbor has a smaller distance to edge, or belongs to a different gyre, the inward dir points away from it (so we add dirFromTo(nr, r), aka the dir away from nr)
-				if groups[nr] != groups[r] {
-					inwardDirRaw = add2(inwardDirRaw, m.dirVecFromToRegs(nr, r))
-				} else if distFromEdge[nr] < distFromEdge[r] {
-					inwardDirRaw = add2(inwardDirRaw, m.dirVecFromToRegs(nr, r))
-				} else if distFromEdge[nr] == distFromEdge[r] {
-					continue
-				} else {
-					// if the neighbor has a larger dist to the edge, the inward dir points towards it
-					inwardDirRaw = add2(inwardDirRaw, m.dirVecFromToRegs(r, nr))
-				}
-			}
-			// normalize inward dir
-			inwardDir := normal2(inwardDirRaw)
 
-			clockwise := seedSupergroup[seed] == 1 || seedSupergroup[seed] == 2
-			// since currents at gyre edges are a mess, we'll decrease their magnitude
-			// map.r_currents[r] = setMagnitude(perpendicular, 2*(1-distFromEdge[r]/maxDist))
-			if clockwise {
-				r_currents[r][0] = -inwardDir[1]
-				r_currents[r][1] = inwardDir[0]
-			} else {
-				r_currents[r][0] = inwardDir[1]
-				r_currents[r][1] = -inwardDir[0]
+		chunkProcessor := func(start, end int) {
+			outRegs := make([]int, 0, 8)
+			for idx := start; idx < end; idx++ {
+				r := groupmatesForSeed[idx]
+				var inwardDirRaw [2]float64
+				for _, nr := range m.SphereMesh.r_circulate_r(outRegs, r) {
+					// if this neighbor has a smaller distance to edge, or belongs to a different gyre, the inward dir points away from it (so we add dirFromTo(nr, r), aka the dir away from nr)
+					if groups[nr] != groups[r] {
+						inwardDirRaw = add2(inwardDirRaw, m.dirVecFromToRegs(nr, r))
+					} else if distFromEdge[nr] < distFromEdge[r] {
+						inwardDirRaw = add2(inwardDirRaw, m.dirVecFromToRegs(nr, r))
+					} else if distFromEdge[nr] == distFromEdge[r] {
+						continue
+					} else {
+						// if the neighbor has a larger dist to the edge, the inward dir points towards it
+						inwardDirRaw = add2(inwardDirRaw, m.dirVecFromToRegs(r, nr))
+					}
+				}
+				// normalize inward dir
+				inwardDir := normal2(inwardDirRaw)
+
+				clockwise := seedSupergroup[seed] == 1 || seedSupergroup[seed] == 2
+				// since currents at gyre edges are a mess, we'll decrease their magnitude
+				// map.r_currents[r] = setMagnitude(perpendicular, 2*(1-distFromEdge[r]/maxDist))
+				if clockwise {
+					r_currents[r][0] = -inwardDir[1]
+					r_currents[r][1] = inwardDir[0]
+				} else {
+					r_currents[r][0] = inwardDir[1]
+					r_currents[r][1] = -inwardDir[0]
+				}
+				// if(distFromEdge[r] === 0) map.r_currents[r] = setMagnitude(perpendicular, 0.4)
 			}
-			// if(distFromEdge[r] === 0) map.r_currents[r] = setMagnitude(perpendicular, 0.4)
+		}
+		if useGoRoutines {
+			kickOffChunkWorkers(len(groupmatesForSeed), chunkProcessor)
+		} else {
+			chunkProcessor(0, len(groupmatesForSeed))
 		}
 	}
 

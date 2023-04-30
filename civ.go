@@ -300,7 +300,8 @@ func (m *Civ) generateTimeOfSettlement() {
 	}
 
 	// Now add the region neighbors to the queue.
-	for _, n := range m.GetRegNeighbors(bestRegion) {
+	out_r := make([]int, 0, 8)
+	for _, n := range m.r_circulate_r(out_r, bestRegion) {
 		heap.Push(&queue, &queueEntry{
 			origin:      bestRegion,
 			score:       weight(bestRegion, bestRegion, n),
@@ -309,7 +310,6 @@ func (m *Civ) generateTimeOfSettlement() {
 	}
 
 	// Expand settlements until we have settled all regions.
-	out_r := make([]int, 0, 8)
 	for queue.Len() > 0 {
 		u := heap.Pop(&queue).(*queueEntry)
 
