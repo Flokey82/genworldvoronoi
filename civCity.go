@@ -437,15 +437,18 @@ func (m *Civ) PlaceNCities(n int, cType TownType) {
 	// For now we just maximize the distance to cities of the same type.
 	distSeedFunc := cType.GetDistanceSeedFunc(m)
 
+	// Get the stop regions, i.e. regions that we don't want to place cities in.
+	stopRegions := make(map[int]bool)
+
 	// Place n cities of the given type.
-	regDistanceC := m.assignDistanceField(distSeedFunc(), make(map[int]bool))
+	regDistanceC := m.assignDistanceField(distSeedFunc(), stopRegions)
 	for i := 0; i < n; i++ {
 		// Place a city at the region with the highest fitness score.
 		c := m.placeCityWithScore(cType, m.CalcCityScoreWithDistanceField(scoreFunc, regDistanceC))
 		log.Printf("placing %s city %d: %s", cType, i, c.String())
 
 		// Update the distance field.
-		regDistanceC = m.UpdateDistanceField(regDistanceC, distSeedFunc(), make(map[int]bool))
+		regDistanceC = m.UpdateDistanceField(regDistanceC, distSeedFunc(), stopRegions)
 	}
 }
 

@@ -216,7 +216,7 @@ func (m *Civ) ExpandReligions() {
 	}
 
 	territoryWeightFunc := m.getTerritoryWeightFunc()
-	m.RegionToReligion = m.regPlaceNTerritoriesCustom(seeds, func(o, u, v int) float64 {
+	m.RegionToReligion = m.regPlaceNTerritoriesCustom(m.RegionToReligion, seeds, func(o, u, v int) float64 {
 		r := originToReligion[o]
 		if r.Expansion == ReligionExpCulture && m.RegionToCulture[v] != r.Culture.ID ||
 			r.Expansion == ReligionExpState && m.RegionToCityState[v] != m.RegionToCityState[o] {

@@ -11,8 +11,7 @@ func (m *Geo) fbmNoiseCustom(octaves int, persistence, mx, my, mz, dx, dy, dz fl
 	// https://thebookofshaders.com/13/
 	return func(r int) float64 {
 		nx, ny, nz := m.XYZ[3*r]*mx+dx, m.XYZ[3*r+1]*my+dy, m.XYZ[3*r+2]*mz+dz
-		var sum float64
-		var sumOfAmplitudes float64
+		var sum, sumOfAmplitudes float64
 		amplitude := 1.0
 		for octave := 0; octave < octaves; octave++ {
 			frequency := 1 << octave
@@ -70,8 +69,7 @@ func NewNoise(octaves int, persistence float64, seed int64) *Noise {
 
 // Eval3 returns the noise value at the given point.
 func (n *Noise) Eval3(x, y, z float64) float64 {
-	var sum float64
-	var sumOfAmplitudes float64
+	var sum, sumOfAmplitudes float64
 	for octave := 0; octave < n.Octaves; octave++ {
 		frequency := 1 << octave
 		fFreq := float64(frequency)
@@ -83,8 +81,7 @@ func (n *Noise) Eval3(x, y, z float64) float64 {
 
 // Eval2 returns the noise value at the given point.
 func (n *Noise) Eval2(x, y float64) float64 {
-	var sum float64
-	var sumOfAmplitudes float64
+	var sum, sumOfAmplitudes float64
 	for octave := 0; octave < n.Octaves; octave++ {
 		frequency := 1 << octave
 		fFreq := float64(frequency)

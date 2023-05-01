@@ -2,6 +2,44 @@ package genworldvoronoi
 
 import "math"
 
+type fitCache struct {
+	f       func(int) float64
+	fGetter func() func(int) float64
+}
+
+func newFitCache(fGetter func() func(int) float64) *fitCache {
+	return &fitCache{
+		fGetter: fGetter,
+	}
+}
+
+func (fc *fitCache) getFunc() func(int) float64 {
+	if fc.f == nil {
+		fc.f = fc.fGetter()
+	}
+	return fc.f
+}
+
+type fitCaches struct {
+	climate *fitCache
+	city    *fitCache
+	trading *fitCache
+	steep   *fitCache
+	water   *fitCache
+	arable  *fitCache
+}
+
+func (m *Civ) getFitCaches() *fitCaches {
+	return &fitCaches{
+		climate: newFitCache(m.getFitnessClimate),
+		city:    newFitCache(m.getFitnessCityDefault),
+		trading: newFitCache(m.getFitnessTradingTowns),
+		steep:   newFitCache(m.getFitnessSteepMountains),
+		water:   newFitCache(m.getFitnessProximityToWater),
+		arable:  newFitCache(m.getFitnessArableLand),
+	}
+}
+
 // getFitnessProximityToWater returns a fitness function with high scores for
 // terrain close to water.
 func (m *Geo) getFitnessProximityToWater() func(int) float64 {
@@ -30,7 +68,7 @@ func (m *Geo) getFitnessProximityToWater() func(int) float64 {
 // steep terrain close to mountains.
 func (m *Geo) getFitnessSteepMountains() func(int) float64 {
 	steepness := m.GetSteepness()
-	seedMountains, _, _, _ := m.findCollisions()
+	seedMountains := m.mountain_r
 	distMountains := m.assignDistanceField(seedMountains, make(map[int]bool))
 	return func(r int) float64 {
 		if m.Elevation[r] <= 0 {
@@ -47,7 +85,9 @@ func (m *Geo) getFitnessSteepMountains() func(int) float64 {
 // oceans.
 func (m *Geo) getFitnessInlandValleys() func(int) float64 {
 	steepness := m.GetSteepness()
-	seedMountains, seedCoastlines, seedOceans, _ := m.findCollisions()
+	seedMountains := m.mountain_r
+	seedCoastlines := m.coastline_r
+	seedOceans := m.ocean_r
 
 	// Combine all seed points so we can find the spots furthest away from them.
 	var seedAll []int

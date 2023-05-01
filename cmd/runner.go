@@ -23,16 +23,18 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	sp, err := genworldvoronoi.NewMap(1234, 25, 200000, 0.0)
+	cfg := genworldvoronoi.NewConfig()
+
+	sp, err := genworldvoronoi.NewMapFromConfig(1234, cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	sp.GetEmpires()
-	exportPNG := true
-	exportOBJ := true
-	exportSVG := true
-	exportWebp := true
+	exportPNG := false
+	exportOBJ := false
+	exportSVG := false
+	exportWebp := false
 	if exportPNG {
 		sp.ExportPng("test.png")
 	}

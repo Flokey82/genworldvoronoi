@@ -10,6 +10,7 @@ import (
 )
 
 type Geo struct {
+	*GeoConfig // Geo configuration
 	*Calendar
 	*BaseObject
 	*Resources                          // Natural resources.
@@ -20,18 +21,22 @@ type Geo struct {
 	RegionToWindVecLocal [][2]float64   // Point / region wind vector (local)
 	RegionToOceanVec     [][2]float64   // Point / region ocean current vector
 	RegionToPlate        []int          // Point / region to plate mapping
-	NumPlates            int            // Number of generated plates
-	NumVolcanoes         int            // Number of generated volcanoes
-	NumPoints            int            // Number of generated points / regions
+	ocean_r              []int          // Ocean regions
+	mountain_r           []int          // Mountain regions
+	coastline_r          []int          // Coastline regions
 	QuadGeom             *QuadGeometry  // Quad geometry generated from the mesh (?)
 }
 
-func newGeo(seed int64, numPlates, numPoints int, jitter float64) (*Geo, error) {
-	result, err := MakeSphere(seed, numPoints, jitter)
+func newGeo(seed int64, cfg *GeoConfig) (*Geo, error) {
+	if cfg == nil {
+		cfg = NewGeoConfig()
+	}
+	result, err := MakeSphere(seed, cfg.NumPoints, cfg.Jitter)
 	if err != nil {
 		return nil, err
 	}
 	return &Geo{
+		GeoConfig:            cfg,
 		Calendar:             NewCalendar(),
 		PlateIsOcean:         make(map[int]bool),
 		BaseObject:           newBaseObject(seed, result),
@@ -39,9 +44,6 @@ func newGeo(seed int64, numPlates, numPoints int, jitter float64) (*Geo, error) 
 		RegionToWindVec:      make([][2]float64, result.numRegions),
 		RegionToWindVecLocal: make([][2]float64, result.numRegions),
 		RegionToOceanVec:     make([][2]float64, result.numRegions),
-		NumPlates:            numPlates,
-		NumVolcanoes:         10, // TODO: Allow independent configuration.
-		NumPoints:            numPoints,
 		QuadGeom:             NewQuadGeometry(result.TriangleMesh),
 	}, nil
 }

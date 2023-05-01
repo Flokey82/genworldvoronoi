@@ -9,6 +9,7 @@ import (
 )
 
 type Civ struct {
+	*CivConfig
 	*Geo
 	*History
 	nextPersonID      int
@@ -24,39 +25,23 @@ type Civ struct {
 	Religions         []*Religion  // (cultural) Religion seed points / regions
 	Settled           []int64      // (cultural) Time of settlement per region
 	// SettledBySpecies []int // (cultural) Which species settled the region first
-	NumCities             int // Number of generated cities (regions)
-	NumCityStates         int // Number of generated city states
-	NumMiningTowns        int // Number of generated mining towns
-	NumMiningGemsTowns    int // Number of generated (gem) mining towns
-	NumQuarryTowns        int // Number of generated quarry towns
-	NumFarmingTowns       int // Number of generated farming towns
-	NumDesertOasis        int // Number of generated desert oases
-	NumEmpires            int // Number of generated territories
-	NumCultures           int // (Min) Number of generated cultures
-	NumOrganizedReligions int // (Min) Number of generated religions
-	NameGen               *NameGenerators
+	NameGen *NameGenerators
 }
 
-func NewCiv(geo *Geo) *Civ {
+func NewCiv(geo *Geo, cfg *CivConfig) *Civ {
+	if cfg == nil {
+		cfg = NewCivConfig()
+	}
 	return &Civ{
-		Geo:                   geo,
-		History:               NewHistory(geo.Calendar),
-		RegionToEmpire:        initRegionSlice(geo.SphereMesh.numRegions),
-		RegionToCityState:     initRegionSlice(geo.SphereMesh.numRegions),
-		RegionToCulture:       initRegionSlice(geo.SphereMesh.numRegions),
-		RegionToReligion:      initRegionSlice(geo.SphereMesh.numRegions),
-		Settled:               initTimeSlice(geo.SphereMesh.numRegions),
-		NumEmpires:            10,
-		NumCities:             150,
-		NumCityStates:         150,
-		NumMiningTowns:        60,
-		NumMiningGemsTowns:    60,
-		NumQuarryTowns:        60,
-		NumFarmingTowns:       60,
-		NumDesertOasis:        10,
-		NumCultures:           30,
-		NumOrganizedReligions: 20,
-		NameGen:               NewNameGenerators(geo.Seed),
+		CivConfig:         cfg,
+		Geo:               geo,
+		History:           NewHistory(geo.Calendar),
+		RegionToEmpire:    initRegionSlice(geo.SphereMesh.numRegions),
+		RegionToCityState: initRegionSlice(geo.SphereMesh.numRegions),
+		RegionToCulture:   initRegionSlice(geo.SphereMesh.numRegions),
+		RegionToReligion:  initRegionSlice(geo.SphereMesh.numRegions),
+		Settled:           initTimeSlice(geo.SphereMesh.numRegions),
+		NameGen:           NewNameGenerators(geo.Seed),
 	}
 }
 

@@ -329,9 +329,8 @@ func (m *Map) ExportSVG(path string) error {
 	}
 
 	if drawPlateCompression {
-		mountain_r, coastline_r, ocean_r, compression_r := m.findCollisions()
 		var minComp, maxComp float64
-		for _, comp := range compression_r {
+		for _, comp := range m.RegionCompression {
 			if comp < minComp {
 				minComp = comp
 			}
@@ -339,18 +338,18 @@ func (m *Map) ExportSVG(path string) error {
 				maxComp = comp
 			}
 		}
-		for _, r := range mountain_r {
+		for _, r := range m.mountain_r {
 			drawCircle(m.LatLon[r][0], m.LatLon[r][1], 2, "fill: rgb(255, 128, 128)")
 		}
-		for _, r := range coastline_r {
+		for _, r := range m.coastline_r {
 			drawCircle(m.LatLon[r][0], m.LatLon[r][1], 2, "fill: rgb(128, 255, 128)")
 		}
-		for _, r := range ocean_r {
+		for _, r := range m.ocean_r {
 			drawCircle(m.LatLon[r][0], m.LatLon[r][1], 2, "fill: rgb(128, 128, 255)")
 		}
 		for r := 0; r < m.SphereMesh.numSides; r++ {
-			if compression_r[r] != 0 {
-				col := genGreen((compression_r[r] - minComp) / (maxComp - minComp))
+			if m.RegionCompression[r] != 0 {
+				col := genGreen((m.RegionCompression[r] - minComp) / (maxComp - minComp))
 				drawCircle(m.LatLon[r][0], m.LatLon[r][1], 1, fmt.Sprintf("fill: rgb(%d, %d, %d)", col.R, col.R, col.R))
 			}
 		}

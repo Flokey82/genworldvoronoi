@@ -17,17 +17,19 @@ import (
 var worldmap *genworldvoronoi.Map
 
 var (
-	seed      int64   = 1234
-	numPlates int     = 25
-	numPoints int     = 400000
-	jitter    float64 = 0.0
-	useGlobe  bool    = false
+	seed         int64   = 1234
+	numPlates    int     = 25
+	numPoints    int     = 400000
+	numVolcanoes int     = 10
+	jitter       float64 = 0.0
+	useGlobe     bool    = false
 )
 
 func init() {
 	flag.Int64Var(&seed, "seed", seed, "the world seed")
 	flag.IntVar(&numPlates, "num_plates", numPlates, "number of plates")
 	flag.IntVar(&numPoints, "num_points", numPoints, "number of points")
+	flag.IntVar(&numVolcanoes, "num_volcanoes", numVolcanoes, "number of volcanoes")
 	flag.BoolVar(&useGlobe, "use_globe", useGlobe, "use 3D globe")
 	flag.Float64Var(&jitter, "jitter", jitter, "jitter")
 }
@@ -35,8 +37,15 @@ func init() {
 func main() {
 	flag.Parse()
 
+	// Initialize the config.
+	cfg := genworldvoronoi.NewConfig()
+	cfg.GeoConfig.NumPlates = numPlates
+	cfg.GeoConfig.NumPoints = numPoints
+	cfg.GeoConfig.NumVolcanoes = numVolcanoes
+	cfg.GeoConfig.Jitter = jitter
+
 	// Initialize the planet.
-	sp, err := genworldvoronoi.NewMap(seed, numPlates, numPoints, jitter)
+	sp, err := genworldvoronoi.NewMapFromConfig(seed, cfg)
 	if err != nil {
 		log.Fatal(err)
 	}

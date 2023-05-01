@@ -8,24 +8,27 @@ import (
 
 // Bio handles the generation of life on the map (plants, animals, etc.).
 type Bio struct {
+	*BioConfig
 	*Geo
 	Species                []*Species              // All species on the map.
 	SpeciesFamilyToRegions map[SpeciesFamily][]int // Regions where each species is found.
 	SpeciesRegions         []int                   // Regions where each species is found.
 	GrowthDays             []int                   // Number of days within the growth period for each region.
 	GrowthInsolation       []float64               // Average insolation for each region during the growth period.
-	NumSpecies             int                     // Number of species to generate.
 	rand                   *rand.Rand              // Random number generator.
 }
 
-func newBio(geo *Geo) *Bio {
+func newBio(geo *Geo, cfg *BioConfig) *Bio {
+	if cfg == nil {
+		cfg = NewBioConfig()
+	}
 	return &Bio{
+		BioConfig:              cfg,
 		Geo:                    geo,
 		GrowthDays:             make([]int, geo.SphereMesh.numRegions),
 		GrowthInsolation:       make([]float64, geo.SphereMesh.numRegions),
 		SpeciesRegions:         make([]int, geo.SphereMesh.numRegions),
 		SpeciesFamilyToRegions: make(map[SpeciesFamily][]int),
-		NumSpecies:             100,
 		rand:                   rand.New(rand.NewSource(geo.Seed)),
 	}
 }
@@ -57,7 +60,9 @@ func (b *Bio) generateBiology() {
 	b.placeAllSpecies(GenusCereal)
 
 	// Generate the species.
-	// b.genNRandomSpecies(b.NumSpecies)
+	if b.EnableRandomSpecies {
+		b.genNRandomSpecies(b.NumSpecies)
+	}
 	b.SpeciesRegions = b.expandSpecies()
 	b.SpeciesFamilyToRegions = b.expandSpecies2()
 }

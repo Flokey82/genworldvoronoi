@@ -93,15 +93,21 @@ func (m *Civ) getTerritoryWeightFunc() func(o, u, v int) float64 {
 // o: The origin/seed region
 // u: The region we expand from
 // v: The region we expand to
-func (m *Civ) regPlaceNTerritoriesCustom(seedPoints []int, weight func(o, u, v int) float64) []int {
+func (m *Civ) regPlaceNTerritoriesCustom(terr, seedPoints []int, weight func(o, u, v int) float64) []int {
 	var queue ascPriorityQueue
 	heap.Init(&queue)
 	outReg := make([]int, 0, 8)
 
+	// If force rebuild is enabled, we will rebuild all territories from scratch.
+	forceRebuild := false
+
 	// 'terr' will hold a mapping of region to territory.
 	// The territory ID is the region number of the capital city.
-	terr := initRegionSlice(m.SphereMesh.numRegions)
+	//terr := initRegionSlice(m.SphereMesh.numRegions)
 	for i := 0; i < len(seedPoints); i++ {
+		if !forceRebuild && terr[seedPoints[i]] >= 0 {
+			continue
+		}
 		terr[seedPoints[i]] = seedPoints[i]
 		for _, v := range m.SphereMesh.r_circulate_r(outReg, seedPoints[i]) {
 			newdist := weight(seedPoints[i], seedPoints[i], v)
@@ -153,9 +159,6 @@ func (m *Civ) rRelaxTerritories(terr []int, n int) {
 			var nbCountOtherTerr, nbCountSameTerr int
 			otherTerr := -1
 			for _, v := range m.SphereMesh.r_circulate_r(outReg, r) {
-				if v < 0 {
-					continue
-				}
 				if terr[v] != t {
 					nbCountOtherTerr++
 					otherTerr = terr[v]

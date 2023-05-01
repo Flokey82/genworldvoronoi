@@ -81,7 +81,7 @@ func (m *Civ) expandCityStates() {
 	biomeWeight := m.getTerritoryBiomeWeightFunc()
 	cultureWeight := m.getTerritoryCultureWeightFunc()
 
-	m.RegionToCityState = m.regPlaceNTerritoriesCustom(seedCities, func(o, u, v int) float64 {
+	m.RegionToCityState = m.regPlaceNTerritoriesCustom(m.RegionToCityState, seedCities, func(o, u, v int) float64 {
 		// TODO: Make sure we take in account expansionism, wealth, score, and culture.
 		w := weight(o, u, v)
 		if w < 0 {

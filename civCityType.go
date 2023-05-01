@@ -73,8 +73,46 @@ func (t TownType) GetDistanceSeedFunc(m *Civ) func() []int {
 	}
 }
 
+type fitCache struct {
+	f       func(int) float64
+	fGetter func() func(int) float64
+}
+
+func newFitCache(fGetter func() func(int) float64) *fitCache {
+	return &fitCache{
+		fGetter: fGetter,
+	}
+}
+
+func (fc *fitCache) getFunc() func(int) float64 {
+	if fc.f == nil {
+		fc.f = fc.fGetter()
+	}
+	return fc.f
+}
+
+type fitCaches struct {
+	climate *fitCache
+	city    *fitCache
+	trading *fitCache
+	steep   *fitCache
+	water   *fitCache
+	arable  *fitCache
+}
+
+func (m *Civ) getFitCaches() *fitCaches {
+	return &fitCaches{
+		climate: newFitCache(m.getFitnessClimate),
+		city:    newFitCache(m.getFitnessCityDefault),
+		trading: newFitCache(m.getFitnessTradingTowns),
+		steep:   newFitCache(m.getFitnessSteepMountains),
+		water:   newFitCache(m.getFitnessProximityToWater),
+		arable:  newFitCache(m.getFitnessArableLand),
+	}
+}
+
 // GetFitnessFunction returns the fitness function for a city type.
-func (t TownType) GetFitnessFunction(m *Civ) func(int) float64 {
+func (t TownType) GetFitnessFunction(m *Civ, fitc *fitCaches) func(int) float64 {
 	// TODO: Create different fitness functions for different types of settlement.
 	//   - Capital
 	//   - Cities / Settlements
@@ -84,17 +122,17 @@ func (t TownType) GetFitnessFunction(m *Civ) func(int) float64 {
 	//   - ...
 	switch t {
 	case TownTypeDefault:
-		fa := m.getFitnessClimate()
-		fb := m.getFitnessCityDefault()
+		fa := fitc.climate.getFunc()
+		fb := fitc.city.getFunc()
 		return func(r int) float64 {
 			return fa(r) * fb(r)
 		}
 	case TownTypeTrading:
-		return m.getFitnessTradingTowns()
+		return fitc.trading.getFunc()
 	case TownTypeQuarry:
-		fa := m.getFitnessSteepMountains()
-		fb := m.getFitnessClimate()
-		fc := m.getFitnessProximityToWater()
+		fa := fitc.steep.getFunc()
+		fb := fitc.climate.getFunc()
+		fc := fitc.water.getFunc()
 		fd := m.getFitnessProximityToCities(TownTypeMining, TownTypeMiningGems, TownTypeQuarry)
 		return func(r int) float64 {
 			if m.Stones[r] == 0 {
@@ -103,9 +141,9 @@ func (t TownType) GetFitnessFunction(m *Civ) func(int) float64 {
 			return fd(r) * (fa(r)*fb(r) + fc(r)) / 2
 		}
 	case TownTypeMining:
-		fa := m.getFitnessSteepMountains()
-		fb := m.getFitnessClimate()
-		fc := m.getFitnessProximityToWater()
+		fa := fitc.steep.getFunc()
+		fb := fitc.climate.getFunc()
+		fc := fitc.water.getFunc()
 		fd := m.getFitnessProximityToCities(TownTypeMining, TownTypeMiningGems, TownTypeQuarry)
 		return func(r int) float64 {
 			if m.Metals[r] == 0 {
@@ -114,9 +152,9 @@ func (t TownType) GetFitnessFunction(m *Civ) func(int) float64 {
 			return fd(r) * (fa(r)*fb(r) + fc(r)) / 2
 		}
 	case TownTypeMiningGems:
-		fa := m.getFitnessSteepMountains()
-		fb := m.getFitnessClimate()
-		fc := m.getFitnessProximityToWater()
+		fa := fitc.steep.getFunc()
+		fb := fitc.climate.getFunc()
+		fc := fitc.water.getFunc()
 		fd := m.getFitnessProximityToCities(TownTypeMining, TownTypeMiningGems, TownTypeQuarry)
 		return func(r int) float64 {
 			if m.Gems[r] == 0 {
@@ -125,7 +163,7 @@ func (t TownType) GetFitnessFunction(m *Civ) func(int) float64 {
 			return fd(r) * (fa(r)*fb(r) + fc(r)) / 2
 		}
 	case TownTypeFarming:
-		return m.getFitnessArableLand()
+		return fitc.arable.getFunc()
 	case TownTypeDesertOasis:
 		// TODO: Improve this fitness function.
 		// Right now the oasis are placed at the very edges of
@@ -133,7 +171,7 @@ func (t TownType) GetFitnessFunction(m *Civ) func(int) float64 {
 		// However, we want them to be trade hubs for desert
 		// crossings... so we'll need to place them in the middle
 		// of deserts instead.
-		fa := m.getFitnessClimate()
+		fa := fitc.climate.getFunc()
 		bf := m.getRegWhittakerModBiomeFunc()
 		return func(r int) float64 {
 			biome := bf(r)

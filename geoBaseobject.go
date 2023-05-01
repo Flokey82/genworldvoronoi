@@ -31,8 +31,6 @@ type BaseObject struct {
 	Moisture          []float64    // Point / region moisture
 	Rainfall          []float64    // Point / region rainfall
 	Flux              []float64    // Point / region hydrology: throughflow of rainfall
-	Waterpool         []float64    // Point / region hydrology: water pool depth
-	Drainage          []int        // Point / region mapping of pool to its drainage region
 	Waterbodies       []int        // Point / region mapping of pool to waterbody ID
 	WaterbodySize     map[int]int  // Waterbody ID to size mapping
 	LakeSize          map[int]int  // Lake ID to size mapping
@@ -45,13 +43,19 @@ type BaseObject struct {
 	BiomeRegionSize  map[int]int // Biome region ID to size mapping
 
 	// Triangle stuff (purely derived from regions)
-	triElevation    []float64 // Triangle elevation
-	triMoisture     []float64 // Triangle moisture
+	triElevation []float64 // Triangle elevation
+	triMoisture  []float64 // Triangle moisture
+
+	// Currently unused:
 	triPool         []float64 // Triangle water pool depth
 	triFlow         []float64 // Triangle flow intensity (rainfall)
 	triDownflowSide []int     // Triangle mapping to side through which water flows downhill.
 	orderTri        []int     // Triangles in uphill order of elevation.
 	sideFlow        []float64 // Flow intensity through sides
+
+	// Currently unused:
+	Waterpool []float64 // Point / region hydrology: water pool depth
+	Drainage  []int     // Point / region mapping of pool to its drainage region
 }
 
 func newBaseObject(seed int64, mesh *SphereMesh) *BaseObject {
@@ -747,7 +751,7 @@ func (m *BaseObject) assignDistanceField(seedRegs []int, stopReg map[int]bool) [
 	}
 
 	// Allocate a slice for the output of mesh.r_circulate_r.
-	outRegs := make([]int, 0, 6)
+	outRegs := make([]int, 0, 8)
 
 	// Random search adapted from breadth first search.
 	// TODO: Improve the queue. Currently this is growing unchecked.
@@ -804,7 +808,7 @@ func (m *BaseObject) UpdateDistanceField(regDistance []float64, seedRegs []int, 
 	}
 
 	// Allocate a slice for the output of mesh.r_circulate_r.
-	outRegs := make([]int, 0, 6)
+	outRegs := make([]int, 0, 8)
 
 	// Random search adapted from breadth first search.
 	// TODO: Improve the queue. Currently this is growing unchecked.

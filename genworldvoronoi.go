@@ -18,9 +18,13 @@ type Map struct {
 	// CoarseMeshes []*SphereMesh // Coarse meshes for each zoom level.
 }
 
-func NewMap(seed int64, numPlates, numPoints int, jitter float64) (*Map, error) {
+func NewMapFromConfig(seed int64, cfg *Config) (*Map, error) {
+	if cfg == nil {
+		cfg = NewConfig()
+	}
+
 	// Initialize the planet.
-	geo, err := newGeo(seed, numPlates, numPoints, jitter)
+	geo, err := newGeo(seed, cfg.GeoConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -28,8 +32,8 @@ func NewMap(seed int64, numPlates, numPoints int, jitter float64) (*Map, error) 
 	// Initialize the map.
 	m := &Map{
 		Geo: geo,
-		Civ: NewCiv(geo),
-		Bio: newBio(geo),
+		Civ: NewCiv(geo, cfg.CivConfig),
+		Bio: newBio(geo, cfg.BioConfig),
 	}
 	m.generateMap()
 
@@ -52,6 +56,16 @@ func NewMap(seed int64, numPlates, numPoints int, jitter float64) (*Map, error) 
 			m.CoarseMeshes[i] = mesh
 		}*/
 	return m, nil
+}
+
+func NewMap(seed int64, numPlates, numPoints, numVolcanoes int, jitter float64) (*Map, error) {
+	cfg := NewConfig()
+	cfg.NumPlates = numPlates
+	cfg.NumPoints = numPoints
+	cfg.NumVolcanoes = numVolcanoes
+	cfg.Jitter = jitter
+
+	return NewMapFromConfig(seed, cfg)
 }
 
 /*

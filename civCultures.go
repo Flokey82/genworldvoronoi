@@ -93,7 +93,7 @@ func (m *Civ) ExpandCultures() {
 	_, maxElev := minMax(m.Elevation)
 	territoryWeightFunc := m.getTerritoryWeightFunc()
 	biomeWeight := m.getTerritoryBiomeWeightFunc()
-	m.RegionToCulture = m.regPlaceNTerritoriesCustom(seeds, func(o, u, v int) float64 {
+	m.RegionToCulture = m.regPlaceNTerritoriesCustom(m.RegionToCulture, seeds, func(o, u, v int) float64 {
 		c := originToCulture[o]
 
 		// Get the cost to expand to this biome.
@@ -242,7 +242,7 @@ func (m *Civ) PlaceCultureAt(r int) *Culture {
 	c.Regions = []int{r}
 	c.Stats = m.getStats(c.Regions)
 	m.Cultures = append(m.Cultures, c)
-	m.RegionToCulture[r] = r
+	// m.RegionToCulture[r] = r
 	// NOTE: This might be quite expensive, so we might want to
 	// avoid this calling here, or at least limit the regions
 	// we process to the ones that are close to the new culture.
@@ -256,6 +256,7 @@ func (m *Civ) getRegionCultureTypeFunc() func(int) CultureType {
 	getType := m.getRegionFeatureTypeFunc()
 	biomeFunc := m.getRegWhittakerModBiomeFunc()
 	_, maxElev := minMax(m.Elevation)
+	log.Println("TODO: Map whittaker to azgaar biomes")
 
 	// Return culture type based on culture center region.
 	return func(r int) CultureType {

@@ -1,5 +1,7 @@
 package genworldvoronoi
 
+import "math"
+
 type RegProperty struct {
 	ID                  int
 	Elevation           float64 // 0.0-1.0
@@ -27,17 +29,12 @@ func (m *Geo) getRegPropertyFunc() func(int) RegProperty {
 	inlandValleyFunc := m.getFitnessInlandValleys()
 	biomeFunc := m.getRegWhittakerModBiomeFunc()
 	_, maxElev := minMax(m.Elevation)
-	var oceanRegs, mountainRegs, volcanoRegs, riverRegs, faultlineRegs []int
-	stopMountain := make(map[int]bool)
+	var oceanRegs, volcanoRegs, riverRegs, faultlineRegs []int
 	stopOcean := make(map[int]bool)
 	for r := 0; r < m.SphereMesh.numRegions; r++ {
 		if m.Elevation[r] <= 0 {
 			oceanRegs = append(oceanRegs, r)
 			stopOcean[r] = true
-		}
-		if m.RegionIsMountain[r] {
-			mountainRegs = append(mountainRegs, r)
-			stopMountain[r] = true
 		}
 		if m.RegionIsVolcano[r] {
 			volcanoRegs = append(volcanoRegs, r)
@@ -49,8 +46,8 @@ func (m *Geo) getRegPropertyFunc() func(int) RegProperty {
 			faultlineRegs = append(faultlineRegs, r)
 		}
 	}
-	distOcean := m.assignDistanceField(oceanRegs, stopMountain)
-	distMountain := m.assignDistanceField(mountainRegs, stopOcean)
+	distOcean := m.assignDistanceField(oceanRegs, m.RegionIsMountain)
+	distMountain := m.assignDistanceField(m.mountain_r, stopOcean)
 	distVolcano := m.assignDistanceField(volcanoRegs, stopOcean)
 	distRiver := m.assignDistanceField(riverRegs, stopOcean)
 	distFaultline := m.assignDistanceField(faultlineRegs, stopOcean)
@@ -138,7 +135,7 @@ func (m *Geo) getRegionFeatureTypeFunc() func(int) string {
 // If no haven is found, -1 is returned.
 func (m *Geo) getRegHaven(reg int) (int, int) {
 	// get all neighbors that are below or at sea level.
-	var water []int
+	water := make([]int, 0, 8)
 	for _, nb := range m.GetRegNeighbors(reg) {
 		if m.Elevation[nb] <= 0.0 {
 			water = append(water, nb)
@@ -154,11 +151,11 @@ func (m *Geo) getRegHaven(reg int) (int, int) {
 	// get the closest water neighbor.
 	rLatLon := m.LatLon[reg]
 	closest := -1
-	var minDist float64
+	minDist := math.Inf(1)
 	for _, nb := range water {
 		nbLatLon := m.LatLon[nb]
 		dist := haversine(rLatLon[0], rLatLon[1], nbLatLon[0], nbLatLon[1])
-		if closest == -1 || dist < minDist {
+		if dist < minDist {
 			minDist = dist
 			closest = nb
 		}
@@ -191,15 +188,19 @@ const (
 // >2: region is inland
 func (m *Geo) getRegCellTypes() []int {
 	var oceanRegs, landRegs []int
+	stop_land := make(map[int]bool)
+	stop_ocean := make(map[int]bool)
 	for r, elev := range m.Elevation {
 		if elev <= 0.0 {
 			oceanRegs = append(oceanRegs, r)
+			stop_ocean[r] = true
 		} else {
 			landRegs = append(landRegs, r)
+			stop_land[r] = true
 		}
 	}
-	regDistanceOcean := m.assignDistanceField(oceanRegs, make(map[int]bool))
-	regDistanceLand := m.assignDistanceField(landRegs, make(map[int]bool))
+	regDistanceOcean := m.assignDistanceField(oceanRegs, stop_land)
+	regDistanceLand := m.assignDistanceField(landRegs, stop_ocean)
 
 	cellType := make([]int, m.SphereMesh.numRegions)
 	for i := range cellType {
@@ -213,15 +214,12 @@ func (m *Geo) getRegCellTypes() []int {
 				// If not, it is -2 (water far from coast)
 				cellType[i] = CellTypeDeepWaters
 			}
-		} else {
-			// Figure out if it has a water neighbor.
+		} else if regDistanceOcean[i] <= 1 { // Figure out if it has a water neighbor.
 			// If so, it is 1 (land near coast)
-			if regDistanceOcean[i] <= 1 {
-				cellType[i] = CellTypeCoastalLand
-			} else {
-				// If not, it is >=2 (land far from coast)
-				cellType[i] = int(regDistanceOcean[i])
-			}
+			cellType[i] = CellTypeCoastalLand
+		} else {
+			// If not, it is >=2 (land far from coast)
+			cellType[i] = int(regDistanceOcean[i])
 		}
 	}
 	return cellType

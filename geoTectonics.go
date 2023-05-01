@@ -286,18 +286,18 @@ func (m *BaseObject) propagateCompression(compression map[int]float64) []float64
 // To ensure variation, opensimplex noise is used to break up any uniformity.
 func (m *Geo) assignRegionElevation() {
 	// TODO: Use collision values to determine intensity of generated landscape features.
-	mountainRegs, coastlineRegs, oceanRegs, compressionReg := m.findCollisions()
+	m.mountain_r, m.coastline_r, m.ocean_r, m.RegionCompression = m.findCollisions()
 
 	// Sort mountains by compression.
-	sort.Slice(mountainRegs, func(i, j int) bool {
-		return compressionReg[mountainRegs[i]] > compressionReg[mountainRegs[j]]
+	sort.Slice(m.mountain_r, func(i, j int) bool {
+		return m.RegionCompression[m.mountain_r[i]] > m.RegionCompression[m.mountain_r[j]]
 	})
 
 	// Take note of all mountains.
 	// Since they are sorted by compression, we can use the first m.NumVolcanoes
 	// as volcanoes.
 	var gotVolcanoes int
-	for _, r := range mountainRegs {
+	for _, r := range m.mountain_r {
 		m.RegionIsMountain[r] = true
 		if gotVolcanoes < m.NumVolcanoes {
 			m.RegionIsVolcano[r] = true
@@ -305,33 +305,30 @@ func (m *Geo) assignRegionElevation() {
 		}
 	}
 
-	// Take note of the compression of each region.
-	m.RegionCompression = compressionReg
-
 	// Distance field generation.
 	// I do not quite know how that works, but it is based on:
 	// See: https://www.redblobgames.com/x/1728-elevation-control/
 	stopReg := make(map[int]bool)
-	for _, r := range mountainRegs {
+	for _, r := range m.mountain_r {
 		stopReg[r] = true
 	}
-	for _, r := range coastlineRegs {
+	for _, r := range m.coastline_r {
 		stopReg[r] = true
 	}
-	for _, r := range oceanRegs {
+	for _, r := range m.ocean_r {
 		stopReg[r] = true
 	}
 
 	// Calculate distance fields.
 	// Graph distance from mountains (stops at ocean regions).
-	rDistanceA := m.assignDistanceField(mountainRegs, convToMap(oceanRegs))
+	rDistanceA := m.assignDistanceField(m.mountain_r, convToMap(m.ocean_r))
 	// Graph distance from ocean (stops at coastline regions).
-	rDistanceB := m.assignDistanceField(oceanRegs, convToMap(coastlineRegs))
+	rDistanceB := m.assignDistanceField(m.ocean_r, convToMap(m.coastline_r))
 	// Graph distance from coastline (stops at all other regions).
-	rDistanceC := m.assignDistanceField(coastlineRegs, stopReg)
+	rDistanceC := m.assignDistanceField(m.coastline_r, stopReg)
 
 	// Propagate the compression values.
-	compPerReg := m.propagateCompression(compressionReg)
+	compPerReg := m.propagateCompression(m.RegionCompression)
 
 	// This code below calculates the height of a given region based on a linear
 	// interpolation of the three distance values above.
