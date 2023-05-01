@@ -36,31 +36,37 @@ func NewGeoConfig() *GeoConfig {
 
 // CivConfig is a struct that holds all configuration options for civilization generation.
 type CivConfig struct {
-	NumCultures           int // (Min) Number of generated cultures
-	NumOrganizedReligions int // (Min) Number of generated religions
-	NumEmpires            int // Number of generated territories
-	NumCities             int // Number of generated cities (regions)
-	NumCityStates         int // Number of generated city states
-	NumMiningTowns        int // Number of generated mining towns
-	NumMiningGemsTowns    int // Number of generated (gem) mining towns
-	NumQuarryTowns        int // Number of generated quarry towns
-	NumFarmingTowns       int // Number of generated farming towns
-	NumDesertOasis        int // Number of generated desert oases
+	NumCultures              int  // (Min) Number of generated cultures
+	NumOrganizedReligions    int  // (Min) Number of generated religions
+	NumEmpires               int  // Number of generated territories
+	NumCities                int  // Number of generated cities (regions)
+	NumCityStates            int  // Number of generated city states
+	NumMiningTowns           int  // Number of generated mining towns
+	NumMiningGemsTowns       int  // Number of generated (gem) mining towns
+	NumQuarryTowns           int  // Number of generated quarry towns
+	NumFarmingTowns          int  // Number of generated farming towns
+	NumTradingTowns          int  // Number of generated trading towns
+	NumDesertOasis           int  // Number of generated desert oases
+	EnableCityAging          bool // Enable city aging
+	EnableOrganizedReligions bool // Enable organized religion generation
 }
 
 // NewCivConfig returns a new config for civilization generation.
 func NewCivConfig() *CivConfig {
 	return &CivConfig{
-		NumCultures:           30,
-		NumOrganizedReligions: 20,
-		NumEmpires:            10,
-		NumCities:             150,
-		NumCityStates:         150,
-		NumMiningTowns:        60,
-		NumMiningGemsTowns:    60,
-		NumQuarryTowns:        60,
-		NumFarmingTowns:       60,
-		NumDesertOasis:        10,
+		NumCultures:              30,
+		NumOrganizedReligions:    20,
+		NumEmpires:               10,
+		NumCities:                150,
+		NumCityStates:            150,
+		NumMiningTowns:           60,
+		NumMiningGemsTowns:       60,
+		NumQuarryTowns:           60,
+		NumFarmingTowns:          60,
+		NumTradingTowns:          0,
+		NumDesertOasis:           10,
+		EnableCityAging:          true,
+		EnableOrganizedReligions: true,
 	}
 }
 

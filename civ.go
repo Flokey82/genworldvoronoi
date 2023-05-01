@@ -46,9 +46,6 @@ func NewCiv(geo *Geo, cfg *CivConfig) *Civ {
 }
 
 func (m *Civ) generateCivilization() {
-	enableCityAging := false
-	enableOrganizedReligions := false
-
 	// TODO: The generation should happen somewhat like this...
 	// 0. Calculate time of settlement per region through flood fill.
 	// This will allow us to determine the founding date of the cities and
@@ -99,9 +96,11 @@ func (m *Civ) generateCivilization() {
 	// We should probably establish the trade routes now, so we ensure
 	// that the trade towns will still be placed on the nexus points
 	// where trade routes meet.
-	// start = time.Now()
-	// m.rPlaceNCities(30, TownTypeTrading)
-	// log.Println("Done trade cities in ", time.Since(start).String())
+	if m.NumTradingTowns > 0 {
+		start = time.Now()
+		m.PlaceNCities(30, TownTypeTrading)
+		log.Println("Done trade cities in ", time.Since(start).String())
+	}
 
 	_, maxSettled := minMax64(m.Settled)
 	m.Geo.Calendar.SetYear(maxSettled)
@@ -125,14 +124,14 @@ func (m *Civ) generateCivilization() {
 	// Age cities as they are founded, like good cheese.
 	// TODO: We should also introduce some kind of "aging" of city states or empires
 	// to generate some history.
-	if enableCityAging {
+	if m.EnableCityAging {
 		start = time.Now()
 		m.ageCities()
 		log.Println("Done aging cities in ", time.Since(start).String())
 	}
 
 	// Organized religions.
-	if enableOrganizedReligions {
+	if m.EnableOrganizedReligions {
 		m.PlaceNOrganizedReligions(m.NumOrganizedReligions)
 		for _, r := range m.Religions {
 			log.Println(r.String())
