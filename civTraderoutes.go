@@ -44,13 +44,7 @@ func (m *Civ) getTradeRoutes() ([][]int, [][]int) {
 	// wasVisited returns how often the path segment between the two given regions has been used.
 	var wasVisited func(i, j int) int
 	wasVisited = func(i, j int) int {
-		var seg [2]int
-		if i < j {
-			seg = [2]int{i, j}
-		} else {
-			seg = [2]int{j, i}
-		}
-		return visitedPathSeg[seg]
+		return visitedPathSeg[getSegment(i, j)]
 	}
 
 	// getTile returns the TradeTile for the given index from the node cache.
@@ -98,8 +92,10 @@ func (m *Civ) getTradeRoutes() ([][]int, [][]int) {
 		sort.Slice(sortCityIdx, func(j, k int) bool {
 			return m.GetDistance(start, cities[sortCityIdx[j]].ID) < m.GetDistance(start, cities[sortCityIdx[k]].ID)
 		})
-		for nidx, j := range sortCityIdx {
-			if nidx >= connectNClosest {
+
+		var connections int
+		for _, j := range sortCityIdx {
+			if connections >= connectNClosest {
 				break
 			}
 			// We don't want to link a city to itself and we try to avoid double
@@ -109,18 +105,14 @@ func (m *Civ) getTradeRoutes() ([][]int, [][]int) {
 				continue
 			}
 
-			var curEdge [2]int
 			end := cities[j].ID
-			if start < end {
-				curEdge = [2]int{start, end}
-			} else {
-				curEdge = [2]int{end, start}
-			}
+			curEdge := getSegment(start, end)
 			if visited[curEdge] ||
 				m.RegionToEmpire[start] != m.RegionToEmpire[end] ||
 				m.Landmasses[start] != m.Landmasses[end] { //  || math.Abs(float64(i-j)) > float64(5)
 				continue
 			}
+			connections++
 
 			// Make sure we note that we have visited this city pair.
 			visited[curEdge] = true
@@ -137,13 +129,7 @@ func (m *Civ) getTradeRoutes() ([][]int, [][]int) {
 				nti.SetUsed()
 				nIdx := nti.index
 				if idx > 0 {
-					var seg [2]int
-					if nIdx < newPath[idx-1] {
-						seg = [2]int{nIdx, newPath[idx-1]}
-					} else {
-						seg = [2]int{newPath[idx-1], nIdx}
-					}
-					visitedPathSeg[seg]++
+					visitedPathSeg[getSegment(newPath[idx-1], nIdx)]++
 				}
 
 				// Check if the cities are already in our list for
@@ -257,6 +243,13 @@ func (n *TradeTile) PathEstimatedCost(to goastar.Pather) float64 {
 	return n.r.GetDistance(n.index, to.(*TradeTile).index)
 }
 
+func getSegment(a, b int) [2]int {
+	if a < b {
+		return [2]int{a, b}
+	}
+	return [2]int{b, a}
+}
+
 func (m *Civ) getTradeRoutesInLatLonBB(minLat, minLon, maxLat, maxLon float64) [][]int {
 	// Convert the trade route paths to segments.
 	tr := m.tradeRoutes
@@ -264,16 +257,7 @@ func (m *Civ) getTradeRoutesInLatLonBB(minLat, minLon, maxLat, maxLon float64) [
 	seen := make(map[[2]int]bool)
 	for _, path := range tr {
 		for i := 0; i < len(path)-1; i++ {
-			a := path[i]
-			b := path[i+1]
-			var seg [2]int
-			if a > b {
-				seg[0] = b
-				seg[1] = a
-			} else {
-				seg[0] = a
-				seg[1] = b
-			}
+			seg := getSegment(path[i], path[i+1])
 			if seen[seg] {
 				continue
 			}

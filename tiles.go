@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"log"
 	"math"
+	"sort"
 
 	"github.com/Flokey82/genbiome"
 	"github.com/Flokey82/go_gens/gameconstants"
@@ -911,9 +912,34 @@ func (m *Map) GetGeoJSONCities(la1, lo1, la2, lo2 float64, zoom int) ([]byte, er
 
 	regPropertyFunc := m.getRegPropertyFunc()
 
+	// Depending on the zoom level we want to show more or less cities.
+	sortedCities := make([]*City, len(m.Cities))
+	copy(sortedCities, m.Cities)
+
+	// Sort the cities by population (descending).
+	sort.Slice(sortedCities, func(i, j int) bool {
+		return sortedCities[i].Population > sortedCities[j].Population
+	})
+
+	showNumCities := 0
+
+	// At zoom level 9 we want to show all cities.
+	if zoom >= 9 {
+		showNumCities = len(sortedCities)
+	} else {
+		// Show per tile and zoom level:
+		showNumCities = 10 * (1 << uint(zoom))
+	}
+
+	log.Println("Showing", showNumCities, "cities at zoom level", zoom)
+
 	// Loop through all the cities and check if they are within the tile.
 	// TODO: Just show the largest cities for lower zoom levels.
-	for _, c := range m.Cities {
+	for idx, c := range sortedCities {
+		if idx >= showNumCities {
+			break
+		}
+
 		cLat := m.LatLon[c.ID][0]
 		cLon := m.LatLon[c.ID][1]
 
