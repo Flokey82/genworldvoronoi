@@ -25,7 +25,8 @@ type Civ struct {
 	Religions         []*Religion  // (cultural) Religion seed points / regions
 	Settled           []int64      // (cultural) Time of settlement per region
 	// SettledBySpecies []int // (cultural) Which species settled the region first
-	NameGen *NameGenerators
+	NameGen     *NameGenerators
+	tradeRoutes [][]int
 }
 
 func NewCiv(geo *Geo, cfg *CivConfig) *Civ {
@@ -98,7 +99,7 @@ func (m *Civ) generateCivilization() {
 	// where trade routes meet.
 	if m.NumTradingTowns > 0 {
 		start = time.Now()
-		m.PlaceNCities(30, TownTypeTrading)
+		m.PlaceNCities(m.NumTradingTowns, TownTypeTrading)
 		log.Println("Done trade cities in ", time.Since(start).String())
 	}
 

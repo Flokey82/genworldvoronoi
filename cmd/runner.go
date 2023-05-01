@@ -33,7 +33,7 @@ func main() {
 	sp.GetEmpires()
 	exportPNG := false
 	exportOBJ := false
-	exportSVG := false
+	exportSVG := true
 	exportWebp := false
 	if exportPNG {
 		sp.ExportPng("test.png")

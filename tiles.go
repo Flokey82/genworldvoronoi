@@ -19,7 +19,7 @@ import (
 )
 
 // GetTile returns the image of the tile at the given coordinates and zoom level.
-func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawLakes, drawShadows, aspectShading bool) image.Image {
+func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawTradeRoutes, drawLakes, drawShadows, aspectShading bool) image.Image {
 	// NOTE:
 	//
 	// For now we don't use the LOD logic until we have figured out how to handle triangles.
@@ -714,6 +714,52 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawL
 			gc.Close()
 		}
 	}
+
+	if drawTradeRoutes {
+		// Get all the trade routes.
+		traderoutes := m.getTradeRoutesInLatLonBB(la1Margin, lo1Margin, la2Margin, lo2Margin)
+
+		// Set our stroke color to a nice traderoute red.
+		gc.SetStrokeColor(color.NRGBA{255, 0, 0, 255})
+
+		for _, traderoute := range traderoutes {
+			// Set the initial line width.
+			gc.SetLineWidth(1)
+			gc.BeginPath()
+			for i, p := range traderoute {
+				rLat, rLon := m.LatLon[p][0], m.LatLon[p][1]
+				x, y := latLonToPixels(rLat, rLon, zoom)
+				if i == 0 {
+					// Move to the first point.
+					gc.MoveTo(x-dx, y-dy2)
+				} else {
+					// Now compare the longitude to the previous longitude.
+					// If we have crossed the +- 180 degree boundary, we need to
+					// draw to a fake point at the same latitude but on the same side of the world.
+					if diff := rLon - m.LatLon[traderoute[i-1]][1]; math.Abs(diff) > 110 {
+						rLonFake := rLon - 360
+						if diff < 0 {
+							rLonFake = rLon + 360
+						}
+						// Draw to the fake point.
+						x, y := latLonToPixels(rLat, rLonFake, zoom)
+						gc.LineTo(x-dx, y-dy2)
+						gc.Stroke()
+
+						// Move to the real point and start a new path.
+						x, y = latLonToPixels(rLat, rLon, zoom)
+						gc.BeginPath()
+						gc.MoveTo(x-dx, y-dy2)
+					}
+					// Draw to the next point.
+					gc.LineTo(x-dx, y-dy2)
+				}
+			}
+			gc.Stroke()
+			gc.Close()
+		}
+	}
+
 	return dest
 }
 

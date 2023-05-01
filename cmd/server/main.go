@@ -160,6 +160,12 @@ func tileHandler(res http.ResponseWriter, req *http.Request) {
 		rivers = "false"
 	}
 
+	// get the url parameter 'trade'.
+	trade := req.URL.Query().Get("trade")
+	if trade == "" {
+		trade = "false"
+	}
+
 	// get the url parameter 'lakes'.
 	lakes := req.URL.Query().Get("lakes")
 	if lakes == "" {
@@ -194,7 +200,7 @@ func tileHandler(res http.ResponseWriter, req *http.Request) {
 	}
 
 	// Get the tile image.
-	img := worldmap.GetTile(tileX, tileY, tileZ, displayMode, vectorMode, rivers == "true", lakes == "true", shadows == "true", aspectshadows == "true")
+	img := worldmap.GetTile(tileX, tileY, tileZ, displayMode, vectorMode, rivers == "true", trade == "true", lakes == "true", shadows == "true", aspectshadows == "true")
 	writeImage(res, &img)
 }
 

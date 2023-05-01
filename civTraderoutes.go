@@ -5,7 +5,7 @@ import (
 	"math"
 	"sort"
 
-	"github.com/chsc/astar"
+	goastar "github.com/beefsack/go-astar"
 )
 
 func (m *Civ) getTradeRoutes() ([][]int, [][]int) {
@@ -19,7 +19,7 @@ func (m *Civ) getTradeRoutes() ([][]int, [][]int) {
 	// will experience growth through trade passing through, which is something
 	// to consider later.
 	log.Println("Generating trade routes...")
-	nodeCache := make(map[int]*TradeNode)
+	nodeCache := make(map[int]*TradeTile)
 	steepness := m.GetSteepness()
 
 	cities := m.Cities
@@ -33,8 +33,29 @@ func (m *Civ) getTradeRoutes() ([][]int, [][]int) {
 	// linking will store which cities are linked through a trade route crossing
 	// the given region.
 	linking := make([][]int, m.SphereMesh.numRegions)
-	var getNode func(i int) *TradeNode
-	getNode = func(i int) *TradeNode {
+
+	// visited will store which city pairs have already been visited.
+	visited := make(map[[2]int]bool)
+
+	// visitedPathSeg will store how often path segments (neighboring regions connected by a trade route)
+	// have been used
+	visitedPathSeg := make(map[[2]int]int)
+
+	// wasVisited returns how often the path segment between the two given regions has been used.
+	var wasVisited func(i, j int) int
+	wasVisited = func(i, j int) int {
+		var seg [2]int
+		if i < j {
+			seg = [2]int{i, j}
+		} else {
+			seg = [2]int{j, i}
+		}
+		return visitedPathSeg[seg]
+	}
+
+	// getTile returns the TradeTile for the given index from the node cache.
+	var getTile func(i int) *TradeTile
+	getTile = func(i int) *TradeTile {
 		// Make sure we re-use pre-existing nodes.
 		n, ok := nodeCache[i]
 		if ok {
@@ -43,19 +64,18 @@ func (m *Civ) getTradeRoutes() ([][]int, [][]int) {
 
 		// If we have no cached node for this index,
 		// create a new one.
-		n = &TradeNode{
+		n = &TradeTile{
 			steepness:    steepness,
 			r:            m,
 			index:        i,
-			getNode:      getNode,
+			getTile:      getTile,
 			isCity:       isCity,
+			wasVisited:   wasVisited,
 			maxElevation: maxElevation,
 		}
 		nodeCache[i] = n
 		return n
 	}
-	pather := astar.New(estimateFunction)
-	visited := make(map[[2]int]bool)
 
 	// Paths contains a list of all trade routes represented through
 	// a list of connected regions.
@@ -69,6 +89,8 @@ func (m *Civ) getTradeRoutes() ([][]int, [][]int) {
 	for i := range sortCityIdx {
 		sortCityIdx[i] = i
 	}
+
+	connectNClosest := 5
 	for i, startC := range cities {
 		start := startC.ID
 		// Sort by distance to start as we try to connect the closest towns first.
@@ -76,26 +98,53 @@ func (m *Civ) getTradeRoutes() ([][]int, [][]int) {
 		sort.Slice(sortCityIdx, func(j, k int) bool {
 			return m.GetDistance(start, cities[sortCityIdx[j]].ID) < m.GetDistance(start, cities[sortCityIdx[k]].ID)
 		})
-		for _, j := range sortCityIdx {
-			end := cities[j].ID
+		for nidx, j := range sortCityIdx {
+			if nidx >= connectNClosest {
+				break
+			}
 			// We don't want to link a city to itself and we try to avoid double
 			// links (a->b and b->a) as well as we try to only connect towns within
 			// the same territory.
-			if i == j || visited[[2]int{start, end}] || visited[[2]int{end, start}] || m.RegionToEmpire[start] != m.RegionToEmpire[end] { //  || math.Abs(float64(i-j)) > float64(5)
+			if i == j {
 				continue
 			}
+
+			var curEdge [2]int
+			end := cities[j].ID
+			if start < end {
+				curEdge = [2]int{start, end}
+			} else {
+				curEdge = [2]int{end, start}
+			}
+			if visited[curEdge] ||
+				m.RegionToEmpire[start] != m.RegionToEmpire[end] ||
+				m.Landmasses[start] != m.Landmasses[end] { //  || math.Abs(float64(i-j)) > float64(5)
+				continue
+			}
+
 			// Make sure we note that we have visited this city pair.
-			visited[[2]int{start, end}] = true
+			visited[curEdge] = true
 
 			// Attempt to find a path between the two cities.
-			if !pather.Find(getNode(start), getNode(end)) {
+			path, _, found := goastar.Path(getTile(start), getTile(end))
+			if !found {
 				continue
 			}
 			var newPath []int
-			for _, n := range pather.Path() {
+			for idx, n := range path {
 				// Mark the node as used.
-				n.(*TradeNode).SetUsed()
-				nIdx := n.(*TradeNode).index
+				nti := n.(*TradeTile)
+				nti.SetUsed()
+				nIdx := nti.index
+				if idx > 0 {
+					var seg [2]int
+					if nIdx < newPath[idx-1] {
+						seg = [2]int{nIdx, newPath[idx-1]}
+					} else {
+						seg = [2]int{newPath[idx-1], nIdx}
+					}
+					visitedPathSeg[seg]++
+				}
 
 				// Check if the cities are already in our list for
 				// the given region (aka "node index").
@@ -111,107 +160,144 @@ func (m *Civ) getTradeRoutes() ([][]int, [][]int) {
 			}
 			paths = append(paths, newPath)
 		}
+		log.Println("Done connecting city", i, "of", len(cities))
 	}
 
 	log.Println("Done generating trade routes.")
 	return paths, linking
 }
 
-type TradeNode struct {
-	r            *Civ
-	getNode      func(int) *TradeNode
-	index        int          // node index / region number
-	used         int          // number of times this node was used for a trade route
-	steepness    []float64    // cached steepness of all regiones
-	isCity       map[int]bool // quick lookup if an index is a city
+type TradeTile struct {
+	r            *Civ                   // Reference to the Civ object
+	getTile      func(i int) *TradeTile // Fetch tiles from cache
+	index        int                    // region index
+	used         int                    // number of times this node was used for a trade route
+	steepness    []float64              // cached steepness of all regiones
+	wasVisited   func(i, j int) int     // quick lookup if a segment was already visited
+	isCity       map[int]bool           // quick lookup if an index is a city
 	maxElevation float64
 }
 
-func (n *TradeNode) SetUsed() {
+func (n *TradeTile) SetUsed() {
 	n.used++
 }
 
-func (n *TradeNode) NumNeighbours() int {
-	return len(n.r.GetRegNeighbors(n.index))
+// PathNeighbors returns the direct neighboring nodes of this node which
+// can be pathed to.
+func (n *TradeTile) PathNeighbors() []goastar.Pather {
+	nbs := make([]goastar.Pather, 0, 6)
+	for _, i := range n.r.GetRegNeighbors(n.index) {
+		nbs = append(nbs, n.getTile(i))
+	}
+	return nbs
 }
 
-func (n *TradeNode) Neighbour(i int) astar.Node {
-	// TODO: Fix this... this is highly inefficient.
-	return n.getNode(n.r.GetRegNeighbors(n.index)[i])
-}
+// PathNeighborCost calculates the exact movement cost to neighbor nodes.
+func (n *TradeTile) PathNeighborCost(to goastar.Pather) float64 {
+	tot := to.(*TradeTile)
 
-func (n *TradeNode) Cost(i int) float32 {
 	// Discourage underwater paths.
-	if n.r.Elevation[n.index] <= 0 {
-		return 999.00
+	if n.r.Elevation[n.index] <= 0 || n.r.Elevation[tot.index] <= 0 {
+		return math.Inf(1)
 	}
+
 	// TODO: Fix this... this is highly inefficient.
-	nIdx := n.r.GetRegNeighbors(n.index)[i]
-	if n.r.Elevation[nIdx] <= 0 {
-		return 999.00
-	}
+	nIdx := tot.index
 
-	cost := float32(1.0)
-
-	// Altitude changes come with a cost.
-	cost *= 1.0 - float32(math.Abs(n.r.Elevation[nIdx]-n.r.Elevation[n.index])/n.maxElevation)
-	//	if n.used > 0 {
-	//		cost *= 0.75
-	//	} else {
-	//		cost *= 2
-	//	}
+	// Altitude changes come with a cost (downhill is cheaper than uphill)
+	cost := 1.0 + (n.r.Elevation[nIdx]-n.r.Elevation[n.index])/n.maxElevation
 
 	// The steeper the terrain, the more expensive.
-	cost *= 1.0 + float32(n.steepness[nIdx]*n.steepness[nIdx])
+	cost *= 1.0 + n.steepness[nIdx]*n.steepness[nIdx]
+
+	// Highly incentivize re-using used segments
+	if nvis := n.wasVisited(n.index, nIdx); nvis > 0 {
+		cost /= 8.0 * float64(nvis) * float64(nvis)
+	} else {
+		cost *= 8.0
+	}
 
 	// Heavily incentivize re-using existing roads.
-	if nUsed := n.Neighbour(i).(*TradeNode).used; nUsed > 0 {
-		cost *= 0.25
+	if nUsed := tot.used; nUsed > 0 {
+		cost /= 8.0 * float64(nUsed) * float64(nUsed)
 	} else {
-		cost *= 4
+		cost *= 8.0
 	}
 
 	// Bonus if the neighbor is a city.
 	if n.isCity[nIdx] {
-		cost *= 0.25
+		cost /= 4.0
 	}
 
 	// Bonus if along coast.
 	for _, nbnb := range n.r.GetRegNeighbors(nIdx) {
 		if n.r.Elevation[nbnb] <= 0 {
-			cost *= 0.65
+			cost /= 2.0
 			break
 		}
 	}
 
-	// Cost of crossing rivers.
-	if n.r.isRegRiver(n.index) != n.r.isRegRiver(nIdx) {
-		cost *= 1.4
-	}
-
-	// Bonus if along rivers.
 	if n.r.isRegRiver(n.index) && n.r.isRegRiver(nIdx) {
-		cost *= 0.8
+		cost *= 0.8 // Bonus if along rivers.
+	} else if n.r.isRegRiver(n.index) != n.r.isRegRiver(nIdx) {
+		cost *= 1.4 // Cost of crossing rivers.
 	}
 
 	// Penalty for crossing into a new territory
 	if n.r.RegionToEmpire[n.index] != n.r.RegionToEmpire[nIdx] {
-		cost += 1.2
+		cost *= 2.0
 	}
 
-	/*
-		if n.r.rivers[n.index] < 0 && n.r.rivers[nIdx] >= 0 {
-			cost *= 1.4
-		}
-		if n.r.rivers[n.index] >= 0 && n.r.rivers[n.index] >= 0 {
-			cost *= 0.8
-		}
-		if n.r.terr[n.index] != n.r.terr[nIdx] {
-			cost += 1.2
-		}*/
 	return cost
 }
 
-func estimateFunction(start, end astar.Node) float32 {
-	return float32(start.(*TradeNode).r.GetDistance(start.(*TradeNode).index, end.(*TradeNode).index))
+// PathEstimatedCost is a heuristic method for estimating movement costs
+// between non-adjacent nodes.
+func (n *TradeTile) PathEstimatedCost(to goastar.Pather) float64 {
+	return n.r.GetDistance(n.index, to.(*TradeTile).index)
+}
+
+func (m *Civ) getTradeRoutesInLatLonBB(minLat, minLon, maxLat, maxLon float64) [][]int {
+	// Convert the trade route paths to segments.
+	tr := m.tradeRoutes
+	var links [][2]int
+	seen := make(map[[2]int]bool)
+	for _, path := range tr {
+		for i := 0; i < len(path)-1; i++ {
+			a := path[i]
+			b := path[i+1]
+			var seg [2]int
+			if a > b {
+				seg[0] = b
+				seg[1] = a
+			} else {
+				seg[0] = a
+				seg[1] = b
+			}
+			if seen[seg] {
+				continue
+			}
+			seen[seg] = true
+			links = append(links, seg)
+		}
+	}
+
+	filter := false
+
+	// Find the segments that are within the bounding box.
+	var filtered [][2]int
+	for _, link := range links {
+		if filter {
+			lat1, lon1 := m.LatLon[link[0]][0], m.LatLon[link[0]][1]
+			lat2, lon2 := m.LatLon[link[1]][0], m.LatLon[link[1]][1]
+
+			// If both points are outside the bounding box, skip the segment.
+			if (lat1 < minLat || lat1 > maxLat || lon1 < minLon || lon1 > maxLon) &&
+				(lat2 < minLat || lat2 > maxLat || lon2 < minLon || lon2 > maxLon) {
+				continue
+			}
+		}
+		filtered = append(filtered, link)
+	}
+	return mergeIndexSegments(filtered)
 }

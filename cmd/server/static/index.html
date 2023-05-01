@@ -79,6 +79,7 @@
       'Currents',
     ];
     var drawRivers = false;
+    var drawTradeRoutes = false;
     var drawLakes = false;
     var drawShadows = false;
     var drawAspectShadows = false;
@@ -100,7 +101,7 @@
 
     new L.Hash(map);
 
-    var tl = L.tileLayer('tiles/{z}/{x}/{y}?d={d}&vectors={vectors}&rivers={rivers}&lakes={lakes}&shadows={shadows}&aspectshadows={aspectshadows}', {
+    var tl = L.tileLayer('tiles/{z}/{x}/{y}?d={d}&vectors={vectors}&rivers={rivers}&trade={trade}&lakes={lakes}&shadows={shadows}&aspectshadows={aspectshadows}', {
       attribution: '&copy;',
       maxZoom: 20,
       minZoom: 1,
@@ -113,6 +114,9 @@
       },
       rivers: function () {
         return drawRivers;
+      },
+      trade: function () {
+        return drawTradeRoutes;
       },
       lakes: function () {
         return drawLakes;
@@ -287,6 +291,22 @@
       tl.redraw();
     });
     map.addControl(new riverControl());
+
+    // Add our custom control for toggling trade routes.
+    var tradeControl = newCustomControl('T:' + drawTradeRoutes, 'Traderoutes', function (link) {
+      // Toggle trade display.
+      drawTradeRoutes = !drawTradeRoutes;
+      link.innerText = 'T:' + drawTradeRoutes;
+
+      // Make bold if enabled.
+      if (drawTradeRoutes) {
+        link.style.fontWeight = 'bold';
+      } else {
+        link.style.fontWeight = 'normal';
+      }
+      tl.redraw();
+    });
+    map.addControl(new tradeControl());
 
     // Add our custom control for toggling lakes.
     /*

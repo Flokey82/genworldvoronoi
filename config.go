@@ -63,7 +63,7 @@ func NewCivConfig() *CivConfig {
 		NumMiningGemsTowns:       60,
 		NumQuarryTowns:           60,
 		NumFarmingTowns:          60,
-		NumTradingTowns:          0,
+		NumTradingTowns:          60,
 		NumDesertOasis:           10,
 		EnableCityAging:          true,
 		EnableOrganizedReligions: true,

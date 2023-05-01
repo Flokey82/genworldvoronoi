@@ -43,7 +43,7 @@ func (m *Map) ExportSVG(path string) error {
 	drawLatitudeDots := false
 	drawCityscore := false
 	drawRegionTerrain := true
-	drawTradeRoutes := false
+	drawTradeRoutes := true
 	drawResources := true
 	drawMountains := false
 	drawVolcanoes := false
