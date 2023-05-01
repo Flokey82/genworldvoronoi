@@ -15,6 +15,7 @@ This thing needs a use, and I think the major drawback right now is the time tha
 
 * Generation speed
   * Use concurrency where sensible
+  * Introduce a cache for fitness functions
 * Export / import of generated data
   * Separate generation steps into
     * Geology, Climate
