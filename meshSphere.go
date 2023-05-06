@@ -12,31 +12,34 @@ import (
 // as a flat array of lat, lon coordinates.
 func generateFibonacciSphere(seed int64, numPoints int, jitter float64) []float64 {
 	rnd := rand.New(rand.NewSource(seed))
-	var latLon []float64
-	randomLat := make(map[int]float64)
-	randomLon := make(map[int]float64)
 
 	// Second algorithm from http://web.archive.org/web/20120421191837/http://www.cgafaq.info/wiki/Evenly_distributed_points_on_sphere
 	s := 3.6 / math.Sqrt(float64(numPoints))
 	dlong := math.Pi * (3 - math.Sqrt(5)) // ~2.39996323
 	dz := 2.0 / float64(numPoints)
 
-	for k, long, z := 0, 0.0, 1-(dz/2); k != numPoints; k++ {
+	var latLon []float64
+	for k := 0; k < numPoints; k++ {
+		// Calculate latitude as z value from -1 to 1.
+		z := 1 - (dz / 2) - float64(k)*dz
+
+		// Calculate longitude in rad.
+		long := float64(k) * dlong
+
+		// Calculate the radius at the given z.
 		r := math.Sqrt(1 - z*z)
+
+		// Calculate latitude and longitude in degrees.
 		latDeg := math.Asin(z) * 180 / math.Pi
 		lonDeg := long * 180 / math.Pi
-		if _, ok := randomLat[k]; !ok {
-			randomLat[k] = rnd.Float64() - rnd.Float64()
-		}
-		if _, ok := randomLon[k]; !ok {
-			randomLon[k] = rnd.Float64() - rnd.Float64()
+
+		// Apply jitter if any is set.
+		if jitter > 0 {
+			latDeg += jitter * (rnd.Float64() - rnd.Float64()) * (latDeg - math.Asin(math.Max(-1, z-dz*2*math.Pi*r/s))*180/math.Pi)
+			lonDeg += jitter * (rnd.Float64() - rnd.Float64()) * (s / r * 180 / math.Pi)
 		}
 
-		latDeg += jitter * randomLat[k] * (latDeg - math.Asin(math.Max(-1, z-dz*2*math.Pi*r/s))*180/math.Pi)
-		lonDeg += jitter * randomLon[k] * (s / r * 180 / math.Pi)
 		latLon = append(latLon, latDeg, math.Mod(lonDeg, 360.0))
-		long += dlong
-		z -= dz
 	}
 	return latLon
 }
@@ -164,8 +167,8 @@ func newSphereMesh(latLon [][2]float64, xyz []float64, addSouthPole bool) (*Sphe
 	}
 
 	// Close the hole at the south pole if requested.
+	// TODO: rotate an existing point into this spot instead of creating one.
 	if addSouthPole {
-		// TODO: rotate an existing point into this spot instead of creating one.
 		xyz = append(xyz, 0, 0, 1)
 		latLon = append(latLon, [2]float64{-90.0, 45.0})
 		tri = addSouthPoleToMesh((len(xyz)/3)-1, tri)

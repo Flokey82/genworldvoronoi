@@ -73,7 +73,10 @@ func (m *Civ) tickCityDays(c *City, gDisFunc func(int) GeoDisasterChance, cf fun
 
 		// Move 10% of the population or 1.2 times the excess population,
 		// whichever is larger.
-		excessPopulation = utils.Max(excessPopulation*12/10, c.Population/10)
+		excessPopulation = int(math.Max(
+			float64(excessPopulation)*m.MigrationOverpopulationExcessPopulationFactor,
+			float64(c.Population)*m.MigrationOverpopulationMinPopulationFactor,
+		))
 
 		// Make sure we don't move more than the entire population.
 		excessPopulation = utils.Min(excessPopulation, c.Population)
@@ -225,10 +228,9 @@ func (m *Civ) relocateFromCity(c *City, population int) {
 	// The square root will work as a somewhat sensible approximation of distance.
 	distRegion := math.Sqrt(4 * math.Pi / float64(m.SphereMesh.numRegions))
 
-	// Per distRegion, the chance of death is 2%.
-	const chanceDeath = 0.02
+	// Per distRegion traversed, there is a defined chance of death.
 	calcChanceDeath := func(dist float64) float64 {
-		return 1 - math.Pow(1-chanceDeath, dist/distRegion)
+		return 1 - math.Pow(1-m.MigrationFatalityChance, dist/distRegion)
 	}
 
 	// Get the existing cities as potential destinations.
@@ -239,11 +241,9 @@ func (m *Civ) relocateFromCity(c *City, population int) {
 		return m.GetDistance(c.ID, cities[i].ID) < m.GetDistance(c.ID, cities[j].ID)
 	})
 
-	// Check if any of the n closest cities have enough space.
-	numClosestCities := 10
-
 	// The closest city is the city itself, so skip it.
-	for _, city := range cities[1:utils.Min(len(cities), numClosestCities+1)] {
+	// Check if any of the n closest cities have enough space.
+	for _, city := range cities[1:utils.Min(len(cities), m.MigrationToNClosestCities+1)] {
 		maxPop := city.MaxPopulationLimit()
 		popCapacity := maxPop - city.Population
 
@@ -313,7 +313,6 @@ func (m *Civ) relocateFromCity(c *City, population int) {
 	// Find the best suitable neighbor region up to a certain depth.
 	bestReg := -1    // most suitable region so far
 	bestScore := 0.0 // attractiveness of the most suitable region so far
-	maxDepth := 10   // maximum depth to traverse
 
 	// Keep track of the regions that we have already seen.
 	seenRegions := make(map[int]bool)
@@ -322,7 +321,7 @@ func (m *Civ) relocateFromCity(c *City, population int) {
 	out_r := make([]int, 0, 8)
 	var traverseNeighbors func(out_r []int, id int, depth int)
 	traverseNeighbors = func(out_r []int, id int, depth int) {
-		if depth >= maxDepth {
+		if depth >= m.MigrationToNewSettlementWithinNRegions { // maximum depth to traverse
 			return
 		}
 		// Instantiate new re-usable slices for the sequential recursive call in the children.
@@ -465,7 +464,7 @@ func (m *Civ) placeCityWithScore(cType TownType, cityScore []float64) *City {
 	}
 
 	// Find the best location based on the fitness function.
-	var newcity int
+	newcity := -1
 	lastMax := math.Inf(-1)
 	for i, val := range cityScore {
 		if val > lastMax && !occupied[i] {

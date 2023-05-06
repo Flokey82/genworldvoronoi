@@ -71,10 +71,19 @@ func (m *Civ) placeNCultures(n int) {
 		return cultureSeeds
 	}
 
-	// Place n cities of the given type.
+	// Get the stop regions, i.e. regions that we don't want to place cultures in.
+	stopRegions := make(map[int]bool)
+
+	// Place n cultures of any type.
+	regDistanceC := m.assignDistanceField(distSeedFunc(), stopRegions)
 	for i := 0; i < n; i++ {
-		c := m.PlaceCulture(regCultureFunc, scoreFunc, distSeedFunc)
+		// We use the city score since it identifies regions that are well suited for
+		// settlement or general survival.
+		c := m.placeCultureWithScore(regCultureFunc, m.CalcCityScoreWithDistanceField(scoreFunc, regDistanceC))
 		log.Printf("placing culture %d: %s", i, c.Name)
+
+		// Update the distance field to ensure we evenly distribute the cultures.
+		regDistanceC = m.UpdateDistanceField(regDistanceC, distSeedFunc(), stopRegions)
 	}
 }
 
@@ -221,10 +230,15 @@ func (m *Civ) newCulture(r int, cultureType CultureType) *Culture {
 
 // PlaceCulture places another culture on the map at the region with the highest fitness score.
 func (m *Civ) PlaceCulture(regCultureFunc func(int) CultureType, scoreFunc func(int) float64, distSeedFunc func() []int) *Culture {
+	return m.placeCultureWithScore(regCultureFunc, m.CalcCityScore(scoreFunc, distSeedFunc))
+}
+
+// placeCultureWithScore places a culture at the given region using the computed scores.
+func (m *Civ) placeCultureWithScore(regCultureFunc func(int) CultureType, scores []float64) *Culture {
 	// Score all regions, pick highest score.
 	var newculture int
 	lastMax := math.Inf(-1)
-	for i, val := range m.CalcCityScore(scoreFunc, distSeedFunc) {
+	for i, val := range scores {
 		if val > lastMax {
 			newculture = i
 			lastMax = val
