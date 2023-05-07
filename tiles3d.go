@@ -6,7 +6,7 @@ import (
 	"log"
 	"math"
 
-	"github.com/Flokey82/go_gens/geoquad"
+	"github.com/Flokey82/geoquad"
 )
 
 func (m *Map) GetHeightMapTile(x, y, zoom int) []byte {

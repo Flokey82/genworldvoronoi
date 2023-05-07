@@ -4,7 +4,7 @@ import (
 	"math"
 	"math/rand"
 
-	"github.com/Flokey82/go_gens/geoquad"
+	"github.com/Flokey82/geoquad"
 	"github.com/fogleman/delaunay"
 )
 

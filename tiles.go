@@ -9,8 +9,8 @@ import (
 	"sort"
 
 	"github.com/Flokey82/genbiome"
+	"github.com/Flokey82/geoquad"
 	"github.com/Flokey82/go_gens/gameconstants"
-	"github.com/Flokey82/go_gens/geoquad"
 	"github.com/Flokey82/go_gens/vectors"
 	"github.com/davvo/mercator"
 	"github.com/llgcode/draw2d/draw2dimg"
