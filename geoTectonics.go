@@ -375,6 +375,62 @@ func (m *Geo) assignRegionElevation() {
 			// f *= math.Abs(f)
 			m.Elevation[r] += f
 		}
-		m.Elevation[r] += m.noise.Eval3(r_xyz[3*r], r_xyz[3*r+1], r_xyz[3*r+2])*2 - 1 // Noise from -1.0 to 1.0
+	}
+
+	/*
+		// Add a cosine based on the distance to the closest mountain.
+		// This is to simulate the effect of the mountain ridges.
+		// NOTE: This looks very unnatural. :(
+		for r := 0; r < m.SphereMesh.numRegions; r++ {
+			if m.Elevation[r] < 0 {
+				continue
+			}
+			// Get the distance to the closest mountain.
+			minDist := math.Inf(1)
+			for _, r2 := range m.mountain_r {
+				dist := m.GetDistance(r, r2)
+				if dist < minDist {
+					minDist = dist
+				}
+			}
+
+			// Add a cosine based on the distance to the closest mountain.
+			v := (math.Cos(minDist*math.Pi*128) + 1) / 2
+			randAmount := m.noise.Eval3(r_xyz[3*r], r_xyz[3*r+1], r_xyz[3*r+2])
+			m.Elevation[r] *= 0.5 + (0.5 * (1 - randAmount)) + 0.5*v*v*randAmount
+		}
+	*/
+
+	// Apply noise to the elevation values.
+	if m.GeoConfig.MultiplyNoise {
+		for r := 0; r < m.SphereMesh.numRegions; r++ {
+			m.Elevation[r] *= m.noise.Eval3(r_xyz[3*r], r_xyz[3*r+1], r_xyz[3*r+2])
+		}
+	} else {
+		for r := 0; r < m.SphereMesh.numRegions; r++ {
+			m.Elevation[r] += m.noise.Eval3(r_xyz[3*r], r_xyz[3*r+1], r_xyz[3*r+2])*2 - 1 // Noise from -1.0 to 1.0
+		}
+	}
+
+	// Normalize the elevation values to the range -1.0 - 1.0
+	// TODO: Protect against division by zero.
+	if m.GeoConfig.NormalizeElevation {
+		minElevation, maxElevation := minMax(m.Elevation)
+		for r := 0; r < m.SphereMesh.numRegions; r++ {
+			if m.Elevation[r] < 0 {
+				m.Elevation[r] /= math.Abs(minElevation)
+			} else {
+				m.Elevation[r] /= maxElevation
+			}
+		}
+	}
+
+	// Apply a square falloff to the elevation values above sea level.
+	if m.GeoConfig.TectonicFalloff {
+		for r := range m.Elevation {
+			if m.Elevation[r] > 0 {
+				m.Elevation[r] *= m.Elevation[r]
+			}
+		}
 	}
 }
