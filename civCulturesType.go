@@ -4,6 +4,7 @@ import (
 	"math/rand"
 
 	"github.com/Flokey82/genbiome"
+	"github.com/Flokey82/genworldvoronoi/various"
 )
 
 type CultureType int
@@ -75,7 +76,7 @@ func (t CultureType) Expansionism() float64 {
 	case CultureTypeHighland:
 		base = 1.2
 	}
-	return roundToDecimals(((rand.Float64()*powerInputValue)/2+1)*base, 1)
+	return various.RoundToDecimals(((rand.Float64()*powerInputValue)/2+1)*base, 1)
 }
 
 // Martialism returns the martialism of a given culture type.
@@ -96,7 +97,7 @@ func (t CultureType) Martialism() float64 {
 	case CultureTypeHighland:
 		base = 1.1
 	}
-	return roundToDecimals(((rand.Float64()*powerInputValue)/2+1)*base, 1)
+	return various.RoundToDecimals(((rand.Float64()*powerInputValue)/2+1)*base, 1)
 }
 
 // CellTypeCost returns the cost of crossing / navigating a given cell type for a given culture.

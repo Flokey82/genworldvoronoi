@@ -4,6 +4,8 @@ import (
 	"log"
 	"math"
 	"sort"
+
+	"github.com/Flokey82/genworldvoronoi/various"
 )
 
 // assignOceanCurrents will calculate the ocean currents for the map.
@@ -44,12 +46,12 @@ func (m *Geo) assignOceanCurrents() {
 		// Calculate the dot product of the current vector and the
 		// vector to each neighbor.
 		for _, nb := range m.GetRegNeighbors(reg) {
-			nbVec := calcVecFromLatLong(m.LatLon[reg][0], m.LatLon[reg][1], m.LatLon[nb][0], m.LatLon[nb][1])
-			nbVec = normal2(nbVec)
+			nbVec := various.CalcVecFromLatLong(m.LatLon[reg][0], m.LatLon[reg][1], m.LatLon[nb][0], m.LatLon[nb][1])
+			nbVec = various.Normal2(nbVec)
 
 			// Get the dot product of the current vector and the
 			// vector to the neighbor.
-			dot := dot2(vec, nbVec)
+			dot := various.Dot2(vec, nbVec)
 
 			if m.Elevation[nb] > 0 {
 				landRegions = append(landRegions, nb)
@@ -87,7 +89,7 @@ func (m *Geo) assignOceanCurrents() {
 				// region.
 				if minPressureIdx != -1 && minPressure < p {
 					oceanReg := oceanRegions[minPressureIdx]
-					vec = add2(vec, scale2(regToRegNeighborVec[reg][oceanReg], p-minPressure))
+					vec = various.Add2(vec, various.Scale2(regToRegNeighborVec[reg][oceanReg], p-minPressure))
 				}
 			} else {
 				// Find the highest pressure ocean region.
@@ -105,10 +107,10 @@ func (m *Geo) assignOceanCurrents() {
 				// region.
 				if maxPressureIdx != -1 && maxPressure > p {
 					oceanReg := oceanRegions[maxPressureIdx]
-					vec = add2(vec, scale2(regToRegNeighborVec[reg][oceanReg], p-maxPressure))
+					vec = various.Add2(vec, various.Scale2(regToRegNeighborVec[reg][oceanReg], p-maxPressure))
 				}
 			}
-			vec = normalize2(vec)
+			vec = various.Normalize2(vec)
 		} else {
 			// Deflect the current vector towards the closest ocean region.
 			maxDot1 := -1.0
@@ -128,11 +130,11 @@ func (m *Geo) assignOceanCurrents() {
 				oceanReg := oceanRegions[maxDot1Idx]
 				// Scale the new vector and normalize it.
 				vecDot := oceanRegionVec[maxDot1Idx]
-				if vecDot == zero2 {
-					vecDot = normal2(vec)
+				if vecDot == various.Zero2 {
+					vecDot = various.Normal2(vec)
 				}
-				added := scale2(regToRegNeighborVec[reg][oceanReg], 1.0)
-				regCurrentVec[oceanReg] = normal2(add2(regCurrentVec[oceanReg], added))
+				added := various.Scale2(regToRegNeighborVec[reg][oceanReg], 1.0)
+				regCurrentVec[oceanReg] = various.Normal2(various.Add2(regCurrentVec[oceanReg], added))
 
 				// Since we want the vector to snake along the coast, we need to
 				// rotate the current vector towards the closest ocean region.
@@ -141,11 +143,11 @@ func (m *Geo) assignOceanCurrents() {
 				// Rotate the current vector towards the closest ocean region by
 				// averaging the current vector and the vector to the closest ocean
 				// region.
-				vec = normalize2(add2(vec, oceanRegionVec[maxDot1Idx]))
+				vec = various.Normalize2(various.Add2(vec, oceanRegionVec[maxDot1Idx]))
 			}
 
 			// Normalize the current vector.
-			vec = normalize2(vec)
+			vec = various.Normalize2(vec)
 		}
 
 		// Return the current vector.
@@ -157,25 +159,25 @@ func (m *Geo) assignOceanCurrents() {
 	var propagateCurrent func(reg int)
 	propagateCurrent = func(reg int) {
 		useDot := true
-		if regCurrentVec[reg] == zero2 {
+		if regCurrentVec[reg] == various.Zero2 {
 			return
 		}
 		// Propagate the current vector to all neighboring regions.
 		for _, neighbor := range m.GetRegNeighbors(reg) {
 			// Skip elevation above sea level and regions with a current vector
 			// already set.
-			if m.Elevation[neighbor] > 0 || regCurrentVec[neighbor] != zero2 {
+			if m.Elevation[neighbor] > 0 || regCurrentVec[neighbor] != various.Zero2 {
 				continue
 			}
 			// Set the current vector using the dot product to scale the vector
 			// towards the neighboring region.
 			if useDot {
-				dot := dot2(regCurrentVec[reg], regToRegNeighborVec[reg][neighbor])
-				regCurrentVec[neighbor] = add2(regCurrentVec[reg], scale2(regToRegNeighborVec[reg][neighbor], dot))
+				dot := various.Dot2(regCurrentVec[reg], regToRegNeighborVec[reg][neighbor])
+				regCurrentVec[neighbor] = various.Add2(regCurrentVec[reg], various.Scale2(regToRegNeighborVec[reg][neighbor], dot))
 			} else {
-				regCurrentVec[neighbor] = add2(regCurrentVec[reg], scale2(regToRegNeighborVec[reg][neighbor], 0.5))
+				regCurrentVec[neighbor] = various.Add2(regCurrentVec[reg], various.Scale2(regToRegNeighborVec[reg][neighbor], 0.5))
 			}
-			regCurrentVec[neighbor] = normalize2(regCurrentVec[neighbor])
+			regCurrentVec[neighbor] = various.Normalize2(regCurrentVec[neighbor])
 
 			// Propagate the current vector to the neighboring region.
 			propagateCurrent(neighbor)
@@ -233,20 +235,20 @@ func (m *Geo) assignOceanCurrents() {
 			var sumVec [2]float64
 			var numVec int
 			for _, nb := range m.GetRegNeighbors(r) {
-				if m.Elevation[nb] > 0 || regCurrentVec[nb] == zero2 {
+				if m.Elevation[nb] > 0 || regCurrentVec[nb] == various.Zero2 {
 					continue
 				}
-				sumVec = add2(sumVec, regCurrentVec[nb])
+				sumVec = various.Add2(sumVec, regCurrentVec[nb])
 				numVec++
 			}
 			if numVec > 0 {
-				if regCurrentVec[r] != zero2 {
-					sumVec = add2(sumVec, regCurrentVec[r])
+				if regCurrentVec[r] != various.Zero2 {
+					sumVec = various.Add2(sumVec, regCurrentVec[r])
 					numVec++
 				}
-				regCurrentVec[r] = normalize2(sumVec)
+				regCurrentVec[r] = various.Normalize2(sumVec)
 			}
-			if regCurrentVec[r] == zero2 {
+			if regCurrentVec[r] == various.Zero2 {
 				continue
 			}
 			regCurrentVec[r] = deflectAndSplit(r, true)
@@ -307,23 +309,23 @@ func (m *Geo) assignOceanCurrentsInflowOutflow() {
 				// current region and the current vector of the neighbor.
 				// This will tell us how much of the current vector of the neighbor
 				// is flowing into the current region.
-				dot := dot2(normalize2(regToRegNeighborVec[neighbor][reg]), normalize2(regCurrentVec[neighbor]))
+				dot := various.Dot2(various.Normalize2(regToRegNeighborVec[neighbor][reg]), various.Normalize2(regCurrentVec[neighbor]))
 
 				// If the dot product is positive, the neighbor is flowing into the
 				// current region, so it is part of the inflow vector.
 				if dot > 0 {
-					inflowVec = add2(inflowVec, scale2(regCurrentVec[neighbor], dot))
+					inflowVec = various.Add2(inflowVec, various.Scale2(regCurrentVec[neighbor], dot))
 				} else if dot < 0 {
 					// If the dot product is negative, the neighbor is flowing out of
 					// the current region, so it is part of the outflow vector.
-					outflowVec = add2(outflowVec, scale2(regCurrentVec[neighbor], -dot))
+					outflowVec = various.Add2(outflowVec, various.Scale2(regCurrentVec[neighbor], -dot))
 				}
 			}
 
 			// The difference in magnitude between the inflow and outflow vectors
 			// indicates the pressure difference.
-			lenIn := len2(inflowVec)
-			lenOut := len2(outflowVec)
+			lenIn := various.Len2(inflowVec)
+			lenOut := various.Len2(outflowVec)
 			diff := lenIn - lenOut
 
 			log.Println("reg", reg, "pressure", regPressure[reg], "inflow", lenIn, "outflow", lenOut, "diff", diff)
@@ -343,7 +345,7 @@ func (m *Geo) assignOceanCurrentsInflowOutflow() {
 					// current region and the current vector of the neighbor.
 					// This will tell us how much of the current vector of the neighbor
 					// is flowing into the current region.
-					dot := dot2(normalize2(regToRegNeighborVec[neighbor][reg]), normalize2(regCurrentVec[neighbor]))
+					dot := various.Dot2(various.Normalize2(regToRegNeighborVec[neighbor][reg]), various.Normalize2(regCurrentVec[neighbor]))
 					// If the dot product is positive, the neighbor is flowing into the
 					// current region, so it is part of the inflow vector.
 					if dot > 0 {
@@ -351,9 +353,9 @@ func (m *Geo) assignOceanCurrentsInflowOutflow() {
 						// transferred to the neighbor.
 						transfer := dot * regPressure[reg]
 						// Add the transfer to the neighbor's current vector.
-						regCurrentVec[neighbor] = add2(regCurrentVec[neighbor], scale2(inflowVec, transfer))
+						regCurrentVec[neighbor] = various.Add2(regCurrentVec[neighbor], various.Scale2(inflowVec, transfer))
 						// Subtract the transfer from the current region's current vector.
-						regCurrentVec[reg] = add2(regCurrentVec[reg], scale2(inflowVec, -transfer))
+						regCurrentVec[reg] = various.Add2(regCurrentVec[reg], various.Scale2(inflowVec, -transfer))
 					}
 				}
 			}
@@ -366,7 +368,7 @@ func (m *Geo) assignOceanCurrentsInflowOutflow() {
 				continue
 			}
 			// Normalize the current vector.
-			regCurrentVec[reg] = normal2(regCurrentVec[reg])
+			regCurrentVec[reg] = various.Normal2(regCurrentVec[reg])
 		}
 	}
 	m.RegionToOceanVec = regCurrentVec
@@ -386,7 +388,7 @@ func (m *Geo) calcCurrentPressure(currentVecs [][2]float64) []float64 {
 		regToRegNeighborVec[reg] = make(map[int][2]float64)
 		for _, neighbor := range m.GetRegNeighbors(reg) {
 			// TODO: This will cause artifacts around +/- 180 degrees.
-			regToRegNeighborVec[reg][neighbor] = normalize2(calcVecFromLatLong(m.LatLon[reg][0], m.LatLon[reg][1], m.LatLon[neighbor][0], m.LatLon[neighbor][1]))
+			regToRegNeighborVec[reg][neighbor] = various.Normalize2(various.CalcVecFromLatLong(m.LatLon[reg][0], m.LatLon[reg][1], m.LatLon[neighbor][0], m.LatLon[neighbor][1]))
 		}
 	}
 
@@ -415,9 +417,9 @@ func (m *Geo) calcCurrentPressure(currentVecs [][2]float64) []float64 {
 				// We multiply the dot product with the magnitude of the neighbor
 				// vector to get the pressure.
 				// Only add the pressure if the dot product is positive.
-				dot := dot2(regToRegNeighborVec[neighbor][reg], normalize2(currentVecs[neighbor]))
+				dot := various.Dot2(regToRegNeighborVec[neighbor][reg], various.Normalize2(currentVecs[neighbor]))
 				if dot > 0 {
-					pressure[reg] += dot * len2(currentVecs[neighbor])
+					pressure[reg] += dot * various.Len2(currentVecs[neighbor])
 				}
 			}
 
@@ -425,9 +427,9 @@ func (m *Geo) calcCurrentPressure(currentVecs [][2]float64) []float64 {
 			if currentVecs[reg] != [2]float64{0, 0} {
 				// Now do the opposite. If our current streams into the neighbor,
 				// we need to subtract the pressure from the current region.
-				dot := dot2(regToRegNeighborVec[reg][neighbor], normalize2(currentVecs[reg]))
+				dot := various.Dot2(regToRegNeighborVec[reg][neighbor], various.Normalize2(currentVecs[reg]))
 				if dot > 0 {
-					pressure[reg] -= dot * len2(currentVecs[reg])
+					pressure[reg] -= dot * various.Len2(currentVecs[reg])
 				}
 			}
 		}
@@ -464,14 +466,14 @@ func (m *Geo) getRegionToNeighborVec() []map[int][2]float64 {
 		rLat, rLon := m.LatLon[reg][0], m.LatLon[reg][1]
 		for _, neighbor := range m.GetRegNeighbors(reg) {
 			if useFancyFunc {
-				regToNeighborVec[reg][neighbor] = normalize2(calcVecFromLatLong(rLat, rLon, m.LatLon[neighbor][0], m.LatLon[neighbor][1]))
+				regToNeighborVec[reg][neighbor] = various.Normalize2(various.CalcVecFromLatLong(rLat, rLon, m.LatLon[neighbor][0], m.LatLon[neighbor][1]))
 				continue
 			}
 			// Calculate the vector between the current region and the neighbor from lat/long.
 			nbLat, nbLon := m.LatLon[neighbor][0], m.LatLon[neighbor][1]
 
 			vec := [2]float64{nbLon - rLon, nbLat - rLat}
-			regToNeighborVec[reg][neighbor] = normal2(vec)
+			regToNeighborVec[reg][neighbor] = various.Normal2(vec)
 
 		}
 	}
@@ -488,7 +490,7 @@ func (m *Geo) genOceanCurrents2() {
 	regToRegNeighborVec := m.getRegionToNeighborVec()
 
 	deflectCurrent := func(r int) [2]float64 {
-		if m.Elevation[r] > 0 || regCurrentVec[r] == zero2 {
+		if m.Elevation[r] > 0 || regCurrentVec[r] == various.Zero2 {
 			return [2]float64{0, 0}
 		}
 
@@ -499,7 +501,7 @@ func (m *Geo) genOceanCurrents2() {
 		maxDotOcean := math.Inf(-1)
 		maxRegOcean := -1
 		for _, neighbor := range m.GetRegNeighbors(r) {
-			dot := dot2(normalize2(regToRegNeighborVec[r][neighbor]), normalize2(currentVec))
+			dot := various.Dot2(various.Normalize2(regToRegNeighborVec[r][neighbor]), various.Normalize2(currentVec))
 			if m.Elevation[neighbor] > 0 {
 				if dot > maxDotLand {
 					maxDotLand = dot
@@ -515,7 +517,7 @@ func (m *Geo) genOceanCurrents2() {
 		// If the max dot product for land is greater than the max dot product
 		// for ocean, we need to deflect the current vector.
 		if maxDotLand >= 0 && maxRegOcean >= 0 {
-			return normalize2(regToRegNeighborVec[r][maxRegOcean])
+			return various.Normalize2(regToRegNeighborVec[r][maxRegOcean])
 		}
 		return currentVec
 	}
@@ -680,18 +682,18 @@ func (m *Geo) assignOceanCurrents3() {
 				for _, nr := range m.SphereMesh.r_circulate_r(outRegs, r) {
 					// if this neighbor has a smaller distance to edge, or belongs to a different gyre, the inward dir points away from it (so we add dirFromTo(nr, r), aka the dir away from nr)
 					if groups[nr] != groups[r] {
-						inwardDirRaw = add2(inwardDirRaw, m.dirVecFromToRegs(nr, r))
+						inwardDirRaw = various.Add2(inwardDirRaw, m.dirVecFromToRegs(nr, r))
 					} else if distFromEdge[nr] < distFromEdge[r] {
-						inwardDirRaw = add2(inwardDirRaw, m.dirVecFromToRegs(nr, r))
+						inwardDirRaw = various.Add2(inwardDirRaw, m.dirVecFromToRegs(nr, r))
 					} else if distFromEdge[nr] == distFromEdge[r] {
 						continue
 					} else {
 						// if the neighbor has a larger dist to the edge, the inward dir points towards it
-						inwardDirRaw = add2(inwardDirRaw, m.dirVecFromToRegs(r, nr))
+						inwardDirRaw = various.Add2(inwardDirRaw, m.dirVecFromToRegs(r, nr))
 					}
 				}
 				// normalize inward dir
-				inwardDir := normal2(inwardDirRaw)
+				inwardDir := various.Normal2(inwardDirRaw)
 
 				clockwise := seedSupergroup[seed] == 1 || seedSupergroup[seed] == 2
 				// since currents at gyre edges are a mess, we'll decrease their magnitude

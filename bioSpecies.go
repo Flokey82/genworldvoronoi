@@ -4,6 +4,8 @@ import (
 	"container/heap"
 	"fmt"
 	"math"
+
+	"github.com/Flokey82/genworldvoronoi/various"
 )
 
 func (b *Bio) genNRandomSpecies(n int) {
@@ -104,7 +106,7 @@ func (b *Bio) expandSpecies() []int {
 		ulon := b.LatLon[u][1]
 		vlat := b.LatLon[v][0]
 		vlon := b.LatLon[v][1]
-		horiz := haversine(ulat, ulon, vlat, vlon) / (2 * math.Pi)
+		horiz := various.Haversine(ulat, ulon, vlat, vlon) / (2 * math.Pi)
 
 		// Calculate vertical distance.
 		vert := (b.Elevation[v] - b.Elevation[u]) / maxElev

@@ -3,6 +3,7 @@ package genworldvoronoi
 import (
 	"math"
 
+	"github.com/Flokey82/genworldvoronoi/various"
 	"github.com/Flokey82/go_gens/vectors"
 )
 
@@ -43,7 +44,7 @@ func getGlobalWindVector(lat float64) [2]float64 {
 			degree = 180 - change // Southern hemisphere.
 		}
 	}
-	rad := degToRad(degree)
+	rad := various.DegToRad(degree)
 	return [2]float64{math.Cos(rad), math.Sin(rad)}
 }
 
@@ -129,7 +130,7 @@ func (m *Geo) assignWindVectors() {
 						// TODO: Use actual distance from ocean to calculate temperature falloff.
 						tempNb -= 1 / (regDistanceSea[nb] + 1)
 					}
-					ve := calcVecFromLatLong(lat, lon, nbLat, nbLon)
+					ve := various.CalcVecFromLatLong(lat, lon, nbLat, nbLon)
 					v = v.Add(vectors.Normalize(vectors.NewVec2(ve[0], ve[1])).Mul(tempNb - tempReg))
 				}
 				v = vectors.Normalize(v)
@@ -144,7 +145,7 @@ func (m *Geo) assignWindVectors() {
 				// Get the wind vector for r.
 				regVec := regWindVec[r]
 				// Get XYZ Position of r.
-				regXYZ := convToVec3(m.XYZ[r*3 : r*3+3])
+				regXYZ := various.ConvToVec3(m.XYZ[r*3 : r*3+3])
 				// Get polar coordinates.
 				regLat := m.LatLon[r][0]
 				regLon := m.LatLon[r][1]
@@ -157,13 +158,13 @@ func (m *Geo) assignWindVectors() {
 				// rLonWind := regLon + regWindVec[r][0]
 				// Not sure if this is correct... Adding a 2d vector to a lat/lon breaks my brain.
 				// TODO: Fix this once and for all.
-				rLatWind, rLonWind := addVecToLatLong(regLat, regLon, regWindVec[r])
-				rwXYZ := convToVec3(latLonToCartesian(rLatWind, rLonWind)).Normalize()
+				rLatWind, rLonWind := various.AddVecToLatLong(regLat, regLon, regWindVec[r])
+				rwXYZ := various.ConvToVec3(various.LatLonToCartesian(rLatWind, rLonWind)).Normalize()
 				v := vectors.Normalize(vectors.Vec2{
 					X: regVec[0],
 					Y: regVec[1],
 				}) // v.Mul(h / maxElev)
-				vw := calcVecFromLatLong(regLat, regLon, rLatWind, rLonWind)
+				vw := various.CalcVecFromLatLong(regLat, regLon, rLatWind, rLonWind)
 				v0 := vectors.Normalize(vectors.Vec2{
 					X: vw[0],
 					Y: vw[1],
@@ -178,7 +179,7 @@ func (m *Geo) assignWindVectors() {
 					// }
 					// Calculate dot product of wind vector to vector r -> neighbor_r.
 					// Get XYZ Position of r_neighbor.
-					rnXYZ := convToVec3(m.XYZ[nbReg*3 : nbReg*3+3])
+					rnXYZ := various.ConvToVec3(m.XYZ[nbReg*3 : nbReg*3+3])
 
 					// Calculate Vector between r and neighbor_r.
 					va := vectors.Sub3(rnXYZ, regXYZ).Normalize()
@@ -195,7 +196,7 @@ func (m *Geo) assignWindVectors() {
 					if dotV > 0 {
 						nbLat := m.LatLon[nbReg][0]
 						nbLon := m.LatLon[nbReg][1]
-						ve := calcVecFromLatLong(regLat, regLon, nbLat, nbLon)
+						ve := various.CalcVecFromLatLong(regLat, regLon, nbLat, nbLon)
 						vx := vectors.Normalize(v0.Sub(vectors.Normalize(vectors.Vec2{
 							X: ve[0],
 							Y: ve[1],
@@ -235,7 +236,7 @@ func (m *Geo) assignWindVectors() {
 				// map.r_wind[r] = 5*(1-(terrain.depthMap[i][j]-terrain.depthMap[k][l])/1000);
 				// my windspeed: [0, 3]
 				if isInit {
-					regWindVecLocal[r] = setMagnitude2(windDir, windSpeed)
+					regWindVecLocal[r] = various.SetMagnitude2(windDir, windSpeed)
 					continue
 				}
 
@@ -244,14 +245,14 @@ func (m *Geo) assignWindVectors() {
 					// Magnitude will be positive if the neighbor is warmer than the current region, which will
 					// result in a wind vector pointing towards the neighbor.
 					magnitude := (m.getRegTemperature(nr, maxElev) - m.getRegTemperature(r, maxElev))
-					vec := setMagnitude2(m.dirVecFromToRegs(r, nr), magnitude)
-					acc = add2(vec, acc)
+					vec := various.SetMagnitude2(m.dirVecFromToRegs(r, nr), magnitude)
+					acc = various.Add2(vec, acc)
 				}
 				// Add the temperature vector to the wind vector.
-				windDir = add2(windDir, setMagnitude2(acc, TEMPERATURE_INFLUENCE_FACTOR))
+				windDir = various.Add2(windDir, various.SetMagnitude2(acc, TEMPERATURE_INFLUENCE_FACTOR))
 
 				// Scale the wind vector to the wind speed.
-				regWindVecLocal[r] = setMagnitude2(windDir, windSpeed)
+				regWindVecLocal[r] = various.SetMagnitude2(windDir, windSpeed)
 			}
 		}
 	}

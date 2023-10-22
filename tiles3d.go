@@ -6,6 +6,7 @@ import (
 	"log"
 	"math"
 
+	"github.com/Flokey82/genworldvoronoi/various"
 	"github.com/Flokey82/geoquad"
 )
 
@@ -45,7 +46,7 @@ func (m *Map) GetHeightMapTile(x, y, zoom int) []byte {
 		p3x, p3y := latLonToPixels(p3[0], p3[1], zoom)
 		px, py := latLonToPixels(p[0], p[1], zoom)
 
-		return calcHeightInTriangle([2]float64{p1x, p1y}, [2]float64{p2x, p2y}, [2]float64{p3x, p3y}, [2]float64{px, py}, z1, z2, z3)
+		return various.CalcHeightInTriangle([2]float64{p1x, p1y}, [2]float64{p2x, p2y}, [2]float64{p3x, p3y}, [2]float64{px, py}, z1, z2, z3)
 	}
 
 	// inTriangleMercator uses the mercator projection to determine if a point is in a triangle.
@@ -57,7 +58,7 @@ func (m *Map) GetHeightMapTile(x, y, zoom int) []byte {
 		px, py := latLonToPixels(p[0], p[1], zoom)
 
 		// Now we can use the regular inTriangle function.
-		return isPointInTriangle([2]float64{p1x, p1y}, [2]float64{p2x, p2y}, [2]float64{p3x, p3y}, [2]float64{px, py})
+		return various.IsPointInTriangle([2]float64{p1x, p1y}, [2]float64{p2x, p2y}, [2]float64{p3x, p3y}, [2]float64{px, py})
 	}
 
 	outTri := make([]int, 0, 7)
@@ -79,7 +80,7 @@ func (m *Map) GetHeightMapTile(x, y, zoom int) []byte {
 				var dist float64
 				//if len(tris) > 1000 {
 				// convert to radians
-				dist = dist2(latlon, m.TriLatLon[tri])
+				dist = various.Dist2(latlon, m.TriLatLon[tri])
 				//} else {
 				//	dist = haversine(latlon[0], latlon[1], m.triLatLon[tri][0], m.triLatLon[tri][1])
 				//}

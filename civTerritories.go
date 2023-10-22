@@ -3,6 +3,8 @@ package genworldvoronoi
 import (
 	"container/heap"
 	"math"
+
+	"github.com/Flokey82/genworldvoronoi/various"
 )
 
 // getTerritoryCultureWeightFunc returns a weight function which returns a penalty
@@ -68,7 +70,7 @@ func (m *Civ) getTerritoryWeightFunc() func(o, u, v int) float64 {
 		ulon := m.LatLon[u][1]
 		vlat := m.LatLon[v][0]
 		vlon := m.LatLon[v][1]
-		horiz := haversine(ulat, ulon, vlat, vlon) / (2 * math.Pi)
+		horiz := various.Haversine(ulat, ulon, vlat, vlon) / (2 * math.Pi)
 
 		// TODO: Maybe add a small penalty based on distance from the capital?
 		// oLat := m.r_latLon[o][0]

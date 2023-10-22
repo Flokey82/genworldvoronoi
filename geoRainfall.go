@@ -5,6 +5,7 @@ import (
 	"math"
 	"sort"
 
+	"github.com/Flokey82/genworldvoronoi/various"
 	"github.com/Flokey82/go_gens/vectors"
 )
 
@@ -120,20 +121,20 @@ func (m *Geo) assignRainfall(numSteps, transferMode, sortOrder int) {
 			for _, r := range sortOrderRegs {
 				count := 0
 				// Get XYZ Position of r.
-				regXYZ := convToVec3(m.XYZ[r*3 : r*3+3])
+				regXYZ := various.ConvToVec3(m.XYZ[r*3 : r*3+3])
 				// Convert to polar coordinates.
 				regLat := m.LatLon[r][0]
 				regLon := m.LatLon[r][1]
 
 				// Add wind vector to neighbor lat/lon to get the "wind vector lat long" or something like that..
-				regToWindVec3 := convToVec3(latLonToCartesian(regLat+regWindVec[r][1], regLon+regWindVec[r][0])).Normalize()
+				regToWindVec3 := various.ConvToVec3(various.LatLonToCartesian(regLat+regWindVec[r][1], regLon+regWindVec[r][0])).Normalize()
 				for _, nbReg := range m.SphereMesh.r_circulate_r(outRegs, r) {
 					if isSea[nbReg] {
 						continue
 					}
 					// Calculate dot product of wind vector to vector r -> neighbor_r.
 					// Get XYZ Position of r_neighbor.
-					regToNbVec3 := convToVec3(m.XYZ[nbReg*3 : nbReg*3+3])
+					regToNbVec3 := various.ConvToVec3(m.XYZ[nbReg*3 : nbReg*3+3])
 
 					// Calculate Vector between r and neighbor_r.
 					va := vectors.Sub3(regToNbVec3, regXYZ).Normalize()
@@ -174,18 +175,18 @@ func (m *Geo) assignRainfall(numSteps, transferMode, sortOrder int) {
 				count := 0
 				sum := 0.0
 				// Get XYZ Position of r as vector3
-				regVec3 := convToVec3(m.XYZ[r*3 : r*3+3])
+				regVec3 := various.ConvToVec3(m.XYZ[r*3 : r*3+3])
 				for _, nbReg := range m.SphereMesh.r_circulate_r(outRegs, r) {
 					// Calculate dot product of wind vector to vector r -> neighbor_r.
 					// Get XYZ Position of r_neighbor.
-					regToNbVec3 := convToVec3(m.XYZ[nbReg*3 : nbReg*3+3])
+					regToNbVec3 := various.ConvToVec3(m.XYZ[nbReg*3 : nbReg*3+3])
 
 					// Convert to polar coordinates.
 					rLat := m.LatLon[nbReg][0]
 					rLon := m.LatLon[nbReg][1]
 
 					// Add wind vector to neighbor lat/lon to get the "wind vector lat long" or something like that..
-					nbToWindVec3 := convToVec3(latLonToCartesian(rLat+regWindVec[nbReg][1], rLon+regWindVec[nbReg][0])).Normalize()
+					nbToWindVec3 := various.ConvToVec3(various.LatLonToCartesian(rLat+regWindVec[nbReg][1], rLon+regWindVec[nbReg][0])).Normalize()
 
 					// Calculate Vector between r and neighbor_r.
 					va := vectors.Sub3(regVec3, regToNbVec3).Normalize()
@@ -341,7 +342,7 @@ func (m *Geo) assignRainfallBasic() {
 
 		// NOTE: The above vector is almost identical to the wind vector (dot product > 0.999)
 		// so we can just use the normalized wind vector instead.
-		normalizedWindVecs[r] = normal2(regWindVec[r])
+		normalizedWindVecs[r] = various.Normal2(regWindVec[r])
 	}
 
 	// Calculate the dot product of the wind vector and the vector from the region to its
@@ -356,8 +357,8 @@ func (m *Geo) assignRainfallBasic() {
 				nL := m.LatLon[nbReg]
 				// TODO: Check dot product of wind vector (r) and neighbour->r.
 				vVec := normalizedWindVecs[nbReg]
-				nVec := normal2(calcVecFromLatLong(nL[0], nL[1], rL[0], rL[1]))
-				dotToNeighbors[r] = append(dotToNeighbors[r], dot2(vVec, nVec))
+				nVec := various.Normal2(various.CalcVecFromLatLong(nL[0], nL[1], rL[0], rL[1]))
+				dotToNeighbors[r] = append(dotToNeighbors[r], various.Dot2(vVec, nVec))
 			}
 		}
 	}

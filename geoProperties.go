@@ -1,6 +1,10 @@
 package genworldvoronoi
 
-import "math"
+import (
+	"math"
+
+	"github.com/Flokey82/genworldvoronoi/various"
+)
 
 type RegProperty struct {
 	ID                  int
@@ -154,7 +158,7 @@ func (m *Geo) getRegHaven(reg int) (int, int) {
 	minDist := math.Inf(1)
 	for _, nb := range water {
 		nbLatLon := m.LatLon[nb]
-		dist := haversine(rLatLon[0], rLatLon[1], nbLatLon[0], nbLatLon[1])
+		dist := various.Haversine(rLatLon[0], rLatLon[1], nbLatLon[0], nbLatLon[1])
 		if dist < minDist {
 			minDist = dist
 			closest = nb

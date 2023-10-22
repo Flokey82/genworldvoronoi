@@ -2,6 +2,8 @@ package genworldvoronoi
 
 import (
 	"math"
+
+	"github.com/Flokey82/genworldvoronoi/various"
 )
 
 const (
@@ -57,7 +59,7 @@ func (m *Geo) GetSeason(lat float64) int {
 // GetSolarRadiation returns the solar radiation for the current day of the year
 // and the given latitude.
 func (m *Geo) GetSolarRadiation(lat float64) float64 {
-	return calcSolarRadiation(degToRad(lat), m.GetDayOfYear())
+	return calcSolarRadiation(various.DegToRad(lat), m.GetDayOfYear())
 }
 
 // calcMinMaxTemperature calculates the minimum and maximum temperature for
@@ -83,7 +85,7 @@ func (m *Geo) getMinMaxTemperatureOfDay(lat float64, dayOfYear int) (min, max fl
 	// TODO: Compensate for altitude.
 
 	// Now get the average day and night duration for the given latitude.
-	dayLen := calcDaylightHoursByLatitudeAndDayOfYear(degToRad(lat), dayOfYear)
+	dayLen := calcDaylightHoursByLatitudeAndDayOfYear(various.DegToRad(lat), dayOfYear)
 	nightLen := 24.0 - dayLen
 
 	// Given the mean temperature and the day and night duration, we can
@@ -131,7 +133,7 @@ func (m *Geo) getMinMaxTemperatureOfDay(lat float64, dayOfYear int) (min, max fl
 func (m *Geo) calcSolarRadiation(dayOfYear int) []float64 {
 	res := make([]float64, m.SphereMesh.numRegions)
 	for i := range res {
-		res[i] = calcSolarRadiation(degToRad(m.LatLon[i][0]), dayOfYear)
+		res[i] = calcSolarRadiation(various.DegToRad(m.LatLon[i][0]), dayOfYear)
 	}
 	return res
 }

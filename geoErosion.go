@@ -2,6 +2,8 @@ package genworldvoronoi
 
 import (
 	"math"
+
+	"github.com/Flokey82/genworldvoronoi/various"
 )
 
 // Erode erodes all region by the given amount and returns the resulting heightmap.
@@ -260,7 +262,7 @@ func (m *Geo) GetErosionRate2() []float64 {
 				nbLatLon := m.LatLon[nb]
 
 				// Calculate distance to the arc/line segment of the river (r->rdh).
-				dist := crossArc(rLatLon[0], rLatLon[1], dLatLon[0], dLatLon[1], nbLatLon[0], nbLatLon[1])
+				dist := various.CrossArc(rLatLon[0], rLatLon[1], dLatLon[0], dLatLon[1], nbLatLon[0], nbLatLon[1])
 
 				// Skip everything that is too far away.
 				if math.IsNaN(dist) || dist > maxDist {

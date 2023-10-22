@@ -5,6 +5,7 @@ import (
 	"math"
 	"sort"
 
+	"github.com/Flokey82/genworldvoronoi/various"
 	"github.com/Flokey82/go_gens/utils"
 	"github.com/Flokey82/go_gens/vectors"
 )
@@ -57,8 +58,8 @@ func (m *Geo) generatePlates() {
 	plateVectors := make([]vectors.Vec3, mesh.numRegions)
 	for _, centerReg := range plateRegs {
 		nbReg := mesh.r_circulate_r(outReg, centerReg)[0]
-		p0 := convToVec3(regXYZ[3*centerReg : 3*centerReg+3])
-		p1 := convToVec3(regXYZ[3*nbReg : 3*nbReg+3])
+		p0 := various.ConvToVec3(regXYZ[3*centerReg : 3*centerReg+3])
+		p1 := various.ConvToVec3(regXYZ[3*nbReg : 3*nbReg+3])
 		plateVectors[centerReg] = vectors.Sub3(p1, p0).Normalize()
 	}
 
@@ -126,8 +127,8 @@ func (m *Geo) findCollisions() ([]int, []int, []int, map[int]float64) {
 		for _, nbReg := range rOut {
 			if regPlate[currentReg] != regPlate[nbReg] {
 				// sometimes I regret storing xyz in a compact array...
-				currentPos := convToVec3(m.XYZ[3*currentReg : 3*currentReg+3])
-				neighborPos := convToVec3(m.XYZ[3*nbReg : 3*nbReg+3])
+				currentPos := various.ConvToVec3(m.XYZ[3*currentReg : 3*currentReg+3])
+				neighborPos := various.ConvToVec3(m.XYZ[3*nbReg : 3*nbReg+3])
 
 				// simulate movement for deltaTime seconds
 				distanceBefore := vectors.Dist3(currentPos, neighborPos)

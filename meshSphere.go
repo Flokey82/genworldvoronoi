@@ -4,6 +4,7 @@ import (
 	"math"
 	"math/rand"
 
+	"github.com/Flokey82/genworldvoronoi/various"
 	"github.com/Flokey82/geoquad"
 	"github.com/fogleman/delaunay"
 )
@@ -133,11 +134,11 @@ func MakeSphere(seed int64, numPoints int, jitter float64) (*SphereMesh, error) 
 	var latLon [][2]float64
 	for r := 0; r < len(latlong); r += 2 {
 		// HACKY! Fix this properly!
-		nla, nlo := latLonFromVec3(convToVec3(latLonToCartesian(latlong[r], latlong[r+1])).Normalize(), 1.0)
+		nla, nlo := various.LatLonFromVec3(various.ConvToVec3(various.LatLonToCartesian(latlong[r], latlong[r+1])).Normalize(), 1.0)
 		latLon = append(latLon, [2]float64{nla, nlo})
 
 		// This calculates x,y,z from the spherical coordinates lat,lon.
-		xyz = append(xyz, latLonToCartesian(latlong[r], latlong[r+1])...)
+		xyz = append(xyz, various.LatLonToCartesian(latlong[r], latlong[r+1])...)
 	}
 	return newSphereMesh(latLon, xyz, true)
 }
@@ -188,12 +189,12 @@ func newSphereMesh(latLon [][2]float64, xyz []float64, addSouthPole bool) (*Sphe
 		a := m.s_begin_r(3 * t)
 		b := m.s_begin_r(3*t + 1)
 		c := m.s_begin_r(3*t + 2)
-		v3 := getCentroidOfTriangle(
+		v3 := various.GetCentroidOfTriangle(
 			m.XYZ[3*a:3*a+3],
 			m.XYZ[3*b:3*b+3],
 			m.XYZ[3*c:3*c+3])
 		tXYZ = append(tXYZ, v3.X, v3.Y, v3.Z)
-		nla, nlo := latLonFromVec3(v3, 1.0)
+		nla, nlo := various.LatLonFromVec3(v3, 1.0)
 		tLatLon = append(tLatLon, [2]float64{nla, nlo})
 	}
 	m.TriLatLon = tLatLon
