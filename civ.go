@@ -37,11 +37,11 @@ func NewCiv(geo *Geo, cfg *CivConfig) *Civ {
 		CivConfig:         cfg,
 		Geo:               geo,
 		History:           NewHistory(geo.Calendar),
-		RegionToEmpire:    initRegionSlice(geo.SphereMesh.numRegions),
-		RegionToCityState: initRegionSlice(geo.SphereMesh.numRegions),
-		RegionToCulture:   initRegionSlice(geo.SphereMesh.numRegions),
-		RegionToReligion:  initRegionSlice(geo.SphereMesh.numRegions),
-		Settled:           initTimeSlice(geo.SphereMesh.numRegions),
+		RegionToEmpire:    initRegionSlice(geo.SphereMesh.NumRegions),
+		RegionToCityState: initRegionSlice(geo.SphereMesh.NumRegions),
+		RegionToCulture:   initRegionSlice(geo.SphereMesh.NumRegions),
+		RegionToReligion:  initRegionSlice(geo.SphereMesh.NumRegions),
+		Settled:           initTimeSlice(geo.SphereMesh.NumRegions),
 		NameGen:           NewNameGenerators(geo.Seed),
 	}
 }
@@ -213,7 +213,7 @@ func (m *Civ) generateTimeOfSettlement() {
 	heap.Init(&queue)
 
 	// 'settleTime' is the time when a region was settled.
-	settleTime := initTimeSlice(m.SphereMesh.numRegions)
+	settleTime := initTimeSlice(m.SphereMesh.NumRegions)
 
 	// Now we pick a suitable region to start with (steppe/grassland).
 	// We will use the climate fitness function and filter by biome.
@@ -221,7 +221,7 @@ func (m *Civ) generateTimeOfSettlement() {
 	bestFitness := 0.0
 	fa := m.getFitnessClimate()
 	bf := m.getRegWhittakerModBiomeFunc()
-	for r := 0; r < m.SphereMesh.numRegions; r++ {
+	for r := 0; r < m.SphereMesh.NumRegions; r++ {
 		if bf(r) == genbiome.WhittakerModBiomeTemperateGrassland {
 			fitness := fa(r)
 			if fitness > bestFitness {
@@ -286,7 +286,7 @@ func (m *Civ) generateTimeOfSettlement() {
 
 	// Now add the region neighbors to the queue.
 	out_r := make([]int, 0, 8)
-	for _, n := range m.r_circulate_r(out_r, bestRegion) {
+	for _, n := range m.R_circulate_r(out_r, bestRegion) {
 		heap.Push(&queue, &queueEntry{
 			origin:      bestRegion,
 			score:       weight(bestRegion, bestRegion, n),
@@ -306,7 +306,7 @@ func (m *Civ) generateTimeOfSettlement() {
 		// The higher the score, the more difficult it is to settle there,
 		// and the longer it took to settle there.
 		settleTime[u.destination] = int64(u.score)
-		for _, v := range m.SphereMesh.r_circulate_r(out_r, u.destination) {
+		for _, v := range m.SphereMesh.R_circulate_r(out_r, u.destination) {
 			// Check if the region has already been settled.
 			if settleTime[v] >= 0 {
 				continue

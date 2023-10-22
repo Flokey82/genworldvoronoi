@@ -1,4 +1,4 @@
-package genworldvoronoi
+package various
 
 import (
 	"encoding/binary"
@@ -6,7 +6,9 @@ import (
 	"sort"
 )
 
-func writeMapIntInt(w io.Writer, m map[int]int) error {
+var byteorder = binary.LittleEndian
+
+func WriteMapIntInt(w io.Writer, m map[int]int) error {
 	if err := binary.Write(w, byteorder, int64(len(m))); err != nil {
 		return err
 	}
@@ -29,7 +31,7 @@ func writeMapIntInt(w io.Writer, m map[int]int) error {
 	return nil
 }
 
-func readMapIntInt(r io.Reader) (map[int]int, error) {
+func ReadMapIntInt(r io.Reader) (map[int]int, error) {
 	m := make(map[int]int)
 	var num int64
 	if err := binary.Read(r, byteorder, &num); err != nil {
@@ -48,7 +50,7 @@ func readMapIntInt(r io.Reader) (map[int]int, error) {
 	return m, nil
 }
 
-func writeMapIntFloat64(w io.Writer, m map[int]float64) error {
+func WriteMapIntFloat64(w io.Writer, m map[int]float64) error {
 	if err := binary.Write(w, byteorder, int64(len(m))); err != nil {
 		return err
 	}
@@ -71,7 +73,7 @@ func writeMapIntFloat64(w io.Writer, m map[int]float64) error {
 	return nil
 }
 
-func readMapIntFloat64(r io.Reader) (map[int]float64, error) {
+func ReadMapIntFloat64(r io.Reader) (map[int]float64, error) {
 	m := make(map[int]float64)
 	var num int64
 	if err := binary.Read(r, byteorder, &num); err != nil {
@@ -91,7 +93,7 @@ func readMapIntFloat64(r io.Reader) (map[int]float64, error) {
 	return m, nil
 }
 
-func writeMapIntBool(w io.Writer, m map[int]bool) error {
+func WriteMapIntBool(w io.Writer, m map[int]bool) error {
 	if err := binary.Write(w, byteorder, int64(len(m))); err != nil {
 		return err
 	}
@@ -114,7 +116,7 @@ func writeMapIntBool(w io.Writer, m map[int]bool) error {
 	return nil
 }
 
-func readMapIntBool(r io.Reader) (map[int]bool, error) {
+func ReadMapIntBool(r io.Reader) (map[int]bool, error) {
 	m := make(map[int]bool)
 	var num int64
 	if err := binary.Read(r, byteorder, &num); err != nil {
@@ -134,7 +136,7 @@ func readMapIntBool(r io.Reader) (map[int]bool, error) {
 	return m, nil
 }
 
-func writeFloatSlice(w io.Writer, s []float64) error {
+func WriteFloatSlice(w io.Writer, s []float64) error {
 	if err := binary.Write(w, byteorder, int64(len(s))); err != nil {
 		return err
 	}
@@ -146,7 +148,7 @@ func writeFloatSlice(w io.Writer, s []float64) error {
 	return nil
 }
 
-func readFloatSlice(r io.Reader) ([]float64, error) {
+func ReadFloatSlice(r io.Reader) ([]float64, error) {
 	var num int64
 	if err := binary.Read(r, byteorder, &num); err != nil {
 		return nil, err
@@ -160,7 +162,7 @@ func readFloatSlice(r io.Reader) ([]float64, error) {
 	return s, nil
 }
 
-func write2FloatSlice(w io.Writer, s [][2]float64) error {
+func Write2FloatSlice(w io.Writer, s [][2]float64) error {
 	if err := binary.Write(w, byteorder, int64(len(s))); err != nil {
 		return err
 	}
@@ -175,7 +177,7 @@ func write2FloatSlice(w io.Writer, s [][2]float64) error {
 	return nil
 }
 
-func read2FloatSlice(r io.Reader) ([][2]float64, error) {
+func Read2FloatSlice(r io.Reader) ([][2]float64, error) {
 	var num int64
 	if err := binary.Read(r, byteorder, &num); err != nil {
 		return nil, err
@@ -192,7 +194,7 @@ func read2FloatSlice(r io.Reader) ([][2]float64, error) {
 	return s, nil
 }
 
-func writeIntSlice(w io.Writer, s []int) error {
+func WriteIntSlice(w io.Writer, s []int) error {
 	if err := binary.Write(w, byteorder, int64(len(s))); err != nil {
 		return err
 	}
@@ -204,7 +206,7 @@ func writeIntSlice(w io.Writer, s []int) error {
 	return nil
 }
 
-func readIntSlice(r io.Reader) ([]int, error) {
+func ReadIntSlice(r io.Reader) ([]int, error) {
 	var num int64
 	if err := binary.Read(r, byteorder, &num); err != nil {
 		return nil, err

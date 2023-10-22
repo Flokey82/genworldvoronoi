@@ -1,28 +1,30 @@
-package genworldvoronoi
+package spheremesh
 
 import (
 	"io"
+
+	"github.com/Flokey82/genworldvoronoi/various"
 )
 
-// writeTo writes the mesh to the given writer.
-func (m *SphereMesh) writeTo(w io.Writer) error {
+// WriteTo writes the mesh to the given writer.
+func (m *SphereMesh) WriteTo(w io.Writer) error {
 	// Write the XYZ coordinates.
-	if err := writeFloatSlice(w, m.XYZ); err != nil {
+	if err := various.WriteFloatSlice(w, m.XYZ); err != nil {
 		return err
 	}
 
 	// Write the LatLon coordinates.
-	if err := write2FloatSlice(w, m.LatLon); err != nil {
+	if err := various.Write2FloatSlice(w, m.LatLon); err != nil {
 		return err
 	}
 
 	// Write the triangle XYZ coordinates.
-	if err := writeFloatSlice(w, m.TriXYZ); err != nil {
+	if err := various.WriteFloatSlice(w, m.TriXYZ); err != nil {
 		return err
 	}
 
 	// Write the triangle LatLon coordinates.
-	if err := write2FloatSlice(w, m.TriLatLon); err != nil {
+	if err := various.Write2FloatSlice(w, m.TriLatLon); err != nil {
 		return err
 	}
 
@@ -30,28 +32,28 @@ func (m *SphereMesh) writeTo(w io.Writer) error {
 	return m.TriangleMesh.writeTo(w)
 }
 
-// readSphereMesh reads a sphere mesh from the given reader.
-func readSphereMesh(r io.Reader) (*SphereMesh, error) {
+// ReadSphereMesh reads a sphere mesh from the given reader.
+func ReadSphereMesh(r io.Reader) (*SphereMesh, error) {
 	// Read the XYZ coordinates.
-	xyz, err := readFloatSlice(r)
+	xyz, err := various.ReadFloatSlice(r)
 	if err != nil {
 		return nil, err
 	}
 
 	// Read the LatLon coordinates.
-	latLon, err := read2FloatSlice(r)
+	latLon, err := various.Read2FloatSlice(r)
 	if err != nil {
 		return nil, err
 	}
 
 	// Read the triangle XYZ coordinates.
-	triXYZ, err := readFloatSlice(r)
+	triXYZ, err := various.ReadFloatSlice(r)
 	if err != nil {
 		return nil, err
 	}
 
 	// Read the triangle LatLon coordinates.
-	triLatLon, err := read2FloatSlice(r)
+	triLatLon, err := various.Read2FloatSlice(r)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +70,7 @@ func readSphereMesh(r io.Reader) (*SphereMesh, error) {
 		LatLon:       latLon,
 		TriXYZ:       triXYZ,
 		TriLatLon:    triLatLon,
-		regQuadTree:  newQuadTreeFromLatLon(latLon),
-		triQuadTree:  newQuadTreeFromLatLon(triLatLon),
+		RegQuadTree:  NewQuadTreeFromLatLon(latLon),
+		TriQuadTree:  NewQuadTreeFromLatLon(triLatLon),
 	}, nil
 }

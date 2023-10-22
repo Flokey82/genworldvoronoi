@@ -14,7 +14,7 @@ import (
 // https://forhinhexes.blogspot.com/search/label/Currents
 // https://github.com/FreezeDriedMangos/realistic-planet-generation-and-simulation
 func (m *Geo) assignOceanCurrents() {
-	regCurrentVec := make([][2]float64, m.SphereMesh.numRegions)
+	regCurrentVec := make([][2]float64, m.SphereMesh.NumRegions)
 
 	// Let's calculate the ocean currents.
 	// Build the region to region neighbor vectors.
@@ -186,7 +186,7 @@ func (m *Geo) assignOceanCurrents() {
 
 	// Reinforce the primary currents.
 	m.seedOceanCurrents(regCurrentVec)
-	for r := 0; r < m.SphereMesh.numRegions; r++ {
+	for r := 0; r < m.SphereMesh.NumRegions; r++ {
 		// Check if we deflected the current vector.
 		regCurrentVec[r] = deflectAndSplit(r, false)
 	}
@@ -200,7 +200,7 @@ func (m *Geo) assignOceanCurrents() {
 			// Calculate the pressure in each ocean region.
 			regPressure = m.calcCurrentPressure(regCurrentVec)
 			// Reinforce the primary currents.
-			for r := 0; r < m.mesh.numRegions; r++ {
+			for r := 0; r < m.mesh.NumRegions; r++ {
 				// Skip elevation above sea level.
 				if m.Elevation[r] > 0 {
 					continue
@@ -271,7 +271,7 @@ func (m *Geo) assignOceanCurrentsInflowOutflow() {
 	// We start off by setting the primary ocean current vectors and then iterate
 	// over the regions to calculate the inflow and outflow vectors, depending
 	// on the pressure in the region.
-	regCurrentVec := make([][2]float64, m.SphereMesh.numRegions)
+	regCurrentVec := make([][2]float64, m.SphereMesh.NumRegions)
 
 	// Build the region to region neighbor vectors.
 	regToRegNeighborVec := m.getRegionToNeighborVec()
@@ -285,7 +285,7 @@ func (m *Geo) assignOceanCurrentsInflowOutflow() {
 		regPressure := m.calcCurrentPressure(regCurrentVec)
 
 		// Calculate the inflow and outflow vectors based on the pressure difference.
-		for reg := 0; reg < m.SphereMesh.numRegions; reg++ {
+		for reg := 0; reg < m.SphereMesh.NumRegions; reg++ {
 			// If the region is not an ocean region, skip it.
 			if m.Elevation[reg] > 0 {
 				continue
@@ -362,7 +362,7 @@ func (m *Geo) assignOceanCurrentsInflowOutflow() {
 		}
 
 		// Normalize the current vectors.
-		for reg := 0; reg < m.SphereMesh.numRegions; reg++ {
+		for reg := 0; reg < m.SphereMesh.NumRegions; reg++ {
 			// If the region is not an ocean region, skip it.
 			if m.Elevation[reg] > 0 {
 				continue
@@ -383,8 +383,8 @@ func (m *Geo) calcCurrentPressure(currentVecs [][2]float64) []float64 {
 	// Build the region to region neighbor vectors.
 
 	// TODO: Use the function (but this leads to odd results?????)
-	regToRegNeighborVec := make([]map[int][2]float64, m.SphereMesh.numRegions)
-	for reg := 0; reg < m.SphereMesh.numRegions; reg++ {
+	regToRegNeighborVec := make([]map[int][2]float64, m.SphereMesh.NumRegions)
+	for reg := 0; reg < m.SphereMesh.NumRegions; reg++ {
 		regToRegNeighborVec[reg] = make(map[int][2]float64)
 		for _, neighbor := range m.GetRegNeighbors(reg) {
 			// TODO: This will cause artifacts around +/- 180 degrees.
@@ -393,8 +393,8 @@ func (m *Geo) calcCurrentPressure(currentVecs [][2]float64) []float64 {
 	}
 
 	// Calculate the pressure in each region.
-	pressure := make([]float64, m.SphereMesh.numRegions)
-	for reg := 0; reg < m.SphereMesh.numRegions; reg++ {
+	pressure := make([]float64, m.SphereMesh.NumRegions)
+	for reg := 0; reg < m.SphereMesh.NumRegions; reg++ {
 		// If the region is not an ocean region, skip it.
 		if m.Elevation[reg] > 0 {
 			continue
@@ -440,7 +440,7 @@ func (m *Geo) calcCurrentPressure(currentVecs [][2]float64) []float64 {
 
 func (m *Geo) seedOceanCurrents(currents [][2]float64) {
 	// Seed the ocean currents with the given vectors.
-	for reg := 0; reg < m.SphereMesh.numRegions; reg++ {
+	for reg := 0; reg < m.SphereMesh.NumRegions; reg++ {
 		// If the region is not an ocean region, set the vector to zero.
 		if m.Elevation[reg] > 0 {
 			currents[reg] = [2]float64{0, 0}
@@ -460,8 +460,8 @@ func (m *Geo) seedOceanCurrents(currents [][2]float64) {
 
 func (m *Geo) getRegionToNeighborVec() []map[int][2]float64 {
 	useFancyFunc := false
-	regToNeighborVec := make([]map[int][2]float64, m.SphereMesh.numRegions)
-	for reg := 0; reg < m.SphereMesh.numRegions; reg++ {
+	regToNeighborVec := make([]map[int][2]float64, m.SphereMesh.NumRegions)
+	for reg := 0; reg < m.SphereMesh.NumRegions; reg++ {
 		regToNeighborVec[reg] = make(map[int][2]float64)
 		rLat, rLon := m.LatLon[reg][0], m.LatLon[reg][1]
 		for _, neighbor := range m.GetRegNeighbors(reg) {
@@ -481,7 +481,7 @@ func (m *Geo) getRegionToNeighborVec() []map[int][2]float64 {
 }
 
 func (m *Geo) genOceanCurrents2() {
-	regCurrentVec := make([][2]float64, m.SphereMesh.numRegions)
+	regCurrentVec := make([][2]float64, m.SphereMesh.NumRegions)
 
 	// Seed the ocean currents.
 	m.seedOceanCurrents(regCurrentVec)
@@ -521,7 +521,7 @@ func (m *Geo) genOceanCurrents2() {
 		}
 		return currentVec
 	}
-	newVec := make([][2]float64, m.SphereMesh.numRegions)
+	newVec := make([][2]float64, m.SphereMesh.NumRegions)
 
 	// Loop once so we can see what it looks like.
 	for i := 0; i < 1; i++ {
@@ -550,7 +550,7 @@ func (m *Geo) assignOceanCurrents3() {
 	//for(let l = step / 2; l < 90; l += step) seedLatsBands.push(l)
 
 	// initialize output variable
-	r_currents := make([][2]float64, m.SphereMesh.numRegions)
+	r_currents := make([][2]float64, m.SphereMesh.NumRegions)
 
 	// select seeds. all regions that are "close enough" to the center of a current band becomes a seed
 	var seeds []int
@@ -564,7 +564,7 @@ func (m *Geo) assignOceanCurrents3() {
 		lowLatBand := band[1]
 		//const highLatBand = 75.0 // 67.5
 		//const lowLatBand = 60.0  // 22.5
-		for r := 0; r < m.SphereMesh.numRegions; r++ {
+		for r := 0; r < m.SphereMesh.NumRegions; r++ {
 			if m.Elevation[r] > 0 {
 				continue
 			}
@@ -604,7 +604,7 @@ func (m *Geo) assignOceanCurrents3() {
 		if rgr == -1 || m.Elevation[r] > 0 {
 			continue
 		}
-		for _, sr := range m.SphereMesh.r_circulate_r(outRegs, r) {
+		for _, sr := range m.SphereMesh.R_circulate_r(outRegs, r) {
 			sgr := groups[sr]
 			if sgr == -1 || rgr == sgr || seedSupergroup[rgr] != seedSupergroup[sgr] {
 				continue // if r and sr are in different "bands", aka supergroups, do not merge them
@@ -628,10 +628,10 @@ func (m *Geo) assignOceanCurrents3() {
 	}
 
 	// determine how close each region is to the edge of its group
-	distFromEdge := initRegionSlice(m.SphereMesh.numRegions)
+	distFromEdge := initRegionSlice(m.SphereMesh.NumRegions)
 
-	frontier := make([]int, 0, m.SphereMesh.numRegions)
-	groupmates := make([][]int, m.SphereMesh.numRegions)
+	frontier := make([]int, 0, m.SphereMesh.NumRegions)
+	groupmates := make([][]int, m.SphereMesh.NumRegions)
 	for r, g := range groups {
 		if g != -1 {
 			groupmates[g] = append(groupmates[g], r)
@@ -642,7 +642,7 @@ func (m *Geo) assignOceanCurrents3() {
 		frontier = frontier[:0]
 		groupmatesForSeed := groupmates[seed]
 		for _, r := range groupmatesForSeed {
-			for _, nr := range m.SphereMesh.r_circulate_r(outRegs, r) {
+			for _, nr := range m.SphereMesh.R_circulate_r(outRegs, r) {
 				if groups[nr] != groups[r] {
 					frontier = append(frontier, r)
 					distFromEdge[r] = 0
@@ -654,7 +654,7 @@ func (m *Geo) assignOceanCurrents3() {
 		for fidx := 0; fidx < len(frontier); fidx++ {
 			curr := frontier[fidx]
 			// frontier = frontier[1:]
-			for _, nr := range m.SphereMesh.r_circulate_r(outRegs, curr) {
+			for _, nr := range m.SphereMesh.R_circulate_r(outRegs, curr) {
 				if distFromEdge[nr] < 0 {
 					distFromEdge[nr] = 9999
 				}
@@ -679,7 +679,7 @@ func (m *Geo) assignOceanCurrents3() {
 			for idx := start; idx < end; idx++ {
 				r := groupmatesForSeed[idx]
 				var inwardDirRaw [2]float64
-				for _, nr := range m.SphereMesh.r_circulate_r(outRegs, r) {
+				for _, nr := range m.SphereMesh.R_circulate_r(outRegs, r) {
 					// if this neighbor has a smaller distance to edge, or belongs to a different gyre, the inward dir points away from it (so we add dirFromTo(nr, r), aka the dir away from nr)
 					if groups[nr] != groups[r] {
 						inwardDirRaw = various.Add2(inwardDirRaw, m.dirVecFromToRegs(nr, r))
@@ -720,7 +720,7 @@ func (m *Geo) assignOceanCurrents3() {
 	for i := 0; i < 4; i++ {
 		m.RegionToOceanVec = m.interpolateWindVecs(r_currents, 1)
 		// Reset all vectors that are not in the ocean
-		for r := 0; r < m.SphereMesh.numRegions; r++ {
+		for r := 0; r < m.SphereMesh.NumRegions; r++ {
 			if m.Elevation[r] >= 0 {
 				m.RegionToOceanVec[r][0] = 0.0
 				m.RegionToOceanVec[r][1] = 0.0
@@ -735,14 +735,14 @@ func (m *Geo) assignOceanCurrents3() {
 func (m *BaseObject) bfsMetaVoronoi(seeds []int, includeCondition func(int) bool, forceIncludeIsolatedRegions bool) []int {
 	// Reset the random number generator.
 	m.resetRand()
-	rGroup := initRegionSlice(m.SphereMesh.numRegions)
-	isSeed := make([]bool, m.SphereMesh.numRegions)
+	rGroup := initRegionSlice(m.SphereMesh.NumRegions)
+	isSeed := make([]bool, m.SphereMesh.NumRegions)
 	for _, seed := range seeds {
 		isSeed[seed] = true
 	}
 
 	mesh := m.SphereMesh
-	numRegions := mesh.numRegions
+	numRegions := mesh.NumRegions
 
 	// Initialize the queue for the breadth first search with
 	// the seed regions.
@@ -752,7 +752,7 @@ func (m *BaseObject) bfsMetaVoronoi(seeds []int, includeCondition func(int) bool
 		rGroup[r] = r
 	}
 
-	// Allocate a slice for the output of mesh.r_circulate_r.
+	// Allocate a slice for the output of mesh.R_circulate_r.
 	outRegs := make([]int, 0, 6)
 
 	// Random search adapted from breadth first search.
@@ -761,7 +761,7 @@ func (m *BaseObject) bfsMetaVoronoi(seeds []int, includeCondition func(int) bool
 		pos := queueOut + m.rand.Intn(len(queue)-queueOut)
 		currentReg := queue[pos]
 		queue[pos] = queue[queueOut]
-		for _, nbReg := range mesh.r_circulate_r(outRegs, currentReg) {
+		for _, nbReg := range mesh.R_circulate_r(outRegs, currentReg) {
 			if rGroup[nbReg] >= 0 || !includeCondition(nbReg) {
 				continue
 			}

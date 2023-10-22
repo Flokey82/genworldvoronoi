@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/Flokey82/genworldvoronoi/spheremesh"
 	"github.com/Flokey82/go_gens/vectors"
 )
 
@@ -31,7 +32,7 @@ func newGeo(seed int64, cfg *GeoConfig) (*Geo, error) {
 	if cfg == nil {
 		cfg = NewGeoConfig()
 	}
-	result, err := MakeSphere(seed, cfg.NumPoints, cfg.Jitter)
+	result, err := spheremesh.MakeSphere(seed, cfg.NumPoints, cfg.Jitter)
 	if err != nil {
 		return nil, err
 	}
@@ -40,10 +41,10 @@ func newGeo(seed int64, cfg *GeoConfig) (*Geo, error) {
 		Calendar:             NewCalendar(),
 		PlateIsOcean:         make(map[int]bool),
 		BaseObject:           newBaseObject(seed, result),
-		Resources:            newResources(result.numRegions),
-		RegionToWindVec:      make([][2]float64, result.numRegions),
-		RegionToWindVecLocal: make([][2]float64, result.numRegions),
-		RegionToOceanVec:     make([][2]float64, result.numRegions),
+		Resources:            newResources(result.NumRegions),
+		RegionToWindVec:      make([][2]float64, result.NumRegions),
+		RegionToWindVecLocal: make([][2]float64, result.NumRegions),
+		RegionToOceanVec:     make([][2]float64, result.NumRegions),
 		QuadGeom:             NewQuadGeometry(result.TriangleMesh),
 	}, nil
 }
@@ -158,15 +159,15 @@ func (m *Geo) GetCustomContour(f func(idxA, idxB int) bool) [][]int {
 	var edges [][2]int
 	seen := make(map[[2]int]bool)
 	for i := 0; i < len(m.SphereMesh.Halfedges); i++ {
-		idxA := m.SphereMesh.s_begin_r(i)
-		idxB := m.SphereMesh.s_end_r(i)
+		idxA := m.SphereMesh.S_begin_r(i)
+		idxB := m.SphereMesh.S_end_r(i)
 		var vx [2]int
 		if idxA > idxB {
-			vx[0] = m.SphereMesh.s_outer_t(i)
-			vx[1] = m.SphereMesh.s_inner_t(i)
+			vx[0] = m.SphereMesh.S_outer_t(i)
+			vx[1] = m.SphereMesh.S_inner_t(i)
 		} else {
-			vx[0] = m.SphereMesh.s_inner_t(i)
-			vx[1] = m.SphereMesh.s_outer_t(i)
+			vx[0] = m.SphereMesh.S_inner_t(i)
+			vx[1] = m.SphereMesh.S_outer_t(i)
 		}
 		if seen[vx] {
 			continue
@@ -183,9 +184,9 @@ func (m *Geo) GetCustomContour(f func(idxA, idxB int) bool) [][]int {
 // getVectorSortOrder returns a list of regions sorted by their vector order.
 // This allows us to sort regions "up wind" or "down wind", for example.
 func (m *Geo) getVectorSortOrder(vecs [][2]float64, reverse bool) ([]float64, []int) {
-	orderedRegs := make([]int, m.SphereMesh.numRegions) // sorted regions
-	regSort := make([]float64, m.SphereMesh.numRegions) // numeric sort order
-	for r := 0; r < m.SphereMesh.numRegions; r++ {
+	orderedRegs := make([]int, m.SphereMesh.NumRegions) // sorted regions
+	regSort := make([]float64, m.SphereMesh.NumRegions) // numeric sort order
+	for r := 0; r < m.SphereMesh.NumRegions; r++ {
 		lat := (m.LatLon[r][0]) * vecs[r][1] / math.Abs(vecs[r][1])
 		lon := (m.LatLon[r][1]) * vecs[r][0] / math.Abs(vecs[r][0])
 		regSort[r] = (lat + lon)

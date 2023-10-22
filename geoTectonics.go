@@ -15,7 +15,7 @@ import (
 func (m *Geo) generatePlates() {
 	m.resetRand()
 	mesh := m.SphereMesh
-	regPlate := make([]int, mesh.numRegions)
+	regPlate := make([]int, mesh.NumRegions)
 	for i := range regPlate {
 		regPlate[i] = -1
 	}
@@ -44,7 +44,7 @@ func (m *Geo) generatePlates() {
 		pos := queueOut + m.rand.Intn(len(queue)-queueOut)
 		currentReg := queue[pos]
 		queue[pos] = queue[queueOut]
-		outReg = mesh.r_circulate_r(outReg, currentReg)
+		outReg = mesh.R_circulate_r(outReg, currentReg)
 		for _, nbReg := range outReg {
 			if regPlate[nbReg] == -1 {
 				regPlate[nbReg] = regPlate[currentReg]
@@ -55,9 +55,9 @@ func (m *Geo) generatePlates() {
 
 	// Assign a random movement vector for each plate
 	regXYZ := m.XYZ
-	plateVectors := make([]vectors.Vec3, mesh.numRegions)
+	plateVectors := make([]vectors.Vec3, mesh.NumRegions)
 	for _, centerReg := range plateRegs {
-		nbReg := mesh.r_circulate_r(outReg, centerReg)[0]
+		nbReg := mesh.R_circulate_r(outReg, centerReg)[0]
 		p0 := various.ConvToVec3(regXYZ[3*centerReg : 3*centerReg+3])
 		p1 := various.ConvToVec3(regXYZ[3*nbReg : 3*nbReg+3])
 		plateVectors[centerReg] = vectors.Sub3(p1, p0).Normalize()
@@ -100,7 +100,7 @@ func (m *Geo) findCollisions() ([]int, []int, []int, map[int]float64) {
 	plateIsOcean := m.PlateIsOcean
 	regPlate := m.RegionToPlate
 	plateVectors := m.PlateToVector
-	numRegions := m.SphereMesh.numRegions
+	numRegions := m.SphereMesh.NumRegions
 	compressionReg := make(map[int]float64)
 
 	// Initialize the compression measure to either the largest or smallest
@@ -123,7 +123,7 @@ func (m *Geo) findCollisions() ([]int, []int, []int, map[int]float64) {
 	for currentReg := 0; currentReg < numRegions; currentReg++ {
 		bestCompression = inf
 		bestReg = -1
-		rOut = m.SphereMesh.r_circulate_r(rOut, currentReg)
+		rOut = m.SphereMesh.R_circulate_r(rOut, currentReg)
 		for _, nbReg := range rOut {
 			if regPlate[currentReg] != regPlate[nbReg] {
 				// sometimes I regret storing xyz in a compact array...
@@ -219,7 +219,7 @@ func (m *BaseObject) propagateCompression(compression map[int]float64) []float64
 	// normalize the compression value, also we need to copy
 	// the compression values into a slice so that we can
 	// modify them and queue them up.
-	cmp := make([]float64, m.SphereMesh.numRegions)
+	cmp := make([]float64, m.SphereMesh.NumRegions)
 	var cmpSeeds []int
 	for r, comp := range compression {
 		cmp[r] = comp
@@ -249,7 +249,7 @@ func (m *BaseObject) propagateCompression(compression map[int]float64) []float64
 	for queue.Len() > 0 {
 		currentReg := queue.Remove(queue.Front()).(int)
 		currentComp := cmp[currentReg]
-		for _, nbReg := range m.SphereMesh.r_circulate_r(outRegs, currentReg) {
+		for _, nbReg := range m.SphereMesh.R_circulate_r(outRegs, currentReg) {
 			// The compression value diminishes over distance.
 			// This should be using the inverse square law, but
 			// we use a linear function instead.
@@ -350,7 +350,7 @@ func (m *Geo) assignRegionElevation() {
 	na := 1.0 / 1.0
 	nb := 1.0 / 1.0
 	nc := 1.0 / 1.0
-	for r := 0; r < m.SphereMesh.numRegions; r++ {
+	for r := 0; r < m.SphereMesh.NumRegions; r++ {
 		a := math.Pow(rDistanceA[r], na) + epsilon // Distance from mountains
 		b := math.Pow(rDistanceB[r], nb) + epsilon // Distance from oceans
 		c := math.Pow(rDistanceC[r], nc) + epsilon // Distance from coastline
@@ -382,7 +382,7 @@ func (m *Geo) assignRegionElevation() {
 		// Add a cosine based on the distance to the closest mountain.
 		// This is to simulate the effect of the mountain ridges.
 		// NOTE: This looks very unnatural. :(
-		for r := 0; r < m.SphereMesh.numRegions; r++ {
+		for r := 0; r < m.SphereMesh.NumRegions; r++ {
 			if m.Elevation[r] < 0 {
 				continue
 			}
@@ -404,11 +404,11 @@ func (m *Geo) assignRegionElevation() {
 
 	// Apply noise to the elevation values.
 	if m.GeoConfig.MultiplyNoise {
-		for r := 0; r < m.SphereMesh.numRegions; r++ {
+		for r := 0; r < m.SphereMesh.NumRegions; r++ {
 			m.Elevation[r] *= m.noise.Eval3(r_xyz[3*r], r_xyz[3*r+1], r_xyz[3*r+2])
 		}
 	} else {
-		for r := 0; r < m.SphereMesh.numRegions; r++ {
+		for r := 0; r < m.SphereMesh.NumRegions; r++ {
 			m.Elevation[r] += m.noise.Eval3(r_xyz[3*r], r_xyz[3*r+1], r_xyz[3*r+2])*2 - 1 // Noise from -1.0 to 1.0
 		}
 	}
@@ -417,7 +417,7 @@ func (m *Geo) assignRegionElevation() {
 	// TODO: Protect against division by zero.
 	if m.GeoConfig.NormalizeElevation {
 		minElevation, maxElevation := minMax(m.Elevation)
-		for r := 0; r < m.SphereMesh.numRegions; r++ {
+		for r := 0; r < m.SphereMesh.NumRegions; r++ {
 			if m.Elevation[r] < 0 {
 				m.Elevation[r] /= math.Abs(minElevation)
 			} else {

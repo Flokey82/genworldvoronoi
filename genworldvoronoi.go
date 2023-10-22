@@ -3,12 +3,6 @@
 // And: https://github.com/redblobgames/1843-planet-generation
 package genworldvoronoi
 
-import (
-	"encoding/binary"
-)
-
-var byteorder = binary.LittleEndian
-
 type Map struct {
 	*Geo // Geography / geology
 	*Civ // Civilization

@@ -25,9 +25,9 @@ func newBio(geo *Geo, cfg *BioConfig) *Bio {
 	return &Bio{
 		BioConfig:              cfg,
 		Geo:                    geo,
-		GrowthDays:             make([]int, geo.SphereMesh.numRegions),
-		GrowthInsolation:       make([]float64, geo.SphereMesh.numRegions),
-		SpeciesRegions:         make([]int, geo.SphereMesh.numRegions),
+		GrowthDays:             make([]int, geo.SphereMesh.NumRegions),
+		GrowthInsolation:       make([]float64, geo.SphereMesh.NumRegions),
+		SpeciesRegions:         make([]int, geo.SphereMesh.NumRegions),
 		SpeciesFamilyToRegions: make(map[SpeciesFamily][]int),
 		rand:                   rand.New(rand.NewSource(geo.Seed)),
 	}
@@ -78,9 +78,9 @@ func (b *Bio) calcGrowthPeriod() {
 	useGoRoutines := true
 	// Use go routines to process a chunk of regions at a time.
 	if useGoRoutines {
-		kickOffChunkWorkers(b.SphereMesh.numRegions, b.calcGrowthPeriodChunk)
+		kickOffChunkWorkers(b.SphereMesh.NumRegions, b.calcGrowthPeriodChunk)
 	} else {
-		b.calcGrowthPeriodChunk(0, b.SphereMesh.numRegions)
+		b.calcGrowthPeriodChunk(0, b.SphereMesh.NumRegions)
 	}
 	log.Println("calcGrowthPeriod took", time.Since(start))
 }

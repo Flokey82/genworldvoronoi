@@ -4,8 +4,11 @@ import (
 	"encoding/binary"
 	"io"
 
+	"github.com/Flokey82/genworldvoronoi/various"
 	"github.com/ojrac/opensimplex-go"
 )
+
+var byteorder = binary.LittleEndian
 
 func (n *Noise) writeTo(w io.Writer) error {
 	// Write the number of octaves, persistence, and amplitudes, as well as the
@@ -21,7 +24,7 @@ func (n *Noise) writeTo(w io.Writer) error {
 	}
 
 	// Write the amplitudes.
-	if err := writeFloatSlice(w, n.Amplitudes); err != nil {
+	if err := various.WriteFloatSlice(w, n.Amplitudes); err != nil {
 		return err
 	}
 	return nil
@@ -43,7 +46,7 @@ func readNoise(r io.Reader) (*Noise, error) {
 	}
 
 	// Read the amplitudes.
-	amps, err := readFloatSlice(r)
+	amps, err := various.ReadFloatSlice(r)
 	if err != nil {
 		return nil, err
 	}

@@ -1,4 +1,4 @@
-package genworldvoronoi
+package spheremesh
 
 import (
 	"math"
@@ -140,7 +140,7 @@ func MakeSphere(seed int64, numPoints int, jitter float64) (*SphereMesh, error) 
 		// This calculates x,y,z from the spherical coordinates lat,lon.
 		xyz = append(xyz, various.LatLonToCartesian(latlong[r], latlong[r+1])...)
 	}
-	return newSphereMesh(latLon, xyz, true)
+	return NewSphereMesh(latLon, xyz, true)
 }
 
 type SphereMesh struct {
@@ -149,11 +149,11 @@ type SphereMesh struct {
 	LatLon      [][2]float64      // Region latitude and longitude
 	TriXYZ      []float64         // Triangle xyz coordinates
 	TriLatLon   [][2]float64      // Triangle latitude and longitude
-	regQuadTree *geoquad.QuadTree // Quadtree for region lookup
-	triQuadTree *geoquad.QuadTree // Quadtree for triangle lookup
+	RegQuadTree *geoquad.QuadTree // Quadtree for region lookup
+	TriQuadTree *geoquad.QuadTree // Quadtree for triangle lookup
 }
 
-func newSphereMesh(latLon [][2]float64, xyz []float64, addSouthPole bool) (*SphereMesh, error) {
+func NewSphereMesh(latLon [][2]float64, xyz []float64, addSouthPole bool) (*SphereMesh, error) {
 	// Map the sphere on a plane using the stereographic projection.
 	xy := stereographicProjection(xyz)
 
@@ -183,12 +183,12 @@ func newSphereMesh(latLon [][2]float64, xyz []float64, addSouthPole bool) (*Sphe
 	}
 
 	// Iterate over all triangles and generates the centroids for each.
-	tXYZ := make([]float64, 0, m.numTriangles*3)
-	tLatLon := make([][2]float64, 0, m.numTriangles)
-	for t := 0; t < m.numTriangles; t++ {
-		a := m.s_begin_r(3 * t)
-		b := m.s_begin_r(3*t + 1)
-		c := m.s_begin_r(3*t + 2)
+	tXYZ := make([]float64, 0, m.NumTriangles*3)
+	tLatLon := make([][2]float64, 0, m.NumTriangles)
+	for t := 0; t < m.NumTriangles; t++ {
+		a := m.S_begin_r(3 * t)
+		b := m.S_begin_r(3*t + 1)
+		c := m.S_begin_r(3*t + 2)
 		v3 := various.GetCentroidOfTriangle(
 			m.XYZ[3*a:3*a+3],
 			m.XYZ[3*b:3*b+3],
@@ -201,15 +201,15 @@ func newSphereMesh(latLon [][2]float64, xyz []float64, addSouthPole bool) (*Sphe
 	m.TriXYZ = tXYZ
 
 	// Create a quadtree for region lookup.
-	m.regQuadTree = newQuadTreeFromLatLon(m.LatLon)
+	m.RegQuadTree = NewQuadTreeFromLatLon(m.LatLon)
 
 	// Create a quadtree for triangle lookup.
-	m.triQuadTree = newQuadTreeFromLatLon(m.TriLatLon)
+	m.TriQuadTree = NewQuadTreeFromLatLon(m.TriLatLon)
 
 	return m, nil
 }
 
-func newQuadTreeFromLatLon(latLon [][2]float64) *geoquad.QuadTree {
+func NewQuadTreeFromLatLon(latLon [][2]float64) *geoquad.QuadTree {
 	var points []geoquad.Point
 	for i := range latLon {
 		ll := latLon[i]
@@ -233,5 +233,5 @@ func (m *SphereMesh) MakeCoarseSphereMesh(step int) (*SphereMesh, error) {
 	}
 
 	// Now adjust the indices of the triangles
-	return newSphereMesh(latLon, xyz, true)
+	return NewSphereMesh(latLon, xyz, true)
 }
