@@ -8,6 +8,8 @@ import (
 	"github.com/ojrac/opensimplex-go"
 )
 
+var byteorder = binary.LittleEndian
+
 func (n *Noise) writeTo(w io.Writer) error {
 	// Write the number of octaves, persistence, and amplitudes, as well as the
 	// seed. From this, we can reconstruct the noise function.

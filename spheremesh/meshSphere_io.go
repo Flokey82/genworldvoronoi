@@ -1,4 +1,4 @@
-package genworldvoronoi
+package spheremesh
 
 import (
 	"io"
@@ -6,8 +6,8 @@ import (
 	"github.com/Flokey82/genworldvoronoi/various"
 )
 
-// writeTo writes the mesh to the given writer.
-func (m *SphereMesh) writeTo(w io.Writer) error {
+// WriteTo writes the mesh to the given writer.
+func (m *SphereMesh) WriteTo(w io.Writer) error {
 	// Write the XYZ coordinates.
 	if err := various.WriteFloatSlice(w, m.XYZ); err != nil {
 		return err
@@ -32,8 +32,8 @@ func (m *SphereMesh) writeTo(w io.Writer) error {
 	return m.TriangleMesh.writeTo(w)
 }
 
-// readSphereMesh reads a sphere mesh from the given reader.
-func readSphereMesh(r io.Reader) (*SphereMesh, error) {
+// ReadSphereMesh reads a sphere mesh from the given reader.
+func ReadSphereMesh(r io.Reader) (*SphereMesh, error) {
 	// Read the XYZ coordinates.
 	xyz, err := various.ReadFloatSlice(r)
 	if err != nil {
@@ -70,7 +70,7 @@ func readSphereMesh(r io.Reader) (*SphereMesh, error) {
 		LatLon:       latLon,
 		TriXYZ:       triXYZ,
 		TriLatLon:    triLatLon,
-		regQuadTree:  newQuadTreeFromLatLon(latLon),
-		triQuadTree:  newQuadTreeFromLatLon(triLatLon),
+		RegQuadTree:  NewQuadTreeFromLatLon(latLon),
+		TriQuadTree:  NewQuadTreeFromLatLon(triLatLon),
 	}, nil
 }

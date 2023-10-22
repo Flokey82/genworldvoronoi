@@ -59,7 +59,7 @@ const (
 // by the topography / elevation changes. Please note that the code for local winds is incomplete.
 func (m *Geo) assignWindVectors() {
 	// Based on latitude of each region, we calculate the wind vector.
-	regWindVec := make([][2]float64, m.numRegions)
+	regWindVec := make([][2]float64, m.NumRegions)
 	chunkProcessorWind := func(start, end int) {
 		for r := start; r < end; r++ {
 			regWindVec[r] = getGlobalWindVector(m.LatLon[r][0])
@@ -69,10 +69,10 @@ func (m *Geo) assignWindVectors() {
 	useGoRoutines := true
 	if useGoRoutines {
 		// Use goroutines to calculate wind vectors.
-		kickOffChunkWorkers(m.numRegions, chunkProcessorWind)
+		kickOffChunkWorkers(m.NumRegions, chunkProcessorWind)
 	} else {
 		// Use single threaded calculation of wind vectors.
-		chunkProcessorWind(0, m.numRegions)
+		chunkProcessorWind(0, m.NumRegions)
 	}
 
 	// Select the mode for calculating local wind vectors.
@@ -82,7 +82,7 @@ func (m *Geo) assignWindVectors() {
 	var chunkProcessor func(start, end int)
 
 	// Local wind vectors.
-	regWindVecLocal := make([][2]float64, m.numRegions)
+	regWindVecLocal := make([][2]float64, m.NumRegions)
 
 	// NOTE: This is currently overridden by the altitude changes below.
 	_, maxElev := minMax(m.Elevation)
@@ -99,7 +99,7 @@ func (m *Geo) assignWindVectors() {
 
 		// Determine all sea regions.
 		var seaRegs []int
-		for r := 0; r < m.SphereMesh.numRegions; r++ {
+		for r := 0; r < m.SphereMesh.NumRegions; r++ {
 			if m.Elevation[r] <= 0 {
 				seaRegs = append(seaRegs, r)
 			}
@@ -122,7 +122,7 @@ func (m *Geo) assignWindVectors() {
 					X: regVec[0],
 					Y: regVec[1],
 				})
-				for _, nb := range m.SphereMesh.r_circulate_r(outRegs, r) {
+				for _, nb := range m.SphereMesh.R_circulate_r(outRegs, r) {
 					nbLat := m.LatLon[nb][0]
 					nbLon := m.LatLon[nb][1]
 					tempNb := getMeanAnnualTemp(nbLat) - getTempFalloffFromAltitude(maxAltitudeFactor*m.Elevation[nb]/maxElev)
@@ -173,7 +173,7 @@ func (m *Geo) assignWindVectors() {
 				// Calculate Vector between r and wind_r.
 				vb := vectors.Sub3(rwXYZ, regXYZ).Normalize()
 
-				for _, nbReg := range m.SphereMesh.r_circulate_r(outRegs, r) {
+				for _, nbReg := range m.SphereMesh.R_circulate_r(outRegs, r) {
 					// if is_sea[neighbor_r] {
 					//	continue
 					// }
@@ -241,7 +241,7 @@ func (m *Geo) assignWindVectors() {
 				}
 
 				var acc [2]float64
-				for _, nr := range m.SphereMesh.r_circulate_r(outRegs, r) {
+				for _, nr := range m.SphereMesh.R_circulate_r(outRegs, r) {
 					// Magnitude will be positive if the neighbor is warmer than the current region, which will
 					// result in a wind vector pointing towards the neighbor.
 					magnitude := (m.getRegTemperature(nr, maxElev) - m.getRegTemperature(r, maxElev))
@@ -259,9 +259,9 @@ func (m *Geo) assignWindVectors() {
 
 	if useGoRoutines {
 		// Split the work into chunks and process them in parallel.
-		kickOffChunkWorkers(m.SphereMesh.numRegions, chunkProcessor)
+		kickOffChunkWorkers(m.SphereMesh.NumRegions, chunkProcessor)
 	} else {
-		chunkProcessor(0, m.SphereMesh.numRegions)
+		chunkProcessor(0, m.SphereMesh.NumRegions)
 	}
 
 	// Average wind vectors using neighbor vectors.
@@ -278,14 +278,14 @@ func (m *Geo) interpolateWindVecs(in [][2]float64, steps int) [][2]float64 {
 	// Average wind vectors using neighbor vectors.
 	outRegs := make([]int, 0, 8)
 	for i := 0; i < steps; i++ {
-		regWindVecInterpolated := make([][2]float64, m.SphereMesh.numRegions)
+		regWindVecInterpolated := make([][2]float64, m.SphereMesh.NumRegions)
 		for r := range regWindVecInterpolated {
 			// Copy the original wind vector.
 			resVec := in[r]
 
 			// Add the wind vectors of the neighbor regions.
 			var count int
-			for _, nbReg := range m.SphereMesh.r_circulate_r(outRegs, r) {
+			for _, nbReg := range m.SphereMesh.R_circulate_r(outRegs, r) {
 				resVec[0] += in[nbReg][0]
 				resVec[1] += in[nbReg][1]
 				count++

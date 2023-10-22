@@ -70,11 +70,11 @@ func (m *Map) GetHeightMapTile(x, y, zoom int) []byte {
 		// contains the point.
 		minDistIndex := -1
 
-		closestReg, ok := m.regQuadTree.FindNearestNeighbor(geoquad.Point{Lat: latlon[0], Lon: latlon[1]})
+		closestReg, ok := m.RegQuadTree.FindNearestNeighbor(geoquad.Point{Lat: latlon[0], Lon: latlon[1]})
 		if !ok {
 			log.Println("no closest point found")
 			// Find the closest triangle center.
-			for tri := 0; tri < m.SphereMesh.numTriangles; tri++ {
+			for tri := 0; tri < m.SphereMesh.NumTriangles; tri++ {
 				//for _, tri := range tris {
 				// for speed, we just use the euclidean distance here.
 				var dist float64
@@ -88,7 +88,7 @@ func (m *Map) GetHeightMapTile(x, y, zoom int) []byte {
 				if dist < tbbWidth*tbbHeight {
 					minDistIndex = tri
 
-					regs = m.SphereMesh.t_circulate_r(outTri, tri)
+					regs = m.SphereMesh.T_circulate_r(outTri, tri)
 
 					// Check if the point is inside the triangle.
 					if inTriangleMercator(m.LatLon[regs[0]], m.LatLon[regs[1]], m.LatLon[regs[2]], latlon) {
@@ -98,9 +98,9 @@ func (m *Map) GetHeightMapTile(x, y, zoom int) []byte {
 			}
 		} else {
 			cReg := closestReg.Data.(int)
-			for _, tri := range m.SphereMesh.r_circulate_t(outTri, cReg) {
+			for _, tri := range m.SphereMesh.R_circulate_t(outTri, cReg) {
 				// Check if the point is inside the triangle.
-				regs = m.SphereMesh.t_circulate_r(outRegs, tri)
+				regs = m.SphereMesh.T_circulate_r(outRegs, tri)
 				if inTriangleMercator(m.LatLon[regs[0]], m.LatLon[regs[1]], m.LatLon[regs[2]], latlon) {
 					minDistIndex = tri
 					break
@@ -170,7 +170,7 @@ func (m *Map) Get3DTile(x, y, zoom int) *Tile3D {
 	// Collect min max elevation of all regions in the tile.
 	var minElev, maxElev float64
 	var regionsInBounds []int
-	for i := 0; i < m.SphereMesh.numRegions; i++ {
+	for i := 0; i < m.SphereMesh.NumRegions; i++ {
 		rLat := m.LatLon[i][0]
 		rLon := m.LatLon[i][1]
 		if isLatLonInBounds(rLat, rLon) {
@@ -243,13 +243,13 @@ func (m *Map) Get3DTile(x, y, zoom int) *Tile3D {
 	// Now we have to figure out which triangles we have in the tile.
 	var trianglesInBounds []int
 	outTri := make([]int, 0, 3)
-	for i := 0; i < m.SphereMesh.numTriangles; i++ {
+	for i := 0; i < m.SphereMesh.NumTriangles; i++ {
 		triLat := m.TriLatLon[i][0]
 		triLon := m.TriLatLon[i][1]
 		if isLatLonInBounds(triLat, triLon) {
 			// Check if all three vertices are in the tile.
 			allInBounds := true
-			for _, r := range m.SphereMesh.t_circulate_r(outTri, i) {
+			for _, r := range m.SphereMesh.T_circulate_r(outTri, i) {
 				if _, ok := regionToIndex[r]; !ok {
 					allInBounds = false
 					break
@@ -270,7 +270,7 @@ func (m *Map) Get3DTile(x, y, zoom int) *Tile3D {
 	for i := 0; i < len(trianglesInBounds); i++ {
 		tri := trianglesInBounds[i]
 		// Get the three regions that make up the triangle.
-		regionIndices := m.SphereMesh.t_circulate_r(outTri, tri)
+		regionIndices := m.SphereMesh.T_circulate_r(outTri, tri)
 		// Get the index of the triangle in the tile.
 		triIndex := i * 3
 		// Get the indices of the three regions in the tile.
@@ -298,7 +298,7 @@ func (m *Map) Get3DTile(x, y, zoom int) *Tile3D {
 
 	for _, r := range regionsInBounds {
 		// Get the neighbors of the region.
-		neighbors := m.SphereMesh.r_circulate_r(nil, r)
+		neighbors := m.SphereMesh.R_circulate_r(nil, r)
 		// Check if all the neighbors are in the tile.
 		allInBounds := true
 		for _, n := range neighbors {

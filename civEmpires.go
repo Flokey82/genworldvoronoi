@@ -110,7 +110,7 @@ func (m *Civ) expandEmpires() {
 	// For this we will have to copy the city states and
 	// set new territories.
 
-	m.RegionToEmpire = initRegionSlice(m.SphereMesh.numRegions)
+	m.RegionToEmpire = initRegionSlice(m.SphereMesh.NumRegions)
 	for i, t := range m.RegionToCityState {
 		cIdx, ok := cityIDToIndex[t]
 		if !ok {

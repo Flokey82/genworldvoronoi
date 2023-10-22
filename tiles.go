@@ -204,7 +204,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 	x, y = wrapTileCoordinates(x, y, zoom)
 
 	// Calculate an approximation of the distance between regions.
-	distRegion := math.Sqrt(4 * math.Pi / float64(m.numRegions))
+	distRegion := math.Sqrt(4 * math.Pi / float64(m.NumRegions))
 
 	// Convert into degrees.
 	distRegionDeg := distRegion * 180 / math.Pi
@@ -244,7 +244,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 
 	// Get all regions that are within the tile bounds.
 	var inQuadTreeRegs []int
-	qds := mesh.regQuadTree.FindPointsInRect(geoquad.Rect{
+	qds := mesh.RegQuadTree.FindPointsInRect(geoquad.Rect{
 		MinLat: la1Margin,
 		MaxLat: la2Margin,
 		MinLon: lo1Margin,
@@ -263,7 +263,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 		rLon := mesh.LatLon[i][1]
 		// Draw the path that outlines the region.
 		var path [][2]float64
-		for _, j := range mesh.r_circulate_t(out_t, i) {
+		for _, j := range mesh.R_circulate_t(out_t, i) {
 			tLat := mesh.TriLatLon[j][0]
 			tLon := mesh.TriLatLon[j][1]
 
@@ -317,7 +317,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 	if drawShadows {
 		// Get all triangles that are within the tile bounds.
 		var inQuadTreeTris []int
-		qds = m.triQuadTree.FindPointsInRect(geoquad.Rect{
+		qds = m.TriQuadTree.FindPointsInRect(geoquad.Rect{
 			MinLat: la1Margin,
 			MaxLat: la2Margin,
 			MinLon: lo1Margin,
@@ -347,7 +347,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 
 			// Draw the path that outlines the region.
 			var path [][2]float64
-			for _, j := range m.t_circulate_r(out_t, i) {
+			for _, j := range m.T_circulate_r(out_t, i) {
 				rLat := m.LatLon[j][0]
 				rLon := m.LatLon[j][1]
 
@@ -385,7 +385,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 			}
 
 			// Get the 3 regions of the triangle.
-			regions := m.t_circulate_r(out_t, i)
+			regions := m.T_circulate_r(out_t, i)
 
 			// Get the normal of the triangle.
 			normal := m.regTriNormal(i, regions)
@@ -905,7 +905,7 @@ func (m *Map) GetGeoJSONCities(la1, lo1, la2, lo2 float64, zoom int) ([]byte, er
 
 	// Get the last settled year.
 	_, maxSettled := minMax64(m.Settled)
-	distRegion := math.Sqrt(4 * math.Pi / float64(m.numRegions))
+	distRegion := math.Sqrt(4 * math.Pi / float64(m.NumRegions))
 
 	biomeFunc := m.getRegWhittakerModBiomeFunc()
 	_, maxElev := minMax(m.Elevation)

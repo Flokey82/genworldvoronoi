@@ -22,7 +22,7 @@ func (m *BaseObject) assignWaterbodies() {
 // a value of -2 is assigned.
 func (m *BaseObject) getWaterBodies() []int {
 	// Initialize the waterbody (ocean) mapping.
-	done := make([]int, m.SphereMesh.numRegions)
+	done := make([]int, m.SphereMesh.NumRegions)
 	for i := range done {
 		if m.Elevation[i] > 0 {
 			done[i] = -2 // Non-ocean regions above sealevel.
@@ -51,7 +51,7 @@ func (m *BaseObject) getWaterBodies() []int {
 		var diveDeeper func(out_r []int, rd int)
 		diveDeeper = func(out_r []int, rd int) {
 			out_rc := make([]int, 0, 8)
-			for _, nbs := range m.r_circulate_r(out_r, rd) {
+			for _, nbs := range m.R_circulate_r(out_r, rd) {
 				// If we have reached land or already visited nbs, skip.
 				if m.Elevation[nbs] > 0 || done[nbs] != -1 {
 					continue

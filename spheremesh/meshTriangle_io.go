@@ -1,4 +1,4 @@
-package genworldvoronoi
+package spheremesh
 
 import (
 	"encoding/binary"
@@ -11,16 +11,16 @@ var byteorder = binary.LittleEndian
 
 func (tm *TriangleMesh) writeTo(w io.Writer) error {
 	// Write the number of regions, sides, and triangles
-	if err := binary.Write(w, byteorder, int64(tm.numRegions)); err != nil {
+	if err := binary.Write(w, byteorder, int64(tm.NumRegions)); err != nil {
 		return err
 	}
-	if err := binary.Write(w, byteorder, int64(tm.numSides)); err != nil {
+	if err := binary.Write(w, byteorder, int64(tm.NumSides)); err != nil {
 		return err
 	}
-	if err := binary.Write(w, byteorder, int64(tm.numTriangles)); err != nil {
+	if err := binary.Write(w, byteorder, int64(tm.NumTriangles)); err != nil {
 		return err
 	}
-	if err := binary.Write(w, byteorder, int64(tm.numHalfedges)); err != nil {
+	if err := binary.Write(w, byteorder, int64(tm.NumHalfedges)); err != nil {
 		return err
 	}
 
@@ -46,16 +46,16 @@ func readTriangleMesh(r io.Reader) (*TriangleMesh, error) {
 	tm := &TriangleMesh{}
 
 	// Read the number of regions, sides, and triangles
-	if err := binary.Read(r, byteorder, &tm.numRegions); err != nil {
+	if err := binary.Read(r, byteorder, &tm.NumRegions); err != nil {
 		return nil, err
 	}
-	if err := binary.Read(r, byteorder, &tm.numSides); err != nil {
+	if err := binary.Read(r, byteorder, &tm.NumSides); err != nil {
 		return nil, err
 	}
-	if err := binary.Read(r, byteorder, &tm.numTriangles); err != nil {
+	if err := binary.Read(r, byteorder, &tm.NumTriangles); err != nil {
 		return nil, err
 	}
-	if err := binary.Read(r, byteorder, &tm.numHalfedges); err != nil {
+	if err := binary.Read(r, byteorder, &tm.NumHalfedges); err != nil {
 		return nil, err
 	}
 

@@ -1,27 +1,29 @@
 package genworldvoronoi
 
+import "github.com/Flokey82/genworldvoronoi/spheremesh"
+
 type QuadGeometry struct {
 	indexes []int     // indices for indexed drawing mode
 	xyz     []float64 // position in 3D-space
 	tm      []float64 // temperature, moisture
 }
 
-func NewQuadGeometry(mesh *TriangleMesh) *QuadGeometry {
+func NewQuadGeometry(mesh *spheremesh.TriangleMesh) *QuadGeometry {
 	qg := &QuadGeometry{}
 	qg.setMesh(mesh)
 	return qg
 }
 
-func (qg *QuadGeometry) setMesh(mesh *TriangleMesh) {
-	numSides := mesh.numSides
-	numRegions := mesh.numRegions
-	numTriangles := mesh.numTriangles
+func (qg *QuadGeometry) setMesh(mesh *spheremesh.TriangleMesh) {
+	numSides := mesh.NumSides
+	numRegions := mesh.NumRegions
+	numTriangles := mesh.NumTriangles
 	qg.indexes = make([]int, 3*numSides)
 	qg.xyz = make([]float64, 3*(numRegions+numTriangles))
 	qg.tm = make([]float64, 2*(numRegions+numTriangles))
 }
 
-func (qg *QuadGeometry) setMap(mesh *TriangleMesh, m *Geo) {
+func (qg *QuadGeometry) setMap(mesh *spheremesh.TriangleMesh, m *Geo) {
 	const v = 0.95
 	xyz := qg.xyz
 	tm := qg.tm
@@ -35,7 +37,7 @@ func (qg *QuadGeometry) setMap(mesh *TriangleMesh, m *Geo) {
 	p := 0
 	regElevation := m.Elevation
 	regMoisture := m.Moisture
-	numRegions := mesh.numRegions
+	numRegions := mesh.NumRegions
 	for r := 0; r < numRegions; r++ {
 		tm[p] = regElevation[r]
 		tm[p+1] = regMoisture[r]
@@ -44,7 +46,7 @@ func (qg *QuadGeometry) setMap(mesh *TriangleMesh, m *Geo) {
 
 	triElevation := m.triElevation
 	triMoisture := m.triMoisture
-	numTriangles := mesh.numTriangles
+	numTriangles := mesh.NumTriangles
 	for t := 0; t < numTriangles; t++ {
 		tm[p] = triElevation[t]
 		tm[p+1] = triMoisture[t]
@@ -55,12 +57,12 @@ func (qg *QuadGeometry) setMap(mesh *TriangleMesh, m *Geo) {
 	countValley := 0
 	countRidge := 0
 	sideFlow := m.sideFlow
-	for side := 0; side < mesh.numSides; side++ {
-		oppositeSide := mesh.s_opposite_s(side)
-		r1 := mesh.s_begin_r(side)
-		r2 := mesh.s_begin_r(oppositeSide)
-		t1 := mesh.s_inner_t(side)
-		t2 := mesh.s_inner_t(oppositeSide)
+	for side := 0; side < mesh.NumSides; side++ {
+		oppositeSide := mesh.S_opposite_s(side)
+		r1 := mesh.S_begin_r(side)
+		r2 := mesh.S_begin_r(oppositeSide)
+		t1 := mesh.S_inner_t(side)
+		t2 := mesh.S_inner_t(oppositeSide)
 
 		// Each quadrilateral is turned into two triangles, so each
 		// half-edge gets turned into one. There are two ways to fold

@@ -140,10 +140,10 @@ func (b *Bio) expandSpecies() []int {
 
 	// 'terr' will hold a mapping of region to species.
 	// The territory ID is the region number of the species origin.
-	terr := initRegionSlice(b.SphereMesh.numRegions)
+	terr := initRegionSlice(b.SphereMesh.NumRegions)
 	for i := 0; i < len(seedPoints); i++ {
 		terr[seedPoints[i]] = seedPoints[i]
-		for _, v := range b.SphereMesh.r_circulate_r(outReg, seedPoints[i]) {
+		for _, v := range b.SphereMesh.R_circulate_r(outReg, seedPoints[i]) {
 			newdist := weight(seedPoints[i], seedPoints[i], v)
 			if newdist < 0 {
 				continue
@@ -163,7 +163,7 @@ func (b *Bio) expandSpecies() []int {
 			continue
 		}
 		terr[u.destination] = u.origin
-		for _, v := range b.SphereMesh.r_circulate_r(outReg, u.destination) {
+		for _, v := range b.SphereMesh.R_circulate_r(outReg, u.destination) {
 			if terr[v] >= 0 {
 				continue
 			}
@@ -222,7 +222,7 @@ func (b *Bio) newSpecies(r int, t SpeciesKingdom, tf func(int) SpeciesTolerances
 }
 
 func (b *Bio) getSpeciesScores(s *Species) []float64 {
-	scores := make([]float64, b.SphereMesh.numRegions)
+	scores := make([]float64, b.SphereMesh.NumRegions)
 	tsf := b.getToleranceScoreFunc(s.SpeciesTolerances)
 	chunkProcessor := func(start, end int) {
 		for i := start; i < end; i++ {
@@ -233,10 +233,10 @@ func (b *Bio) getSpeciesScores(s *Species) []float64 {
 	useGoRoutines := true
 	if useGoRoutines {
 		// Use goroutines to process the chunks.
-		kickOffChunkWorkers(b.SphereMesh.numRegions, chunkProcessor)
+		kickOffChunkWorkers(b.SphereMesh.NumRegions, chunkProcessor)
 	} else {
 		// Use the main thread to process the chunks.
-		chunkProcessor(0, b.SphereMesh.numRegions)
+		chunkProcessor(0, b.SphereMesh.NumRegions)
 	}
 	return scores
 }

@@ -159,7 +159,7 @@ func (m *Geo) CalcFitnessScore(sf func(int) float64, distSeedFunc func() []int) 
 }
 
 func (m *Geo) CalcFitnessScoreWithDistanceField(sf func(int) float64, regDistanceC []float64) []float64 {
-	score := make([]float64, m.SphereMesh.numRegions)
+	score := make([]float64, m.SphereMesh.NumRegions)
 
 	// Get the max distance for normalizing the distance.
 	_, maxDistC := minMax(regDistanceC)
@@ -192,9 +192,9 @@ func (m *Geo) CalcFitnessScoreWithDistanceField(sf func(int) float64, regDistanc
 
 	useGoRoutines := true
 	if useGoRoutines {
-		kickOffChunkWorkers(m.SphereMesh.numRegions, chunkProcessor)
+		kickOffChunkWorkers(m.SphereMesh.NumRegions, chunkProcessor)
 	} else {
-		chunkProcessor(0, m.SphereMesh.numRegions)
+		chunkProcessor(0, m.SphereMesh.NumRegions)
 	}
 	return score
 }

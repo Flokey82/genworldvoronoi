@@ -49,7 +49,7 @@ func (m *Geo) assignBiomeRegions() {
 // identifyBiomeRegions identifies connected regions with the same biome.
 func (m *Geo) identifyBiomeRegions() []int {
 	// We use a flood fill algorithm to identify regions with the same biome
-	biomeToRegs := initRegionSlice(m.SphereMesh.numRegions)
+	biomeToRegs := initRegionSlice(m.SphereMesh.NumRegions)
 	// Set all ocean regions to -2.
 	for r := range biomeToRegs {
 		if m.Elevation[r] <= 0.0 {
@@ -78,7 +78,7 @@ func (m *Geo) identifyBiomeRegions() []int {
 			queue.Remove(e)
 			nbID := e.Value.(int)
 
-			for _, n := range m.SphereMesh.r_circulate_r(outRegs, nbID) {
+			for _, n := range m.SphereMesh.R_circulate_r(outRegs, nbID) {
 				if biomeToRegs[n] == -1 && biomeFunc(n) == biome {
 					queue.PushBack(n)
 
@@ -91,7 +91,7 @@ func (m *Geo) identifyBiomeRegions() []int {
 
 	// Loop through all regions and pick the first region that has not been
 	// assigned a biome yet. Then flood fill all regions with the same biome.
-	for id := 0; id < m.SphereMesh.numRegions; id++ {
+	for id := 0; id < m.SphereMesh.NumRegions; id++ {
 		if biomeToRegs[id] == -1 {
 			floodFill(id)
 		}
