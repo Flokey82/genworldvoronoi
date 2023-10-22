@@ -3,7 +3,11 @@ package genworldvoronoi
 import (
 	"encoding/binary"
 	"io"
+
+	"github.com/Flokey82/genworldvoronoi/various"
 )
+
+var byteorder = binary.LittleEndian
 
 func (tm *TriangleMesh) writeTo(w io.Writer) error {
 	// Write the number of regions, sides, and triangles
@@ -21,17 +25,17 @@ func (tm *TriangleMesh) writeTo(w io.Writer) error {
 	}
 
 	// Write the triangles
-	if err := writeIntSlice(w, tm.Triangles); err != nil {
+	if err := various.WriteIntSlice(w, tm.Triangles); err != nil {
 		return err
 	}
 
 	// Write the halfedges
-	if err := writeIntSlice(w, tm.Halfedges); err != nil {
+	if err := various.WriteIntSlice(w, tm.Halfedges); err != nil {
 		return err
 	}
 
 	// Write the region-in-side index
-	if err := writeIntSlice(w, tm.RegInSide); err != nil {
+	if err := various.WriteIntSlice(w, tm.RegInSide); err != nil {
 		return err
 	}
 
@@ -56,21 +60,21 @@ func readTriangleMesh(r io.Reader) (*TriangleMesh, error) {
 	}
 
 	// Read the triangles
-	tri, err := readIntSlice(r)
+	tri, err := various.ReadIntSlice(r)
 	if err != nil {
 		return nil, err
 	}
 	tm.Triangles = tri
 
 	// Read the halfedges
-	he, err := readIntSlice(r)
+	he, err := various.ReadIntSlice(r)
 	if err != nil {
 		return nil, err
 	}
 	tm.Halfedges = he
 
 	// Read the region-in-side index
-	ris, err := readIntSlice(r)
+	ris, err := various.ReadIntSlice(r)
 	if err != nil {
 		return nil, err
 	}
