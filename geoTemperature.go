@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/Flokey82/genbiome"
+	"github.com/Flokey82/genworldvoronoi/various"
 	"github.com/Flokey82/go_gens/gameconstants"
 )
 
@@ -33,7 +34,7 @@ const (
 // See: http://www-das.uwyo.edu/~geerts/cwx/notes/chap16/geo_clim.html
 // NOTE: -35 °C to +31 °C would be ideally the temp gradient (according to real-life data), but we don't have (yet) any biomes defined for this.
 func getMeanAnnualTemp(lat float64) float64 {
-	return (math.Sin(degToRad(90-math.Abs(lat))))*rangeTemp + minTemp
+	return (math.Sin(various.DegToRad(90-math.Abs(lat))))*rangeTemp + minTemp
 }
 
 const maxAltitudeFactor = gameconstants.EarthMaxElevation // How tall is the tallest mountain with an elevation of 1.0?

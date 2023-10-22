@@ -11,6 +11,7 @@ import (
 	"os"
 
 	"github.com/Flokey82/genbiome"
+	"github.com/Flokey82/genworldvoronoi/various"
 	"github.com/mazznoer/colorgrad"
 	"github.com/sizeofint/webpanimation"
 
@@ -122,7 +123,7 @@ func (m *Map) ExportSVG(path string) error {
 			var skip bool
 			for _, j := range em.SphereMesh.r_circulate_t(out_t, i) {
 				x, y := latLonToPixels(em.TriLatLon[j][0], em.TriLatLon[j][1], zoom)
-				if dist2([2]float64{x, y}, [2]float64{rX, rY}) > filterPathDist {
+				if various.Dist2([2]float64{x, y}, [2]float64{rX, rY}) > filterPathDist {
 					skip = true
 					break
 				}
@@ -165,7 +166,7 @@ func (m *Map) ExportSVG(path string) error {
 					poolCount++
 				}
 				x, y := latLonToPixels(em.LatLon[j][0], em.LatLon[j][1], zoom)
-				if dist2([2]float64{x, y}, [2]float64{triX, triY}) > filterPathDist {
+				if various.Dist2([2]float64{x, y}, [2]float64{triX, triY}) > filterPathDist {
 					skip = true
 					break
 				}
@@ -220,7 +221,7 @@ func (m *Map) ExportSVG(path string) error {
 
 				// This check prevents long lines across the SVG if the path happens to wrap around
 				// 180° longitude.
-				if len(path) >= 1 && dist2(path[len(path)-1], [2]float64{x, y}) > filterPathDist {
+				if len(path) >= 1 && various.Dist2(path[len(path)-1], [2]float64{x, y}) > filterPathDist {
 					svg.Path(svgGenD(path), style...)
 					path = nil
 				}
@@ -719,14 +720,14 @@ func (m *Map) ExportOBJ(path string) error {
 
 	// Vertices
 	for i := 0; i < len(m.XYZ); i += 3 {
-		ve := convToVec3(m.XYZ[i:]).Mul(1.0 + 0.01*(m.Elevation[i/3]+m.Waterpool[i/3]))
+		ve := various.ConvToVec3(m.XYZ[i:]).Mul(1.0 + 0.01*(m.Elevation[i/3]+m.Waterpool[i/3]))
 		w.WriteString(fmt.Sprintf("v %f %f %f \n", ve.X, ve.Y, ve.Z))
 	}
 
 	// Triangle vertices
 	if drawPlates || drawRivers {
 		for i := 0; i < len(m.TriXYZ); i += 3 {
-			ve := convToVec3(m.TriXYZ[i:]).Mul(1.03 + 0.01*m.triElevation[i/3])
+			ve := various.ConvToVec3(m.TriXYZ[i:]).Mul(1.03 + 0.01*m.triElevation[i/3])
 			w.WriteString(fmt.Sprintf("v %f %f %f \n", ve.X, ve.Y, ve.Z))
 		}
 		w.Flush()

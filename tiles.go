@@ -9,6 +9,7 @@ import (
 	"sort"
 
 	"github.com/Flokey82/genbiome"
+	"github.com/Flokey82/genworldvoronoi/various"
 	"github.com/Flokey82/geoquad"
 	"github.com/Flokey82/go_gens/gameconstants"
 	"github.com/Flokey82/go_gens/vectors"
@@ -586,8 +587,8 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 
 			// Now draw the wind vector for the region.
 			// NOTE: I'm not 100% sure if this is correct, but it seems to work.
-			wLat, wLon := vectorToLatLong(normalize2(vects[i]))
-			windVec := normalize2([2]float64{wLat, wLon})
+			wLat, wLon := various.VectorToLatLong(various.Normalize2(vects[i]))
+			windVec := various.Normalize2([2]float64{wLat, wLon})
 
 			// Calculate the coordinates of the center of the region.
 			x, y := latLonToPixels(rLat, rLon, zoom)
@@ -595,7 +596,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 			y -= dy2
 
 			// Calculate the length of the wind vector.
-			length := len2(windVec)
+			length := various.Len2(windVec)
 
 			// Calculate the angle of the wind vector.
 			angle := math.Atan2(windVec[1], windVec[0])

@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"sort"
 
+	"github.com/Flokey82/genworldvoronoi/various"
 	"github.com/Flokey82/go_gens/vectors"
 )
 
@@ -267,7 +268,7 @@ func (m *BaseObject) assignDownflow() {
 // GetDistance calculate the distance between two regions using
 // the lat long and haversine.
 func (m *BaseObject) GetDistance(r1, r2 int) float64 {
-	return haversine(m.LatLon[r1][0], m.LatLon[r1][1], m.LatLon[r2][0], m.LatLon[r2][1])
+	return various.Haversine(m.LatLon[r1][0], m.LatLon[r1][1], m.LatLon[r2][0], m.LatLon[r2][1])
 }
 
 // GetRegNeighbors returns the neighbor regions of a region.
@@ -291,7 +292,7 @@ func (m *BaseObject) getLowestRegNeighbor(r int) int {
 
 // dirVecFromToRegs returns the direction vector from region r1 to r2.
 func (m *BaseObject) dirVecFromToRegs(from, to int) [2]float64 {
-	return calcVecFromLatLong(m.LatLon[from][0], m.LatLon[from][1], m.LatLon[to][0], m.LatLon[to][1])
+	return various.CalcVecFromLatLong(m.LatLon[from][0], m.LatLon[from][1], m.LatLon[to][0], m.LatLon[to][1])
 }
 
 // getClosestNeighbor returns the closest neighbor of r in the given direction.
@@ -301,7 +302,7 @@ func (m *BaseObject) getClosestNeighbor(outregs []int, r int, vec [2]float64) in
 	}
 	lat := m.LatLon[r][0]
 	lon := m.LatLon[r][1]
-	lat, lon = addVecToLatLong(lat, lon, vec)
+	lat, lon = various.AddVecToLatLong(lat, lon, vec)
 
 	bestDist := math.Inf(1)
 	bestR := -1
@@ -309,7 +310,7 @@ func (m *BaseObject) getClosestNeighbor(outregs []int, r int, vec [2]float64) in
 	neighbors := m.SphereMesh.r_circulate_r(outregs, r)
 	for i := 0; i < len(neighbors); i++ {
 		latLon2 := m.LatLon[neighbors[i]]
-		dist := haversine(lat, lon, latLon2[0], latLon2[1])
+		dist := various.Haversine(lat, lon, latLon2[0], latLon2[1])
 		if dist < bestDist {
 			bestDist = dist
 			bestR = neighbors[i]
@@ -339,7 +340,7 @@ func (m *BaseObject) GetRegArea(r int) float64 {
 	dists := make([]float64, len(tris))
 	for i, tri := range tris {
 		dLatLon := m.TriLatLon[tri]
-		dists[i] = haversine(regLatLon[0], regLatLon[1], dLatLon[0], dLatLon[1])
+		dists[i] = various.Haversine(regLatLon[0], regLatLon[1], dLatLon[0], dLatLon[1])
 	}
 	var area float64
 	for ti0, t0 := range tris {
@@ -349,8 +350,8 @@ func (m *BaseObject) GetRegArea(r int) float64 {
 		t1LatLon := m.TriLatLon[t1]
 		a := dists[ti0]
 		b := dists[ti1]
-		c := haversine(t0LatLon[0], t0LatLon[1], t1LatLon[0], t1LatLon[1])
-		area += heronsTriArea(a, b, c)
+		c := various.Haversine(t0LatLon[0], t0LatLon[1], t1LatLon[0], t1LatLon[1])
+		area += various.HeronsTriArea(a, b, c)
 	}
 	return area
 }
@@ -439,7 +440,7 @@ func (m *BaseObject) GetSteepness() []float64 {
 			// Great arc distance between the lat/lon coordinates of r and dh[r].
 			regLatLon := m.LatLon[r]
 			dhRegLatLon := m.LatLon[dhReg]
-			dist := haversine(regLatLon[0], regLatLon[1], dhRegLatLon[0], dhRegLatLon[1])
+			dist := various.Haversine(regLatLon[0], regLatLon[1], dhRegLatLon[0], dhRegLatLon[1])
 
 			// Calculate the the angle (0°-90°) expressed as range from 0.0 to 1.0.
 			steeps[r] = math.Atan(hDiff/dist) * 2 / math.Pi
@@ -477,7 +478,7 @@ func (m *BaseObject) regPolySlope(outRegs []int, i int) [2]float64 {
 
 	// Get the origin vector of the center region.
 	// We will rotate the points with this vector until the polygon is facing upwards.
-	center := convToVec3(m.XYZ[i*3:]).Normalize()
+	center := various.ConvToVec3(m.XYZ[i*3:]).Normalize()
 
 	// Get the axis of rotation.
 	axis := center.Cross(vectors.Up)
@@ -491,10 +492,10 @@ func (m *BaseObject) regPolySlope(outRegs []int, i int) [2]float64 {
 		jNext := nbs[(j+1)%len(nbs)]
 		// Get the current and next vertex and scale the vector by the height factor
 		// and elevation, then rotate the vector around the axis.
-		current := convToVec3(m.XYZ[r*3:]).
+		current := various.ConvToVec3(m.XYZ[r*3:]).
 			Rotate(axis, angle).
 			Mul(1 + 0.1*m.Elevation[r])
-		next := convToVec3(m.XYZ[jNext*3:]).
+		next := various.ConvToVec3(m.XYZ[jNext*3:]).
 			Rotate(axis, angle).
 			Mul(1 + 0.1*m.Elevation[jNext])
 		normal.X += (current.Z - next.Z) * (current.Y + next.Y)
@@ -584,7 +585,7 @@ func (m *BaseObject) regTriNormal(t int, nbs []int) vectors.Vec3 {
 
 	// Get the origin vector of the triangle center.
 	// We will rotate the points with this vector until the triangle is facing upwards.
-	center := convToVec3(m.TriXYZ[t*3:]).Normalize()
+	center := various.ConvToVec3(m.TriXYZ[t*3:]).Normalize()
 
 	// Get the axis to rotate the 'center' vector to the global up vector.
 	axis := center.Cross(vectors.Up)
@@ -593,9 +594,9 @@ func (m *BaseObject) regTriNormal(t int, nbs []int) vectors.Vec3 {
 	angle := math.Acos(vectors.Up.Dot(center) / (vectors.Up.Len() * center.Len()))
 
 	// Get the three points of the triangle.
-	p0 := convToVec3(m.XYZ[nbs[0]*3:])
-	p1 := convToVec3(m.XYZ[nbs[1]*3:])
-	p2 := convToVec3(m.XYZ[nbs[2]*3:])
+	p0 := various.ConvToVec3(m.XYZ[nbs[0]*3:])
+	p1 := various.ConvToVec3(m.XYZ[nbs[1]*3:])
+	p2 := various.ConvToVec3(m.XYZ[nbs[2]*3:])
 
 	p0 = p0.Rotate(axis, angle).Mul(1 + 0.05*m.Elevation[nbs[0]])
 	p1 = p1.Rotate(axis, angle).Mul(1 + 0.05*m.Elevation[nbs[1]])
@@ -914,7 +915,7 @@ func (m *BaseObject) interpolate(regions []int) (*interpolated, error) {
 
 			// Generate midpoint and average values.
 			rnxyz := m.XYZ[nbReg*3 : (nbReg*3)+3]
-			mid := convToVec3([]float64{
+			mid := various.ConvToVec3([]float64{
 				(rxyz[0] + rnxyz[0]) / 2,
 				(rxyz[1] + rnxyz[1]) / 2,
 				(rxyz[2] + rnxyz[2]) / 2,
@@ -950,7 +951,7 @@ func (m *BaseObject) interpolate(regions []int) (*interpolated, error) {
 	latLon := make([][2]float64, 0, len(xyz)/3)
 	for r := 0; r < len(xyz); r += 3 {
 		// HACKY! Fix this properly!
-		nla, nlo := latLonFromVec3(convToVec3(xyz[r:r+3]).Normalize(), 1.0)
+		nla, nlo := various.LatLonFromVec3(various.ConvToVec3(xyz[r:r+3]).Normalize(), 1.0)
 		latLon = append(latLon, [2]float64{nla, nlo})
 	}
 
