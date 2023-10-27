@@ -9,6 +9,7 @@ import (
 	"sort"
 
 	"github.com/Flokey82/genbiome"
+	"github.com/Flokey82/genworldvoronoi/bio"
 	"github.com/Flokey82/genworldvoronoi/geo"
 	"github.com/Flokey82/genworldvoronoi/various"
 	"github.com/Flokey82/geoquad"
@@ -987,7 +988,7 @@ func (m *Map) GetGeoJSONCities(la1, lo1, la2, lo2 float64, zoom int) ([]byte, er
 		f.SetProperty("flavortext", m.generateCityFlavorText(c, regPropertyFunc(c.ID)))
 		var sName string
 		if m.SpeciesRegions[c.ID] >= 0 {
-			var s *Species
+			var s *bio.Species
 			for _, sp := range m.Species {
 				if sp.Origin == m.SpeciesRegions[c.ID] {
 					s = sp

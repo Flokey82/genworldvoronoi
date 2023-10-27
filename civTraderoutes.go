@@ -9,7 +9,7 @@ import (
 	goastar "github.com/beefsack/go-astar"
 )
 
-func (m *Civ) getTradeRoutes() ([][]int, [][]int) {
+func (m *Civ) GetTradeRoutes() ([][]int, [][]int) {
 	// TODO: Allow persistent trading routes, so we can run multiple times without
 	//       destroying existing routes.
 	// Major cities will produce major trading routes that ensure that trade will be
@@ -253,7 +253,7 @@ func getSegment(a, b int) [2]int {
 
 func (m *Civ) getTradeRoutesInLatLonBB(minLat, minLon, maxLat, maxLon float64) [][]int {
 	// Convert the trade route paths to segments.
-	tr := m.tradeRoutes
+	tr := m.TradeRoutes
 	var links [][2]int
 	seen := make(map[[2]int]bool)
 	for _, path := range tr {

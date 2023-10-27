@@ -1,4 +1,4 @@
-package genworldvoronoi
+package bio
 
 import (
 	"log"
@@ -21,7 +21,7 @@ type Bio struct {
 	rand                   *rand.Rand              // Random number generator.
 }
 
-func newBio(geo *geo.Geo, cfg *BioConfig) *Bio {
+func NewBio(geo *geo.Geo, cfg *BioConfig) *Bio {
 	if cfg == nil {
 		cfg = NewBioConfig()
 	}
@@ -36,7 +36,7 @@ func newBio(geo *geo.Geo, cfg *BioConfig) *Bio {
 	}
 }
 
-func (b *Bio) generateBiology() {
+func (b *Bio) GenerateBiology() {
 	// Calculate the duration of the potential growth period for each region.
 	b.calcGrowthPeriod()
 

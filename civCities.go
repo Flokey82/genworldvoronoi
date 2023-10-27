@@ -304,8 +304,8 @@ func (m *Civ) getFitnessTradingTowns() func(int) float64 {
 	// TODO: Fix this.
 	// I think this function should avoid the penalty wrt.
 	// proximity to towns of other types.
-	tradeRoutes, connecting := m.getTradeRoutes()
-	m.tradeRoutes = tradeRoutes
+	tradeRoutes, connecting := m.GetTradeRoutes()
+	m.TradeRoutes = tradeRoutes
 	return func(r int) float64 {
 		return float64(len(connecting[r]))
 	}

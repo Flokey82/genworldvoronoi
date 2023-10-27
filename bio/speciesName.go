@@ -1,4 +1,4 @@
-package genworldvoronoi
+package bio
 
 import (
 	"math/rand"

@@ -27,7 +27,7 @@ type Civ struct {
 	Settled           []int64      // (cultural) Time of settlement per region
 	// SettledBySpecies []int // (cultural) Which species settled the region first
 	NameGen     *geo.NameGenerators
-	tradeRoutes [][]int
+	TradeRoutes [][]int
 }
 
 func NewCiv(g *geo.Geo, cfg *CivConfig) *Civ {

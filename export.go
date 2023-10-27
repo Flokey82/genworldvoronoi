@@ -275,7 +275,7 @@ func (m *Map) ExportSVG(path string) error {
 	}
 
 	if drawTradeRoutes {
-		paths, _ := m.getTradeRoutes()
+		paths, _ := m.GetTradeRoutes()
 		drawPath(paths, false, "class=\"traderoute\"")
 	}
 

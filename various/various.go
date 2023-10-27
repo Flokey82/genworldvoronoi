@@ -7,6 +7,16 @@ import (
 	"github.com/Flokey82/go_gens/utils"
 )
 
+// IsInIntList returns true if the given int is in the given slice.
+func IsInIntList(l []int, i int) bool {
+	for _, v := range l {
+		if v == i {
+			return true
+		}
+	}
+	return false
+}
+
 // RoundToDecimals rounds the given float to the given number of decimals.
 func RoundToDecimals(v, d float64) float64 {
 	m := math.Pow(10, d)

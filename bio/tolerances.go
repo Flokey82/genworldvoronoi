@@ -1,4 +1,4 @@
-package genworldvoronoi
+package bio
 
 import (
 	"fmt"
@@ -42,7 +42,7 @@ func (b *Bio) getTolerancesForRegionFunc() func(int) SpeciesTolerances {
 	steep := b.GetSteepness()
 	return func(r int) SpeciesTolerances {
 		s := SpeciesTolerances{
-			Ecosphere: b.getEcosphere(r),
+			Ecosphere: b.GetEcosphere(r),
 		}
 
 		// minMaxRange returns a min and max range for the given value with the given variance.
@@ -91,7 +91,7 @@ func (b *Bio) getToleranceScoreFunc(s SpeciesTolerances) func(int) float64 {
 	bf := b.GetRegWhittakerModBiomeFunc()
 	steepness := b.GetSteepness()
 	return func(r int) float64 { // Check what ecosphere we are in and if it matches the species.
-		if !s.Ecosphere.isSet(b.getEcosphere(r)) {
+		if !s.Ecosphere.isSet(b.GetEcosphere(r)) {
 			return -1.0
 		}
 
@@ -176,8 +176,8 @@ func (e EcosphereType) isSet(t EcosphereType) bool {
 	return e&t == t
 }
 
-// getEcosphere returns the ecosphere of the given region.
-func (b *Bio) getEcosphere(r int) EcosphereType {
+// GetEcosphere returns the ecosphere of the given region.
+func (b *Bio) GetEcosphere(r int) EcosphereType {
 	// Get the ecosphere we are in.
 	if b.Elevation[r] <= 0.0 {
 		return EcosphereTypeOcean
