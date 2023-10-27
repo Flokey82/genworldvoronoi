@@ -3,10 +3,12 @@
 // And: https://github.com/redblobgames/1843-planet-generation
 package genworldvoronoi
 
+import "github.com/Flokey82/genworldvoronoi/geo"
+
 type Map struct {
-	*Geo // Geography / geology
-	*Civ // Civilization
-	*Bio // Plants / animals / funghi
+	*geo.Geo // Geography / geology
+	*Civ     // Civilization
+	*Bio     // Plants / animals / funghi
 
 	// *TileCache
 	// CoarseMeshes []*SphereMesh // Coarse meshes for each zoom level.
@@ -18,7 +20,7 @@ func NewMapFromConfig(seed int64, cfg *Config) (*Map, error) {
 	}
 
 	// Initialize the planet.
-	geo, err := newGeo(seed, cfg.GeoConfig)
+	geo, err := geo.NewGeo(seed, cfg.GeoConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +74,7 @@ func (m *Map) getCoarseForZoom(zoom int) (*SphereMesh, int) {
 
 func (m *Map) generateMap() {
 	// Build geography / geology / climate.
-	m.generateGeology()
+	m.GenerateGeology()
 
 	// Build civilization.
 	m.generateCivilization()

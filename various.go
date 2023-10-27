@@ -4,30 +4,13 @@ import (
 	"image/color"
 	"math"
 	"math/rand"
-	"sort"
-	"sync"
 
+	"github.com/Flokey82/genworldvoronoi/various"
 	"github.com/Flokey82/go_gens/utils"
 )
 
-// convToMap converts a slice of ints into a map of ints to bools.
-func convToMap(in []int) map[int]bool {
-	res := make(map[int]bool)
-	for _, v := range in {
-		res[v] = true
-	}
-	return res
-}
-
-// convToArray converts a map of ints to bools into a slice of ints.
-func convToArray(in map[int]bool) []int {
-	var res []int
-	for v := range in {
-		res = append(res, v)
-	}
-	sort.Ints(res)
-	return res
-}
+var convToMap = various.ConvToMap
+var convToArray = various.ConvToArray
 
 // isInIntList returns true if the given int is in the given slice.
 func isInIntList(l []int, i int) bool {
@@ -42,85 +25,9 @@ func isInIntList(l []int, i int) bool {
 var minMax = utils.MinMax[float64]
 var minMax64 = utils.MinMax[int64]
 
-// initFloatSlice returns a slice of floats of the given size, initialized to -1.
-func initFloatSlice(size int) []float64 {
-	return initSlice[float64](size)
-}
-
-// initRegionSlice returns a slice of ints of the given size, initialized to -1.
-func initRegionSlice(size int) []int {
-	return initSlice[int](size)
-}
-
-// initTimeSlice returns a slice of int64s of the given size, initialized to -1.
-func initTimeSlice(size int) []int64 {
-	return initSlice[int64](size)
-}
-
-// initSlice returns a slice of the given type of the given size, initialized to -1.
-func initSlice[V utils.Number](size int) []V {
-	res := make([]V, size)
-	for i := range res {
-		res[i] = -1
-	}
-	return res
-}
-
-// mergeIndexSegments matches up the ends of the segments (region pairs) and returns
-// a slice containing all continuous, connected segments as sequence of connected regions.
-func mergeIndexSegments(segs [][2]int) [][]int {
-	adj := make(map[int][]int)
-	for i := 0; i < len(segs); i++ {
-		seg := segs[i]
-		adj[seg[0]] = append(adj[seg[0]], seg[1])
-		adj[seg[1]] = append(adj[seg[1]], seg[0])
-	}
-	var paths [][]int
-	var path []int
-	for len(segs) > 0 {
-		if path == nil {
-			seg := segs[0]
-			segs = segs[1:]
-			path = []int{seg[0], seg[1]}
-		}
-		var changed bool
-		for i := 0; i < len(segs); i++ {
-			seg := segs[i]
-			if len(adj[path[0]]) == 2 && (seg[0] == path[0] || seg[1] == path[0]) {
-				if seg[0] == path[0] {
-					path = unshiftIndexPath(path, seg[1])
-				} else {
-					path = unshiftIndexPath(path, seg[0])
-				}
-				segs = append(segs[:i], segs[i+1:]...)
-				changed = true
-				break
-			}
-			if len(adj[path[len(path)-1]]) == 2 && (seg[0] == path[len(path)-1] || seg[1] == path[len(path)-1]) {
-				if seg[0] == path[len(path)-1] {
-					path = append(path, seg[1])
-				} else {
-					path = append(path, seg[0])
-				}
-				segs = append(segs[:i], segs[i+1:]...)
-				changed = true
-				break
-			}
-		}
-		if !changed {
-			paths = append(paths, path)
-			path = nil
-		}
-	}
-	return paths
-}
-
-func unshiftIndexPath(path []int, p int) []int {
-	res := make([]int, len(path)+1)
-	res[0] = p
-	copy(res[1:], path)
-	return res
-}
+var initFloatSlice = various.InitFloatSlice
+var initRegionSlice = various.InitRegionSlice
+var initTimeSlice = various.InitTimeSlice
 
 // weightedToArray converts a map of weighted values to an array.
 func weightedToArray(weighted map[string]int) []string {
@@ -144,48 +51,48 @@ func P(probability float64) bool {
 	return rand.Float64() < probability
 }
 
-// queueEntry is a single entry in the priority queue.
-type queueEntry struct {
-	index       int     // index of the item in the heap.
-	score       float64 // priority of the item in the queue.
-	origin      int     // origin region / ID
-	destination int     // destination region / ID
+// QueueEntry is a single entry in the priority queue.
+type QueueEntry struct {
+	Index       int     // index of the item in the heap.
+	Score       float64 // priority of the item in the queue.
+	Origin      int     // origin region / ID
+	Destination int     // destination region / ID
 }
 
-// ascPriorityQueue implements heap.Interface and holds Items.
+// AscPriorityQueue implements heap.Interface and holds Items.
 // Priority is ascending (lowest score first).
-type ascPriorityQueue []*queueEntry
+type AscPriorityQueue []*QueueEntry
 
-func (pq ascPriorityQueue) Len() int { return len(pq) }
+func (pq AscPriorityQueue) Len() int { return len(pq) }
 
-func (pq ascPriorityQueue) Less(i, j int) bool {
+func (pq AscPriorityQueue) Less(i, j int) bool {
 	// We want Pop to give us the highest, not lowest, priority so we use greater than here.
 	// return pq[i].score > pq[j].score // 3, 2, 1
 
 	// We want Pop to give us the lowest, not highest, priority so we use less than here.
-	return pq[i].score < pq[j].score // 1, 2, 3
+	return pq[i].Score < pq[j].Score // 1, 2, 3
 }
 
-func (pq *ascPriorityQueue) Pop() interface{} {
+func (pq *AscPriorityQueue) Pop() interface{} {
 	old := *pq
 	n := len(old)
 	item := old[n-1]
 	old[n-1] = nil  // avoid memory leak
-	item.index = -1 // for safety
+	item.Index = -1 // for safety
 	*pq = old[0 : n-1]
 	return item
 }
 
-func (pq *ascPriorityQueue) Push(x interface{}) {
+func (pq *AscPriorityQueue) Push(x interface{}) {
 	n := len(*pq)
-	item := x.(*queueEntry)
-	item.index = n
+	item := x.(*QueueEntry)
+	item.Index = n
 	*pq = append(*pq, item)
 }
 
-func (pq ascPriorityQueue) Swap(i, j int) {
+func (pq AscPriorityQueue) Swap(i, j int) {
 	pq[i], pq[j] = pq[j], pq[i]
-	pq[i].index, pq[j].index = i, j
+	pq[i].Index, pq[j].Index = i, j
 }
 
 // getDiversionFromRange returns the amount a value diverges from a range.
@@ -254,48 +161,4 @@ func genColor(col color.Color, intensity float64) color.Color {
 	col2.B = uint8(float64(255) * float64(cb) / float64(0xffff))
 	col2.A = 255
 	return col2
-}
-
-func kickOffChunkWorkers(totalItems int, fn func(start, end int)) {
-	numWorkers := 8
-
-	var wg sync.WaitGroup
-	var chunkStart int
-	chunkSize := (totalItems / numWorkers) + 1
-	for i := 0; i < numWorkers; i++ {
-		curChunk := chunkSize
-		if rem := totalItems - chunkStart; rem < curChunk {
-			curChunk = rem
-		}
-		if curChunk <= 0 {
-			break
-		}
-		wg.Add(1)
-		go func(start, end int) {
-			fn(start, end)
-			wg.Done()
-		}(chunkStart, chunkStart+curChunk)
-		chunkStart += curChunk
-	}
-	wg.Wait()
-}
-
-// randPerm returns a random permutation of the given slice indices.
-// This works like rand.Perm, but it reuses the same slice.
-func (m *BaseObject) randPerm(perm []int, n int) []int {
-	perm = perm[:utils.Min(cap(perm), n)]
-	if diff := len(perm) - n; diff < 0 {
-		perm = append(perm, make([]int, -diff)...)
-	}
-	// In the following loop, the iteration when i=0 always swaps m[0] with m[0].
-	// A change to remove this useless iteration is to assign 1 to i in the init
-	// statement. But Perm also effects r. Making this change will affect
-	// the final state of r. So this change can't be made for compatibility
-	// reasons for Go 1.
-	for i := 0; i < n; i++ {
-		j := m.rand.Intn(i + 1)
-		perm[i] = perm[j]
-		perm[j] = i
-	}
-	return perm
 }

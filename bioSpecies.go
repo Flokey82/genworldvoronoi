@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/Flokey82/genworldvoronoi/geo"
 	"github.com/Flokey82/genworldvoronoi/various"
 )
 
@@ -86,7 +87,7 @@ func (b *Bio) expandSpecies() []int {
 		seedPoints = append(seedPoints, s.Origin)
 		originToSpecFit[s.Origin] = b.getToleranceScoreFunc(s.SpeciesTolerances)
 	}
-	var queue ascPriorityQueue
+	var queue geo.AscPriorityQueue
 	heap.Init(&queue)
 	outReg := make([]int, 0, 8)
 
@@ -148,33 +149,33 @@ func (b *Bio) expandSpecies() []int {
 			if newdist < 0 {
 				continue
 			}
-			heap.Push(&queue, &queueEntry{
-				score:       newdist,
-				origin:      seedPoints[i],
-				destination: v,
+			heap.Push(&queue, &geo.QueueEntry{
+				Score:       newdist,
+				Origin:      seedPoints[i],
+				Destination: v,
 			})
 		}
 	}
 
 	// Extend territories until the queue is empty.
 	for queue.Len() > 0 {
-		u := heap.Pop(&queue).(*queueEntry)
-		if terr[u.destination] >= 0 {
+		u := heap.Pop(&queue).(*geo.QueueEntry)
+		if terr[u.Destination] >= 0 {
 			continue
 		}
-		terr[u.destination] = u.origin
-		for _, v := range b.SphereMesh.R_circulate_r(outReg, u.destination) {
+		terr[u.Destination] = u.Origin
+		for _, v := range b.SphereMesh.R_circulate_r(outReg, u.Destination) {
 			if terr[v] >= 0 {
 				continue
 			}
-			newdist := weight(u.origin, u.destination, v)
+			newdist := weight(u.Origin, u.Destination, v)
 			if newdist < 0 {
 				continue
 			}
-			heap.Push(&queue, &queueEntry{
-				score:       u.score + newdist,
-				origin:      u.origin,
-				destination: v,
+			heap.Push(&queue, &geo.QueueEntry{
+				Score:       u.Score + newdist,
+				Origin:      u.Origin,
+				Destination: v,
 			})
 		}
 	}
@@ -233,7 +234,7 @@ func (b *Bio) getSpeciesScores(s *Species) []float64 {
 	useGoRoutines := true
 	if useGoRoutines {
 		// Use goroutines to process the chunks.
-		kickOffChunkWorkers(b.SphereMesh.NumRegions, chunkProcessor)
+		various.KickOffChunkWorkers(b.SphereMesh.NumRegions, chunkProcessor)
 	} else {
 		// Use the main thread to process the chunks.
 		chunkProcessor(0, b.SphereMesh.NumRegions)

@@ -1,4 +1,4 @@
-package genworldvoronoi
+package geo
 
 import (
 	"container/list"
@@ -26,7 +26,7 @@ Loop:
 		// Check if all neighbors are above sea level.
 		lowest := math.Inf(0)
 		for _, nb := range m.R_circulate_r(outRegs, r) {
-			if !m.isRegBelowOrAtSeaLevelOrPool(r) {
+			if !m.IsRegBelowOrAtSeaLevelOrPool(r) {
 				continue Loop
 			}
 			if m.Elevation[nb] < lowest {
@@ -53,7 +53,7 @@ Loop:
 			m.assignRainfallBasic()
 
 			// Regenerate downhill.
-			m.assignDownhill(true)
+			m.AssignDownhill(true)
 
 			// Regenerate flux.
 			m.assignFlux(true)
@@ -81,7 +81,7 @@ Loop:
 		m.assignRainfallBasic()
 
 		// Regenerate downhill.
-		m.assignDownhill(true)
+		m.AssignDownhill(true)
 
 		// Regenerate flux.
 		m.assignFlux(false)
@@ -118,7 +118,7 @@ func (m *Geo) assignHydrologyWithFlooding() {
 		if len(r_sinks) == 0 || attempts > maxAttempts {
 			m.Elevation = m.FillSinks(true)
 			// Regenerate downhill.
-			m.BaseObject.assignDownhill(true)
+			m.BaseObject.AssignDownhill(true)
 
 			// Regenerate flux.
 			m.assignFlux(true)
@@ -149,7 +149,7 @@ func (m *Geo) assignHydrologyWithFlooding() {
 		// m.r_elevation = m.rErode(0.01) // NOTE: Flux would change as downhill values would change.
 
 		// Regenerate downhill and do not skip below sea level.
-		m.BaseObject.assignDownhill(false)
+		m.BaseObject.AssignDownhill(false)
 
 		// Regenerate flux.
 		m.assignFlux(true)

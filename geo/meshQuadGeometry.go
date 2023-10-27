@@ -1,4 +1,4 @@
-package genworldvoronoi
+package geo
 
 import "github.com/Flokey82/genworldvoronoi/spheremesh"
 
@@ -44,8 +44,8 @@ func (qg *QuadGeometry) setMap(mesh *spheremesh.TriangleMesh, m *Geo) {
 		p += 2
 	}
 
-	triElevation := m.triElevation
-	triMoisture := m.triMoisture
+	triElevation := m.TriElevation
+	triMoisture := m.TriMoisture
 	numTriangles := mesh.NumTriangles
 	for t := 0; t < numTriangles; t++ {
 		tm[p] = triElevation[t]
@@ -56,7 +56,7 @@ func (qg *QuadGeometry) setMap(mesh *spheremesh.TriangleMesh, m *Geo) {
 	i := 0
 	countValley := 0
 	countRidge := 0
-	sideFlow := m.sideFlow
+	sideFlow := m.SideFlow
 	for side := 0; side < mesh.NumSides; side++ {
 		oppositeSide := mesh.S_opposite_s(side)
 		r1 := mesh.S_begin_r(side)

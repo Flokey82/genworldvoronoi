@@ -1,9 +1,11 @@
-package genworldvoronoi
+package geo
 
 import (
 	"log"
 	"sort"
 	"time"
+
+	"github.com/Flokey82/genworldvoronoi/various"
 )
 
 const (
@@ -187,23 +189,23 @@ func (m *Geo) getFlux(skipBelowSea bool) []float64 {
 
 // Rivers - from mapgen4
 
-// assignFlow calculates the water flux by traversing the graph generated with
+// AssignFlow calculates the water flux by traversing the graph generated with
 // assignDownflow in reverse order (so, downhill?) and summing up the moisture.
 //
 // NOTE: This is the original code that Amit uses in his procedural planets project.
 // He uses triangle centroids for his river generation, where I prefer to use the regions
 // directly.
-func (m *BaseObject) assignFlow() {
-	sideFlow := m.sideFlow
+func (m *BaseObject) AssignFlow() {
+	sideFlow := m.SideFlow
 
 	// Clear all existing water flux values.
 	for i := range sideFlow {
 		sideFlow[i] = 0
 	}
 
-	triFlow := m.triFlow
-	triElevation := m.triElevation
-	triMoisture := m.triMoisture
+	triFlow := m.TriFlow
+	triElevation := m.TriElevation
+	triMoisture := m.TriMoisture
 
 	// Set the flux value for each triangle above sealevel to
 	// half of its moisture squared as its initial state.
@@ -218,8 +220,8 @@ func (m *BaseObject) assignFlow() {
 
 	// Now traverse the flux graph in reverse order and sum up
 	// the moisture of all tributaries while descending.
-	orderTris := m.orderTri
-	triDownflowSide := m.triDownflowSide
+	orderTris := m.OrderTri
+	triDownflowSide := m.TriDownflowSide
 	halfedges := m.SphereMesh.Halfedges
 	for i := len(orderTris) - 1; i >= 0; i-- {
 		// TODO: Describe what's going on here.
@@ -234,9 +236,9 @@ func (m *BaseObject) assignFlow() {
 			}
 		}
 	}
-	m.triFlow = triFlow
-	m.sideFlow = sideFlow
-	m.triElevation = triElevation
+	m.TriFlow = triFlow
+	m.SideFlow = sideFlow
+	m.TriElevation = triElevation
 }
 
 // assignWaterfalls finds regions that carry a river and are steep enough to be a waterfall.
@@ -249,7 +251,7 @@ func (m *BaseObject) assignWaterfalls() {
 		}
 		// 1.0 is the maximum steepness (90 degrees), so
 		// everything above 0.9 (81 degrees) is a waterfall.
-		if s > 0.9 && m.isRegBigRiver(i) {
+		if s > 0.9 && m.IsRegBigRiver(i) {
 			wfRegs[i] = true
 		}
 		// TODO:
@@ -263,7 +265,7 @@ func (m *BaseObject) assignWaterfalls() {
 
 // getRivers returns the merged river segments whose flux exceeds the provided limit.
 // Each river is represented as a sequence of region indices.
-func (m *BaseObject) getRivers(limit float64) [][]int {
+func (m *BaseObject) GetRivers(limit float64) [][]int {
 	// Get segments that are valid river segments.
 	links := m.getRiverSegments(limit)
 
@@ -273,10 +275,10 @@ func (m *BaseObject) getRivers(limit float64) [][]int {
 	defer func() {
 		log.Println("Done river segments in ", time.Since(start).String())
 	}()
-	return mergeIndexSegments(links)
+	return various.MergeIndexSegments(links)
 }
 
-func (m *BaseObject) getRiversInLatLonBB(limit float64, minLat, minLon, maxLat, maxLon float64) [][]int {
+func (m *BaseObject) GetRiversInLatLonBB(limit float64, minLat, minLon, maxLat, maxLon float64) [][]int {
 	// Get segments that are valid river segments.
 	links := m.getRiverSegments(limit)
 
@@ -299,7 +301,7 @@ func (m *BaseObject) getRiversInLatLonBB(limit float64, minLat, minLon, maxLat, 
 		}
 		filtered = append(filtered, link)
 	}
-	return mergeIndexSegments(filtered)
+	return various.MergeIndexSegments(filtered)
 }
 
 // getRiverSegments returns all region / downhill neighbor pairs whose flux values
@@ -355,7 +357,7 @@ func (m *Geo) getRiverIndices(limit float64) []int {
 	for i := range rivers {
 		rivers[i] = -1 // -1 means no river
 	}
-	for i, riv := range m.getRivers(limit) {
+	for i, riv := range m.GetRivers(limit) {
 		for _, idx := range riv {
 			rivers[idx] = i
 		}

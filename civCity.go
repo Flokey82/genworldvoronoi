@@ -7,17 +7,18 @@ import (
 	"math/rand"
 	"sort"
 
+	"github.com/Flokey82/genworldvoronoi/geo"
 	"github.com/Flokey82/go_gens/gameconstants"
 	"github.com/Flokey82/go_gens/genlanguage"
 	"github.com/Flokey82/go_gens/utils"
 )
 
-func (m *Civ) TickCity(c *City, gDisFunc func(int) GeoDisasterChance, cf func(int) *Culture) {
-	m.resetRand()
+func (m *Civ) TickCity(c *City, gDisFunc func(int) geo.GeoDisasterChance, cf func(int) *Culture) {
+	m.ResetRand()
 	m.tickCityDays(c, gDisFunc, cf, 1)
 }
 
-func (m *Civ) tickCityDays(c *City, gDisFunc func(int) GeoDisasterChance, cf func(int) *Culture, days int) {
+func (m *Civ) tickCityDays(c *City, gDisFunc func(int) geo.GeoDisasterChance, cf func(int) *Culture, days int) {
 	// Check if the city is abandoned.
 	if c.Population <= 0 {
 		if c.Population < 0 {
@@ -27,7 +28,7 @@ func (m *Civ) tickCityDays(c *City, gDisFunc func(int) GeoDisasterChance, cf fun
 	}
 
 	// Check if a random disaster strikes.
-	if m.rand.Intn(100*356) < days {
+	if m.Rand.Intn(100*356) < days {
 		m.tickCityDisaster(c, gDisFunc, days)
 	}
 
@@ -103,14 +104,14 @@ func (m *Civ) tickCityDays(c *City, gDisFunc func(int) GeoDisasterChance, cf fun
 	// chance that a new religion might be founded.
 	//
 	// TODO: Maybe keep note of an inciting event, like a famine, war, etc.
-	if c.Religion == nil && m.rand.Intn(3000*356) < days && c.Population > 0 {
+	if c.Religion == nil && m.Rand.Intn(3000*356) < days && c.Population > 0 {
 		c.Religion = m.genOrganizedReligion(c)
 		m.ExpandReligions()
 		m.History.AddEvent("Religion", fmt.Sprintf("A new religion was founded in %s", c.Name), c.Ref())
 	}
 }
 
-func (m *Civ) getCityDisasters(c *City, gDisFunc func(int) GeoDisasterChance) []disaster {
+func (m *Civ) getCityDisasters(c *City, gDisFunc func(int) geo.GeoDisasterChance) []geo.Disaster {
 	if c.Population == 0 {
 		return nil // No disasters for deserted cities.
 	}
@@ -125,30 +126,30 @@ func (m *Civ) getCityDisasters(c *City, gDisFunc func(int) GeoDisasterChance) []
 	// TODO:
 	// - If there is a coal mine, coal mine fires should be possible.
 	// - Add other industry specific disasters.
-	var ds []disaster
+	var ds []geo.Disaster
 	switch c.Type {
 	case TownTypeQuarry, TownTypeMining, TownTypeMiningGems:
-		ds = append(ds, disRockslide, disCaveIn)
+		ds = append(ds, geo.DisRockslide, geo.DisCaveIn)
 	case TownTypeDesertOasis:
-		ds = append(ds, disSandstorm)
+		ds = append(ds, geo.DisSandstorm)
 	}
-	ds = append(ds, disDrought, disFamine)
+	ds = append(ds, geo.DisDrought, geo.DisFamine)
 	// With increasing population, the city is be more prone to famine
 	// or disease.
 	//
 	// TODO: Improve this with some metrics like population density,
 	// sanitation, etc.
 	if c.Population > 1000 {
-		ds = append(ds, disDisease)
+		ds = append(ds, geo.DisDisease)
 	}
 	if c.Population > 10000 {
-		ds = append(ds, disPlague)
+		ds = append(ds, geo.DisPlague)
 	}
 	// Append the region specific disasters and return.
-	return append(ds, gDisFunc(c.ID).getDisasters()...)
+	return append(ds, gDisFunc(c.ID).GetDisasters()...)
 }
 
-func (m *Civ) tickCityDisaster(c *City, gDisFunc func(int) GeoDisasterChance, days int) {
+func (m *Civ) tickCityDisaster(c *City, gDisFunc func(int) geo.GeoDisasterChance, days int) {
 	// There is a chance of some form of disaster.
 	// If towns are heavily affected, they might be destroyed or abandoned.
 	//
@@ -161,8 +162,8 @@ func (m *Civ) tickCityDisaster(c *City, gDisFunc func(int) GeoDisasterChance, da
 
 	// Pick a random disaster given their respective probabilities.
 	cityDisasters := m.getCityDisasters(c, gDisFunc)
-	dis := randDisaster(cityDisasters)
-	if dis == disNone {
+	dis := geo.RandDisaster(cityDisasters)
+	if dis == geo.DisNone {
 		log.Fatalf("No disaster was chosen")
 	}
 
@@ -440,7 +441,7 @@ func (m *Civ) PlaceNCities(n int, cType TownType) {
 	stopRegions := make(map[int]bool)
 
 	// Place n cities of the given type.
-	regDistanceC := m.assignDistanceField(distSeedFunc(), stopRegions)
+	regDistanceC := m.AssignDistanceField(distSeedFunc(), stopRegions)
 	for i := 0; i < n; i++ {
 		// Place a city at the region with the highest fitness score.
 		c := m.placeCityWithScore(cType, m.CalcCityScoreWithDistanceField(scoreFunc, regDistanceC))
@@ -482,7 +483,7 @@ func (m *Civ) placeCityWithScore(cType TownType, cityScore []float64) *City {
 	// Get base population from city type.
 	// TODO: Calculate population based on suitability for habitation.
 	basePop := cType.FoundingPopulation()
-	basePop += 2 * m.rand.Intn(basePop) / (len(m.Cities) + 1)
+	basePop += 2 * m.Rand.Intn(basePop) / (len(m.Cities) + 1)
 	return m.placeCityAt(newcity, cType, basePop, lastMax)
 }
 
@@ -499,7 +500,7 @@ func (m *Civ) placeCityAt(r int, cType TownType, pop int, score float64) *City {
 		MaxPopulation: pop,
 		Type:          cType,
 		Culture:       m.GetCulture(r),
-		Founded:       m.Settled[r] + m.rand.Int63n(100),
+		Founded:       m.Settled[r] + m.Rand.Int63n(100),
 	}
 
 	// If there is no known culture, generate a new one.

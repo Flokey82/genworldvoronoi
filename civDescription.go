@@ -2,10 +2,12 @@ package genworldvoronoi
 
 import (
 	"log"
+
+	"github.com/Flokey82/genworldvoronoi/geo"
 )
 
 func (m *Civ) generateCitiesFlavorText() {
-	rpFunc := m.getRegPropertyFunc()
+	rpFunc := m.GetRegPropertyFunc()
 	for _, c := range m.Cities {
 		flvTxt := m.generateCityFlavorText(c, rpFunc(c.ID))
 		log.Println(c.Name, flvTxt)
@@ -13,7 +15,7 @@ func (m *Civ) generateCitiesFlavorText() {
 }
 
 // generateCityFlavorText generates a flavor text for a city.
-func (m *Civ) generateCityFlavorText(c *City, p RegProperty) string {
+func (m *Civ) generateCityFlavorText(c *City, p geo.RegProperty) string {
 	str := c.Name + " is a "
 	if c.Population == 0 {
 		str += "deserted "
@@ -54,5 +56,5 @@ func (m *Civ) generateCityFlavorText(c *City, p RegProperty) string {
 	str += m.GenerateRegPropertyDescription(p)
 
 	// ... and finally add some flavor text for the biome.
-	return str + generateFlavorTextForBiome(int64(c.ID), p.Biome)
+	return str + geo.GenerateFlavorTextForBiome(int64(c.ID), p.Biome)
 }

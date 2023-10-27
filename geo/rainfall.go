@@ -1,4 +1,4 @@
-package genworldvoronoi
+package geo
 
 import (
 	"log"
@@ -53,7 +53,7 @@ func (m *Geo) assignRainfall(numSteps, transferMode, sortOrder int) {
 		for r := 0; r < m.SphereMesh.NumRegions; r++ {
 			distOrderRegs[r] = r
 		}
-		regDistanceSea := m.assignDistanceField(seaRegs, make(map[int]bool))
+		regDistanceSea := m.AssignDistanceField(seaRegs, make(map[int]bool))
 		sort.Slice(distOrderRegs, func(a, b int) bool {
 			if regDistanceSea[distOrderRegs[a]] == regDistanceSea[distOrderRegs[b]] {
 				return m.Elevation[distOrderRegs[a]] < m.Elevation[distOrderRegs[b]]
@@ -64,7 +64,7 @@ func (m *Geo) assignRainfall(numSteps, transferMode, sortOrder int) {
 	} else {
 		// 1.2. Sort the indices in wind-order so we can ensure that we push the moisture
 		// in their logical sequence across the globe.
-		_, sortOrderRegs = m.getWindSortOrder() // Works reasonably well.
+		_, sortOrderRegs = m.GetWindSortOrder() // Works reasonably well.
 	}
 
 	// 1.3. Get wind vector for every region
@@ -264,7 +264,7 @@ func (m *Geo) assignRainfallBasic() {
 
 	// Sort the indices in wind-order so we can ensure that we push the moisture
 	// in their logical sequence across the globe.
-	_, windOrderRegs := m.getWindSortOrder()
+	_, windOrderRegs := m.GetWindSortOrder()
 	regWindVec := m.RegionToWindVecLocal
 
 	// calcRainfall returns the amount of rain shed given the region and humidity.
@@ -292,7 +292,7 @@ func (m *Geo) assignRainfallBasic() {
 	// Rivers should experience some evaporation.
 	if evaporateRivers {
 		for r, fluxval := range m.Flux {
-			if m.isRegBigRiver(r) {
+			if m.IsRegBigRiver(r) {
 				evaporation := humidityFromRiver * fluxval / maxFlux
 				m.Moisture[r] = math.Max(m.Moisture[r], evaporation)
 			}
@@ -365,7 +365,7 @@ func (m *Geo) assignRainfallBasic() {
 
 	useGoRoutines := true
 	if useGoRoutines {
-		kickOffChunkWorkers(len(dotToNeighbors), dotChunkProcessor)
+		various.KickOffChunkWorkers(len(dotToNeighbors), dotChunkProcessor)
 	} else {
 		dotChunkProcessor(0, len(dotToNeighbors))
 	}
@@ -391,7 +391,7 @@ func (m *Geo) assignRainfallBasic() {
 			if m.Elevation[r] <= 0 {
 				evaporation := biomesParam.evaporation * humidityFromSea * m.Elevation[r] / minElev
 				humidity = math.Max(humidity, evaporation)
-			} else if evaporateRivers && m.isRegBigRiver(r) {
+			} else if evaporateRivers && m.IsRegBigRiver(r) {
 				evaporation := biomesParam.evaporation * humidityFromRiver * m.Flux[r] / maxFlux
 				humidity = math.Max(humidity, evaporation)
 			} else if evaporatePools && m.Waterpool[r] > 0 {

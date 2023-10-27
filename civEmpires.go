@@ -6,6 +6,7 @@ import (
 	"log"
 	"sort"
 
+	"github.com/Flokey82/genworldvoronoi/geo"
 	"github.com/Flokey82/go_gens/genlanguage"
 )
 
@@ -52,7 +53,7 @@ func (m *Civ) regPlaceNEmpires(n int) {
 }
 
 func (m *Civ) expandEmpires() {
-	var queue ascPriorityQueue
+	var queue geo.AscPriorityQueue
 	heap.Init(&queue)
 
 	terr := initRegionSlice(len(m.Cities))
@@ -72,10 +73,10 @@ func (m *Civ) expandEmpires() {
 			if newdist > cityScore {
 				continue // We can't expand to a city with a higher score.
 			}
-			heap.Push(&queue, &queueEntry{
-				score:       newdist,
-				origin:      c.ID,
-				destination: r,
+			heap.Push(&queue, &geo.QueueEntry{
+				Score:       newdist,
+				Origin:      c.ID,
+				Destination: r,
 			})
 		}
 
@@ -84,24 +85,24 @@ func (m *Civ) expandEmpires() {
 
 	// Extend territories until the queue is empty.
 	for queue.Len() > 0 {
-		u := heap.Pop(&queue).(*queueEntry)
-		if terr[cityIDToIndex[u.destination]] >= 0 {
+		u := heap.Pop(&queue).(*geo.QueueEntry)
+		if terr[cityIDToIndex[u.Destination]] >= 0 {
 			continue
 		}
-		terr[cityIDToIndex[u.destination]] = u.origin
-		for _, v := range m.getTerritoryNeighbors(u.destination, m.RegionToCityState) {
+		terr[cityIDToIndex[u.Destination]] = u.Origin
+		for _, v := range m.getTerritoryNeighbors(u.Destination, m.RegionToCityState) {
 			if terr[cityIDToIndex[v]] >= 0 {
 				continue
 			}
 			newdist := m.getCityScoreForMartial(cityIDToCity[v])
-			cityScore := m.getCityScoreForMartial(cityIDToCity[u.origin])
+			cityScore := m.getCityScoreForMartial(cityIDToCity[u.Origin])
 			if newdist < 0 || newdist > cityScore {
 				continue // We can't expand to a city with a higher score.
 			}
-			heap.Push(&queue, &queueEntry{
-				score:       newdist + u.score,
-				origin:      u.origin,
-				destination: v,
+			heap.Push(&queue, &geo.QueueEntry{
+				Score:       newdist + u.Score,
+				Origin:      u.Origin,
+				Destination: v,
 			})
 		}
 	}
@@ -142,7 +143,7 @@ func (m *Civ) expandEmpires() {
 				e.Regions = append(e.Regions, r)
 			}
 		}
-		e.Stats = m.getStats(e.Regions)
+		e.Stats = m.GetStats(e.Regions)
 		e.Log()
 	}
 }
@@ -184,7 +185,7 @@ type Empire struct {
 
 	// TODO: DO NOT CACHE THIS!
 	Regions []int // Regions that are part of the empire
-	*Stats
+	*geo.Stats
 }
 
 func (e *Empire) String() string {

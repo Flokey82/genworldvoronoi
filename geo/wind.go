@@ -1,4 +1,4 @@
-package genworldvoronoi
+package geo
 
 import (
 	"math"
@@ -69,7 +69,7 @@ func (m *Geo) assignWindVectors() {
 	useGoRoutines := true
 	if useGoRoutines {
 		// Use goroutines to calculate wind vectors.
-		kickOffChunkWorkers(m.NumRegions, chunkProcessorWind)
+		various.KickOffChunkWorkers(m.NumRegions, chunkProcessorWind)
 	} else {
 		// Use single threaded calculation of wind vectors.
 		chunkProcessorWind(0, m.NumRegions)
@@ -107,12 +107,12 @@ func (m *Geo) assignWindVectors() {
 
 		chunkProcessor = func(start, end int) {
 			outRegs := make([]int, 0, 8)
-			regDistanceSea := m.assignDistanceField(seaRegs, make(map[int]bool))
+			regDistanceSea := m.AssignDistanceField(seaRegs, make(map[int]bool))
 			for r := start; r < end; r++ {
 				regVec := regWindVec[r]
 				lat := m.LatLon[r][0]
 				lon := m.LatLon[r][1]
-				tempReg := getMeanAnnualTemp(lat) - getTempFalloffFromAltitude(maxAltitudeFactor*m.Elevation[r]/maxElev)
+				tempReg := GetMeanAnnualTemp(lat) - GetTempFalloffFromAltitude(MaxAltitudeFactor*m.Elevation[r]/maxElev)
 				if m.Elevation[r] < 0 {
 					// TODO: Use actual distance from ocean to calculate temperature falloff.
 					tempReg -= 1 / (regDistanceSea[r] + 1)
@@ -125,7 +125,7 @@ func (m *Geo) assignWindVectors() {
 				for _, nb := range m.SphereMesh.R_circulate_r(outRegs, r) {
 					nbLat := m.LatLon[nb][0]
 					nbLon := m.LatLon[nb][1]
-					tempNb := getMeanAnnualTemp(nbLat) - getTempFalloffFromAltitude(maxAltitudeFactor*m.Elevation[nb]/maxElev)
+					tempNb := GetMeanAnnualTemp(nbLat) - GetTempFalloffFromAltitude(MaxAltitudeFactor*m.Elevation[nb]/maxElev)
 					if m.Elevation[nb] < 0 {
 						// TODO: Use actual distance from ocean to calculate temperature falloff.
 						tempNb -= 1 / (regDistanceSea[nb] + 1)
@@ -225,7 +225,7 @@ func (m *Geo) assignWindVectors() {
 			for r := start; r < end; r++ {
 				windDir := regWindVec[r]
 				// slowdown/speedup according to elevation change
-				blowsPastReg := m.getClosestNeighbor(outRegs, r, windDir)
+				blowsPastReg := m.GetClosestNeighbor(outRegs, r, windDir)
 
 				// Elevation change is negative if the current region is higher than the region the wind blows past.
 				// This will result in wind slowing down if it blows towards a mountain and to speed up if it blows
@@ -244,8 +244,8 @@ func (m *Geo) assignWindVectors() {
 				for _, nr := range m.SphereMesh.R_circulate_r(outRegs, r) {
 					// Magnitude will be positive if the neighbor is warmer than the current region, which will
 					// result in a wind vector pointing towards the neighbor.
-					magnitude := (m.getRegTemperature(nr, maxElev) - m.getRegTemperature(r, maxElev))
-					vec := various.SetMagnitude2(m.dirVecFromToRegs(r, nr), magnitude)
+					magnitude := (m.GetRegTemperature(nr, maxElev) - m.GetRegTemperature(r, maxElev))
+					vec := various.SetMagnitude2(m.DirVecFromToRegs(r, nr), magnitude)
 					acc = various.Add2(vec, acc)
 				}
 				// Add the temperature vector to the wind vector.
@@ -259,7 +259,7 @@ func (m *Geo) assignWindVectors() {
 
 	if useGoRoutines {
 		// Split the work into chunks and process them in parallel.
-		kickOffChunkWorkers(m.SphereMesh.NumRegions, chunkProcessor)
+		various.KickOffChunkWorkers(m.SphereMesh.NumRegions, chunkProcessor)
 	} else {
 		chunkProcessor(0, m.SphereMesh.NumRegions)
 	}
@@ -299,7 +299,7 @@ func (m *Geo) interpolateWindVecs(in [][2]float64, steps int) [][2]float64 {
 	return in
 }
 
-func (m *Geo) getWindSortOrder() ([]float64, []int) {
+func (m *Geo) GetWindSortOrder() ([]float64, []int) {
 	// TODO: Add bool parameter to switch between local winds and global winds.
-	return m.getVectorSortOrder(m.RegionToWindVecLocal, false)
+	return m.GetVectorSortOrder(m.RegionToWindVecLocal, false)
 }

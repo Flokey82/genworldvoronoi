@@ -3,6 +3,8 @@ package genworldvoronoi
 import (
 	"log"
 	"sort"
+
+	"github.com/Flokey82/genworldvoronoi/geo"
 )
 
 const (
@@ -97,7 +99,7 @@ func (m *Civ) genCultureSkills() {
 
 	// Metals.
 	// TODO: Change this to "metalwork" with a speciality for each metal type.
-	for res := 0; res < ResMaxMetals; res++ {
+	for res := 0; res < geo.ResMaxMetals; res++ {
 		sort.Slice(cultureCopy, func(i, j int) bool {
 			return float64(cultureCopy[i].Stats.ResMetal[res])/float64(len(cultureCopy[i].Regions)) > float64(cultureCopy[j].Stats.ResMetal[res])/float64(len(cultureCopy[j].Regions))
 		})
@@ -105,13 +107,13 @@ func (m *Civ) genCultureSkills() {
 			if i >= 3 {
 				break
 			}
-			skillMap[c] = append(skillMap[c], metalToString(res))
+			skillMap[c] = append(skillMap[c], geo.MetalToString(res))
 		}
 	}
 
 	// Gems.
 	// TODO: Change this to "gemwork" with a speciality for each gem type.
-	for res := 0; res < ResMaxGems; res++ {
+	for res := 0; res < geo.ResMaxGems; res++ {
 		sort.Slice(cultureCopy, func(i, j int) bool {
 			return float64(cultureCopy[i].Stats.ResGems[res])/float64(len(cultureCopy[i].Regions)) > float64(cultureCopy[j].Stats.ResGems[res])/float64(len(cultureCopy[j].Regions))
 		})
@@ -119,13 +121,13 @@ func (m *Civ) genCultureSkills() {
 			if i >= 3 {
 				break
 			}
-			skillMap[c] = append(skillMap[c], gemToString(res))
+			skillMap[c] = append(skillMap[c], geo.GemToString(res))
 		}
 	}
 
 	// Stones.
 	// TODO: Change this to "stonework" with a speciality for each stone type.
-	for res := 0; res < ResMaxStones; res++ {
+	for res := 0; res < geo.ResMaxStones; res++ {
 		sort.Slice(cultureCopy, func(i, j int) bool {
 			return float64(cultureCopy[i].Stats.ResStones[res])/float64(len(cultureCopy[i].Regions)) > float64(cultureCopy[j].Stats.ResStones[res])/float64(len(cultureCopy[j].Regions))
 		})
@@ -133,13 +135,13 @@ func (m *Civ) genCultureSkills() {
 			if i >= 3 {
 				break
 			}
-			skillMap[c] = append(skillMap[c], stoneToString(res))
+			skillMap[c] = append(skillMap[c], geo.StoneToString(res))
 		}
 	}
 
 	// Woods.
 	// TODO: Change this to "woodwork" with a speciality for each wood type.
-	for res := 0; res < ResMaxWoods; res++ {
+	for res := 0; res < geo.ResMaxWoods; res++ {
 		sort.Slice(cultureCopy, func(i, j int) bool {
 			return float64(cultureCopy[i].Stats.ResWood[res])/float64(len(cultureCopy[i].Regions)) > float64(cultureCopy[j].Stats.ResWood[res])/float64(len(cultureCopy[j].Regions))
 		})
@@ -147,7 +149,7 @@ func (m *Civ) genCultureSkills() {
 			if i >= 3 {
 				break
 			}
-			skillMap[c] = append(skillMap[c], woodToString(res))
+			skillMap[c] = append(skillMap[c], geo.WoodToString(res))
 		}
 	}
 

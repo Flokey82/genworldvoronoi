@@ -1,4 +1,4 @@
-package genworldvoronoi
+package geo
 
 import (
 	"math"
@@ -110,7 +110,7 @@ func GenerateFlavorText(desc BiomeDescription) string {
 	return text
 }
 
-func generateFlavorTextForBiome(seed int64, biome int) string {
+func GenerateFlavorTextForBiome(seed int64, biome int) string {
 	rand.Seed(seed)
 	switch biome {
 	case genbiome.WhittakerModBiomeSubtropicalDesert:

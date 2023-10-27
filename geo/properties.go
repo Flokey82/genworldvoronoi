@@ -1,4 +1,4 @@
-package genworldvoronoi
+package geo
 
 import (
 	"math"
@@ -24,14 +24,14 @@ type RegProperty struct {
 	OnIsland            bool // true if the region is on an island
 }
 
-// getRegPropertyFunc returns a function that returns the properties of a region.
+// GetRegPropertyFunc returns a function that returns the properties of a region.
 // NOTE: This is probably a very greedy function.
-func (m *Geo) getRegPropertyFunc() func(int) RegProperty {
+func (m *Geo) GetRegPropertyFunc() func(int) RegProperty {
 	// TODO: Add chance of tropical storms, wildfires, etc.
-	disasterFunc := m.getGeoDisasterFunc()
+	disasterFunc := m.GetGeoDisasterFunc()
 	steepness := m.GetSteepness()
-	inlandValleyFunc := m.getFitnessInlandValleys()
-	biomeFunc := m.getRegWhittakerModBiomeFunc()
+	inlandValleyFunc := m.GetFitnessInlandValleys()
+	biomeFunc := m.GetRegWhittakerModBiomeFunc()
 	_, maxElev := minMax(m.Elevation)
 	var oceanRegs, volcanoRegs, riverRegs, faultlineRegs []int
 	stopOcean := make(map[int]bool)
@@ -43,18 +43,18 @@ func (m *Geo) getRegPropertyFunc() func(int) RegProperty {
 		if m.RegionIsVolcano[r] {
 			volcanoRegs = append(volcanoRegs, r)
 		}
-		if m.isRegBigRiver(r) {
+		if m.IsRegBigRiver(r) {
 			riverRegs = append(riverRegs, r)
 		}
 		if m.RegionCompression[r] != 0 {
 			faultlineRegs = append(faultlineRegs, r)
 		}
 	}
-	distOcean := m.assignDistanceField(oceanRegs, m.RegionIsMountain)
-	distMountain := m.assignDistanceField(m.mountain_r, stopOcean)
-	distVolcano := m.assignDistanceField(volcanoRegs, stopOcean)
-	distRiver := m.assignDistanceField(riverRegs, stopOcean)
-	distFaultline := m.assignDistanceField(faultlineRegs, stopOcean)
+	distOcean := m.AssignDistanceField(oceanRegs, m.RegionIsMountain)
+	distMountain := m.AssignDistanceField(m.Mountain_r, stopOcean)
+	distVolcano := m.AssignDistanceField(volcanoRegs, stopOcean)
+	distRiver := m.AssignDistanceField(riverRegs, stopOcean)
+	distFaultline := m.AssignDistanceField(faultlineRegs, stopOcean)
 	return func(id int) RegProperty {
 		// Make sure that we do not have more than 2 neighbours that has a lower elevation.
 		// ... because a valley should be surrounded by mountains.
@@ -83,7 +83,7 @@ func (m *Geo) getRegPropertyFunc() func(int) RegProperty {
 			DistanceToRiver:     distRiver[id],
 			DistanceToVolcano:   distVolcano[id],
 			DistanceToFaultline: distFaultline[id],
-			Temperature:         m.getRegTemperature(id, maxElev),
+			Temperature:         m.GetRegTemperature(id, maxElev),
 			Rainfall:            m.Rainfall[id],
 			Danger:              disasterFunc(id),
 			HasWaterfall:        m.RegionIsWaterfall[id],
@@ -103,9 +103,9 @@ const (
 	FeatureTypeContinent = "continent"
 )
 
-// getRegionFeatureTypeFunc returns a function that returns the feature type of
+// GetRegionFeatureTypeFunc returns a function that returns the feature type of
 // a given region.
-func (m *Geo) getRegionFeatureTypeFunc() func(int) string {
+func (m *Geo) GetRegionFeatureTypeFunc() func(int) string {
 	return func(i int) string {
 		if i < 0 {
 			return ""
@@ -132,12 +132,12 @@ func (m *Geo) getRegionFeatureTypeFunc() func(int) string {
 	}
 }
 
-// getRegHaven returns the closest neighbor region that is a water cell, which
+// GetRegHaven returns the closest neighbor region that is a water cell, which
 // can be used as a haven, and returns the number of water neighbors, indicating
 // the harbor size.
 //
 // If no haven is found, -1 is returned.
-func (m *Geo) getRegHaven(reg int) (int, int) {
+func (m *Geo) GetRegHaven(reg int) (int, int) {
 	// get all neighbors that are below or at sea level.
 	water := make([]int, 0, 8)
 	for _, nb := range m.GetRegNeighbors(reg) {
@@ -177,7 +177,7 @@ const (
 	CellTypeInland       = 2
 )
 
-// getRegCellTypes maps the region to its cell type.
+// GetRegCellTypes maps the region to its cell type.
 //
 // NOTE: Currently this depends on the region graph, which will break
 // things once we increas or decrease the number of regions on the map as
@@ -190,7 +190,7 @@ const (
 // +1: region is a land cell next to a water cell (lake shore/coastal land)
 // +2: region is a land cell next to a coastal land cell
 // >2: region is inland
-func (m *Geo) getRegCellTypes() []int {
+func (m *Geo) GetRegCellTypes() []int {
 	var oceanRegs, landRegs []int
 	stop_land := make(map[int]bool)
 	stop_ocean := make(map[int]bool)
@@ -203,8 +203,8 @@ func (m *Geo) getRegCellTypes() []int {
 			stop_land[r] = true
 		}
 	}
-	regDistanceOcean := m.assignDistanceField(oceanRegs, stop_land)
-	regDistanceLand := m.assignDistanceField(landRegs, stop_ocean)
+	regDistanceOcean := m.AssignDistanceField(oceanRegs, stop_land)
+	regDistanceLand := m.AssignDistanceField(landRegs, stop_ocean)
 
 	cellType := make([]int, m.SphereMesh.NumRegions)
 	for i := range cellType {
@@ -229,26 +229,26 @@ func (m *Geo) getRegCellTypes() []int {
 	return cellType
 }
 
-func (m *BaseObject) isRegBelowOrAtSeaLevelOrPool(r int) bool {
+func (m *BaseObject) IsRegBelowOrAtSeaLevelOrPool(r int) bool {
 	return m.Elevation[r] <= 0 || m.Waterpool[r] > 0
 }
 
-func (m *BaseObject) isRegLakeOrWaterBody(r int) bool {
-	return m.isRegWaterBody(r) || m.isRegLake(r)
+func (m *BaseObject) IsRegLakeOrWaterBody(r int) bool {
+	return m.IsRegWaterBody(r) || m.IsRegLake(r)
 }
 
-func (m *BaseObject) isRegWaterBody(r int) bool {
+func (m *BaseObject) IsRegWaterBody(r int) bool {
 	return m.Waterbodies[r] >= 0
 }
 
-func (m *BaseObject) isRegLake(r int) bool {
+func (m *BaseObject) IsRegLake(r int) bool {
 	return m.Drainage[r] >= 0 || m.Waterpool[r] > 0
 }
 
-func (m *BaseObject) isRegRiver(r int) bool {
+func (m *BaseObject) IsRegRiver(r int) bool {
 	return m.Flux[r] > m.Rainfall[r]
 }
 
-func (m *BaseObject) isRegBigRiver(r int) bool {
+func (m *BaseObject) IsRegBigRiver(r int) bool {
 	return m.Flux[r] > m.Rainfall[r]*2
 }

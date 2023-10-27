@@ -1,4 +1,4 @@
-package genworldvoronoi
+package noise
 
 import (
 	"encoding/binary"
@@ -10,7 +10,7 @@ import (
 
 var byteorder = binary.LittleEndian
 
-func (n *Noise) writeTo(w io.Writer) error {
+func (n *Noise) WriteTo(w io.Writer) error {
 	// Write the number of octaves, persistence, and amplitudes, as well as the
 	// seed. From this, we can reconstruct the noise function.
 	if err := binary.Write(w, byteorder, int64(n.Octaves)); err != nil {
@@ -30,7 +30,7 @@ func (n *Noise) writeTo(w io.Writer) error {
 	return nil
 }
 
-func readNoise(r io.Reader) (*Noise, error) {
+func ReadNoise(r io.Reader) (*Noise, error) {
 	n := &Noise{}
 
 	// Read the number of octaves, persistence, and amplitudes, as well as the

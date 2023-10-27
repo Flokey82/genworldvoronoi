@@ -1,4 +1,4 @@
-package genworldvoronoi
+package geo
 
 import (
 	"container/list"
@@ -7,14 +7,14 @@ import (
 	"github.com/Flokey82/genbiome"
 )
 
-// getAzgaarRegionBiome returns the biome for a given region as per Azgaar's map generator.
-func (m *Geo) getAzgaarRegionBiome(r int, elev, maxElev float64) int {
-	return genbiome.GetAzgaarBiome(int(20.0*m.Moisture[r]), int(m.getRegTemperature(r, maxElev)), int(elev*100))
+// GetAzgaarRegionBiome returns the biome for a given region as per Azgaar's map generator.
+func (m *Geo) GetAzgaarRegionBiome(r int, elev, maxElev float64) int {
+	return genbiome.GetAzgaarBiome(int(20.0*m.Moisture[r]), int(m.GetRegTemperature(r, maxElev)), int(elev*100))
 }
 
-// getRegWhittakerModBiomeFunc returns a function that returns the Whittaker biome
+// GetRegWhittakerModBiomeFunc returns a function that returns the Whittaker biome
 // for a given region.
-func (m *Geo) getRegWhittakerModBiomeFunc() func(r int) int {
+func (m *Geo) GetRegWhittakerModBiomeFunc() func(r int) int {
 	_, maxElev := minMax(m.Elevation)
 	_, maxMois := minMax(m.Moisture)
 	return func(r int) int {
@@ -26,11 +26,11 @@ func (m *Geo) getRegWhittakerModBiomeFunc() func(r int) int {
 }
 
 func getWhittakerModBiome(latitude, elevation, moisture float64) int {
-	return genbiome.GetWhittakerModBiome(int(getMeanAnnualTemp(latitude)-getTempFalloffFromAltitude(maxAltitudeFactor*elevation)), int(moisture*maxPrecipitation))
+	return genbiome.GetWhittakerModBiome(int(GetMeanAnnualTemp(latitude)-GetTempFalloffFromAltitude(MaxAltitudeFactor*elevation)), int(moisture*MaxPrecipitation))
 }
 
-func getWhittakerModBiomeColor(latitude, elevation, moisture, intensity float64) color.NRGBA {
-	return genbiome.GetWhittakerModBiomeColor(int(getMeanAnnualTemp(latitude)-getTempFalloffFromAltitude(maxAltitudeFactor*elevation)), int(moisture*maxPrecipitation), intensity)
+func GetWhittakerModBiomeColor(latitude, elevation, moisture, intensity float64) color.NRGBA {
+	return genbiome.GetWhittakerModBiomeColor(int(GetMeanAnnualTemp(latitude)-GetTempFalloffFromAltitude(MaxAltitudeFactor*elevation)), int(moisture*MaxPrecipitation), intensity)
 }
 
 func (m *Geo) assignBiomeRegions() {
@@ -56,7 +56,7 @@ func (m *Geo) identifyBiomeRegions() []int {
 			biomeToRegs[r] = -2
 		}
 	}
-	biomeFunc := m.getRegWhittakerModBiomeFunc()
+	biomeFunc := m.GetRegWhittakerModBiomeFunc()
 
 	// Use a queue to implement the flood fill algorithm.
 	outRegs := make([]int, 0, 6)

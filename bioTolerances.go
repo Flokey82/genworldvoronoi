@@ -5,6 +5,7 @@ import (
 	"math"
 
 	"github.com/Flokey82/genbiome"
+	"github.com/Flokey82/genworldvoronoi/geo"
 )
 
 // SpeciesTolerances defines the environmental tolerances of a species.
@@ -21,9 +22,9 @@ type SpeciesTolerances struct {
 func (s *SpeciesTolerances) String() string {
 	var str string
 	str += fmt.Sprintf("TEMP: %.2f°C - %.2f°C,\n", s.TempRange[0], s.TempRange[1])
-	str += fmt.Sprintf("HUMD: %.2fdm - %.2fdm,\n", s.HumRange[0]*maxPrecipitation, s.HumRange[1]*maxPrecipitation)
-	str += fmt.Sprintf("RAIN: %.2fdm - %.2fdm,\n", s.RainRange[0]*maxPrecipitation, s.RainRange[1]*maxPrecipitation)
-	str += fmt.Sprintf("ELEV: %.2f-%.2f\n", s.ElevRange[0]*maxAltitudeFactor, s.ElevRange[1]*maxAltitudeFactor)
+	str += fmt.Sprintf("HUMD: %.2fdm - %.2fdm,\n", s.HumRange[0]*geo.MaxPrecipitation, s.HumRange[1]*geo.MaxPrecipitation)
+	str += fmt.Sprintf("RAIN: %.2fdm - %.2fdm,\n", s.RainRange[0]*geo.MaxPrecipitation, s.RainRange[1]*geo.MaxPrecipitation)
+	str += fmt.Sprintf("ELEV: %.2f-%.2f\n", s.ElevRange[0]*geo.MaxAltitudeFactor, s.ElevRange[1]*geo.MaxAltitudeFactor)
 	str += fmt.Sprintf("STEE: %.2f-%.2f\n", s.SteepRange[0], s.SteepRange[1])
 	if len(s.PreferredBiomes) > 0 {
 		str += "biomes:\n"
@@ -64,20 +65,20 @@ func (b *Bio) getTolerancesForRegionFunc() func(int) SpeciesTolerances {
 		}
 
 		// Preferred temperature range.
-		s.TempRange = minMaxRange(b.getRegTemperature(r, maxElev), float64(minTemp), float64(maxTemp), variation)
+		s.TempRange = minMaxRange(b.GetRegTemperature(r, maxElev), float64(geo.MinTemp), float64(geo.MaxTemp), variation)
 
 		// Preferred humidity range.
 		s.HumRange = minMaxRange(b.Moisture[r]/maxHum, 0, 1, variation)
 
 		// Preferred rain range.
-		s.RainRange = minMaxRange(maxPrecipitation*b.Rainfall[r]/maxRain, 0, maxPrecipitation, variation)
+		s.RainRange = minMaxRange(geo.MaxPrecipitation*b.Rainfall[r]/maxRain, 0, geo.MaxPrecipitation, variation)
 
 		// Preferred steepness range.
 		s.SteepRange = minMaxRange(steep[r], 0, 1, variation)
 
 		// If we are not in the ocean, we probably have a preferred biome.
 		if s.Ecosphere != EcosphereTypeOcean && b.rand.Float64() < 0.7 {
-			s.PreferredBiomes = []int{b.getRegWhittakerModBiomeFunc()(r)}
+			s.PreferredBiomes = []int{b.GetRegWhittakerModBiomeFunc()(r)}
 		}
 		return s
 	}
@@ -87,7 +88,7 @@ func (b *Bio) getToleranceScoreFunc(s SpeciesTolerances) func(int) float64 {
 	_, maxElev := minMax(b.Elevation)
 	_, maxHum := minMax(b.Moisture)
 	_, maxRain := minMax(b.Rainfall)
-	bf := b.getRegWhittakerModBiomeFunc()
+	bf := b.GetRegWhittakerModBiomeFunc()
 	steepness := b.GetSteepness()
 	return func(r int) float64 { // Check what ecosphere we are in and if it matches the species.
 		if !s.Ecosphere.isSet(b.getEcosphere(r)) {
@@ -103,7 +104,7 @@ func (b *Bio) getToleranceScoreFunc(s SpeciesTolerances) func(int) float64 {
 
 		// Check how much we diverge from the preferred temperature range.
 		if isRangeSet(s.TempRange) {
-			tempScore = getRangeFit(b.getRegTemperature(r, maxElev), s.TempRange)
+			tempScore = getRangeFit(b.GetRegTemperature(r, maxElev), s.TempRange)
 			if tempScore == -1 {
 				return -1
 			}
@@ -123,7 +124,7 @@ func (b *Bio) getToleranceScoreFunc(s SpeciesTolerances) func(int) float64 {
 
 		// Check how much we diverge from the preferred rain range.
 		if isRangeSet(s.RainRange) {
-			rainScore = getRangeFit(maxPrecipitation*b.Rainfall[r]/maxRain, s.RainRange)
+			rainScore = getRangeFit(geo.MaxPrecipitation*b.Rainfall[r]/maxRain, s.RainRange)
 			if rainScore == -1 {
 				return -1
 			}
@@ -181,10 +182,10 @@ func (b *Bio) getEcosphere(r int) EcosphereType {
 	if b.Elevation[r] <= 0.0 {
 		return EcosphereTypeOcean
 	}
-	if b.isRegRiver(r) {
+	if b.IsRegRiver(r) {
 		return EcosphereTypeRiver
 	}
-	if b.isRegLake(r) {
+	if b.IsRegLake(r) {
 		return EcosphereTypeLake
 	}
 	return EcosphereTypeLand

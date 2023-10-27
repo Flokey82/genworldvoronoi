@@ -1,4 +1,4 @@
-package genworldvoronoi
+package geo
 
 import (
 	"log"
@@ -21,7 +21,7 @@ func (m *Geo) assignOceanCurrents() {
 	regToRegNeighborVec := m.getRegionToNeighborVec()
 
 	// Calculate the pressure in each ocean region.
-	regPressure := m.calcCurrentPressure(regCurrentVec)
+	regPressure := m.CalcCurrentPressure(regCurrentVec)
 
 	// deflectAndSplit is a function that takes a region and
 	// returns a vector. It is used to calculate the ocean currents.
@@ -213,7 +213,7 @@ func (m *Geo) assignOceanCurrents() {
 		// Sort the regions by their "downstream" direction.
 		regions := m.getCurrentSortOrder(regCurrentVec, false)
 		// Calculate the pressure in each ocean region.
-		regPressure = m.calcCurrentPressure(regCurrentVec)
+		regPressure = m.CalcCurrentPressure(regCurrentVec)
 		// Sort the regions by pressure (highest pressure first)
 		sort.Slice(regions, func(i, j int) bool {
 			return regPressure[regions[i]] > regPressure[regions[j]]
@@ -260,7 +260,7 @@ func (m *Geo) assignOceanCurrents() {
 
 // getCurrentSortOrder returns the regions sorted by their position and downstream direction.
 func (m *Geo) getCurrentSortOrder(revVecs [][2]float64, reverse bool) []int {
-	_, orderedRegs := m.getVectorSortOrder(revVecs, reverse)
+	_, orderedRegs := m.GetVectorSortOrder(revVecs, reverse)
 	return orderedRegs
 }
 
@@ -282,7 +282,7 @@ func (m *Geo) assignOceanCurrentsInflowOutflow() {
 		m.seedOceanCurrents(regCurrentVec)
 
 		// Calculate the pressure in each ocean region.
-		regPressure := m.calcCurrentPressure(regCurrentVec)
+		regPressure := m.CalcCurrentPressure(regCurrentVec)
 
 		// Calculate the inflow and outflow vectors based on the pressure difference.
 		for reg := 0; reg < m.SphereMesh.NumRegions; reg++ {
@@ -374,7 +374,7 @@ func (m *Geo) assignOceanCurrentsInflowOutflow() {
 	m.RegionToOceanVec = regCurrentVec
 }
 
-func (m *Geo) calcCurrentPressure(currentVecs [][2]float64) []float64 {
+func (m *Geo) CalcCurrentPressure(currentVecs [][2]float64) []float64 {
 	// Calculate the pressure in each region based on inflow and outflow.
 	// The pressure is the sum of the inflow and outflow vectors.
 	// A non-zero pressure means that the current is not balanced.
@@ -619,7 +619,7 @@ func (m *Geo) assignOceanCurrents3() {
 			}
 			if useGoRoutines {
 				// use goroutines
-				kickOffChunkWorkers(len(groups), chunkProcessor)
+				various.KickOffChunkWorkers(len(groups), chunkProcessor)
 			} else {
 				// do not use goroutines
 				chunkProcessor(0, len(groups))
@@ -682,14 +682,14 @@ func (m *Geo) assignOceanCurrents3() {
 				for _, nr := range m.SphereMesh.R_circulate_r(outRegs, r) {
 					// if this neighbor has a smaller distance to edge, or belongs to a different gyre, the inward dir points away from it (so we add dirFromTo(nr, r), aka the dir away from nr)
 					if groups[nr] != groups[r] {
-						inwardDirRaw = various.Add2(inwardDirRaw, m.dirVecFromToRegs(nr, r))
+						inwardDirRaw = various.Add2(inwardDirRaw, m.DirVecFromToRegs(nr, r))
 					} else if distFromEdge[nr] < distFromEdge[r] {
-						inwardDirRaw = various.Add2(inwardDirRaw, m.dirVecFromToRegs(nr, r))
+						inwardDirRaw = various.Add2(inwardDirRaw, m.DirVecFromToRegs(nr, r))
 					} else if distFromEdge[nr] == distFromEdge[r] {
 						continue
 					} else {
 						// if the neighbor has a larger dist to the edge, the inward dir points towards it
-						inwardDirRaw = various.Add2(inwardDirRaw, m.dirVecFromToRegs(r, nr))
+						inwardDirRaw = various.Add2(inwardDirRaw, m.DirVecFromToRegs(r, nr))
 					}
 				}
 				// normalize inward dir
@@ -709,7 +709,7 @@ func (m *Geo) assignOceanCurrents3() {
 			}
 		}
 		if useGoRoutines {
-			kickOffChunkWorkers(len(groupmatesForSeed), chunkProcessor)
+			various.KickOffChunkWorkers(len(groupmatesForSeed), chunkProcessor)
 		} else {
 			chunkProcessor(0, len(groupmatesForSeed))
 		}
@@ -734,7 +734,7 @@ func (m *Geo) assignOceanCurrents3() {
 // TODO: Optimize, fix, maybe replace.
 func (m *BaseObject) bfsMetaVoronoi(seeds []int, includeCondition func(int) bool, forceIncludeIsolatedRegions bool) []int {
 	// Reset the random number generator.
-	m.resetRand()
+	m.ResetRand()
 	rGroup := initRegionSlice(m.SphereMesh.NumRegions)
 	isSeed := make([]bool, m.SphereMesh.NumRegions)
 	for _, seed := range seeds {
@@ -758,7 +758,7 @@ func (m *BaseObject) bfsMetaVoronoi(seeds []int, includeCondition func(int) bool
 	// Random search adapted from breadth first search.
 	// TODO: Improve the queue. Currently this is growing unchecked.
 	for queueOut := 0; queueOut < len(queue); queueOut++ {
-		pos := queueOut + m.rand.Intn(len(queue)-queueOut)
+		pos := queueOut + m.Rand.Intn(len(queue)-queueOut)
 		currentReg := queue[pos]
 		queue[pos] = queue[queueOut]
 		for _, nbReg := range mesh.R_circulate_r(outRegs, currentReg) {
@@ -783,5 +783,5 @@ func (m *BaseObject) bfsMetaVoronoi(seeds []int, includeCondition func(int) bool
 }
 
 func (m *Geo) getPreviousNeighbor(outregs []int, r int, vec [2]float64) int {
-	return m.getClosestNeighbor(outregs, r, [2]float64{-vec[0], -vec[1]})
+	return m.GetClosestNeighbor(outregs, r, [2]float64{-vec[0], -vec[1]})
 }

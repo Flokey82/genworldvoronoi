@@ -1,4 +1,4 @@
-package genworldvoronoi
+package geo
 
 import (
 	"math"
@@ -8,11 +8,11 @@ import (
 	"github.com/Flokey82/go_gens/gameconstants"
 )
 
-// getTempFalloffFromAltitude returns the temperature falloff at a given altitude in meters
+// GetTempFalloffFromAltitude returns the temperature falloff at a given altitude in meters
 // above sea level. (approx. 9.8 °C per 1000 m)
 // NOTE: This is definitely not correct :)
 // Source: https://www.quora.com/At-what-rate-does-temperature-drop-with-altitude
-func getTempFalloffFromAltitude(height float64) float64 {
+func GetTempFalloffFromAltitude(height float64) float64 {
 	if height < 0 {
 		return 0.0
 	}
@@ -20,41 +20,41 @@ func getTempFalloffFromAltitude(height float64) float64 {
 }
 
 const (
-	minTemp          = genbiome.MinTemperatureC
-	maxTemp          = genbiome.MaxTemperatureC
-	rangeTemp        = maxTemp - minTemp
-	maxPrecipitation = genbiome.MaxPrecipitationDM // 450cm
+	MinTemp          = genbiome.MinTemperatureC
+	MaxTemp          = genbiome.MaxTemperatureC
+	RangeTemp        = MaxTemp - MinTemp
+	MaxPrecipitation = genbiome.MaxPrecipitationDM // 450cm
 )
 
-// getMeanAnnualTemp returns the temperature at a given latitude within the range of
+// GetMeanAnnualTemp returns the temperature at a given latitude within the range of
 // -15 °C to +30°C because that's the range in which the Whittaker biomes are defined.
 // For this I assume that light hits the globe exactly from a 90° angle with respect
 // to the planitary axis.
 // See: https://www.scratchapixel.com/lessons/3d-basic-rendering/introduction-to-shading/shading-normals (facing ratio)
 // See: http://www-das.uwyo.edu/~geerts/cwx/notes/chap16/geo_clim.html
 // NOTE: -35 °C to +31 °C would be ideally the temp gradient (according to real-life data), but we don't have (yet) any biomes defined for this.
-func getMeanAnnualTemp(lat float64) float64 {
-	return (math.Sin(various.DegToRad(90-math.Abs(lat))))*rangeTemp + minTemp
+func GetMeanAnnualTemp(lat float64) float64 {
+	return (math.Sin(various.DegToRad(90-math.Abs(lat))))*RangeTemp + MinTemp
 }
 
-const maxAltitudeFactor = gameconstants.EarthMaxElevation // How tall is the tallest mountain with an elevation of 1.0?
+const MaxAltitudeFactor = gameconstants.EarthMaxElevation // How tall is the tallest mountain with an elevation of 1.0?
 
-// getRegTemperature returns the average yearly temperature of the given region at the surface.
-func (m *Geo) getRegTemperature(r int, maxElev float64) float64 {
+// GetRegTemperature returns the average yearly temperature of the given region at the surface.
+func (m *Geo) GetRegTemperature(r int, maxElev float64) float64 {
 	// TODO: Fix maxElev caching!!!
-	return getMeanAnnualTemp(m.LatLon[r][0]) - getTempFalloffFromAltitude(maxAltitudeFactor*m.Elevation[r]/maxElev)
+	return GetMeanAnnualTemp(m.LatLon[r][0]) - GetTempFalloffFromAltitude(MaxAltitudeFactor*m.Elevation[r]/maxElev)
 }
 
-// getRTemperature returns the average yearly temperature of the given triangle at the surface.
-func (m *Geo) getTriTemperature(t int, maxElev float64) float64 {
+// GetTriTemperature returns the average yearly temperature of the given triangle at the surface.
+func (m *Geo) GetTriTemperature(t int, maxElev float64) float64 {
 	// TODO: Fix maxElev caching!!!
-	return getMeanAnnualTemp(m.TriLatLon[t][0]) - getTempFalloffFromAltitude(maxAltitudeFactor*m.triElevation[t]/maxElev)
+	return GetMeanAnnualTemp(m.TriLatLon[t][0]) - GetTempFalloffFromAltitude(MaxAltitudeFactor*m.TriElevation[t]/maxElev)
 }
 
 func (m *Geo) initRegionAirTemperature() {
 	_, maxElev := minMax(m.Elevation)
 	for r := 0; r < m.SphereMesh.NumRegions; r++ {
-		m.AirTemperature[r] = m.getRegTemperature(r, maxElev)
+		m.AirTemperature[r] = m.GetRegTemperature(r, maxElev)
 	}
 }
 
@@ -110,7 +110,7 @@ func (m *Geo) assignRegionAirTemperature() {
 			movedCount[r]++
 
 			// add in pushed temp
-			nr := m.getClosestNeighbor(outregs, r, m.RegionToWindVecLocal[r])
+			nr := m.GetClosestNeighbor(outregs, r, m.RegionToWindVecLocal[r])
 			if nr == r {
 				continue
 			}
@@ -143,7 +143,7 @@ func (m *Geo) initRegionWaterTemperature() {
 	_, maxElev := minMax(m.Elevation)
 	for r := 0; r < m.SphereMesh.NumRegions; r++ {
 		if m.Elevation[r] <= 0 {
-			m.OceanTemperature[r] = m.getRegTemperature(r, maxElev)
+			m.OceanTemperature[r] = m.GetRegTemperature(r, maxElev)
 		}
 	}
 }
@@ -213,7 +213,7 @@ func (m *Geo) transportRegionWaterTemperature() {
 			}
 
 			// add in pushed temp
-			nr := m.getClosestNeighbor(outregs, r, m.RegionToOceanVec[r])
+			nr := m.GetClosestNeighbor(outregs, r, m.RegionToOceanVec[r])
 			if nr == r || m.Elevation[nr] > 0 {
 				continue
 			}

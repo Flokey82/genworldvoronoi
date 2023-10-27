@@ -5,6 +5,7 @@ import (
 	"math"
 
 	"github.com/Flokey82/genbiome"
+	"github.com/Flokey82/genworldvoronoi/geo"
 	"github.com/Flokey82/go_gens/genlanguage"
 )
 
@@ -37,7 +38,7 @@ func (m *Civ) GetCulture(r int) *Culture {
 // This code is based on:
 // https://github.com/Azgaar/Fantasy-Map-Generator/blob/master/modules/cultures-generator.js
 func (m *Civ) PlaceNCultures(n int) {
-	m.resetRand()
+	m.ResetRand()
 	m.placeNCultures(n)
 	m.ExpandCultures()
 }
@@ -54,7 +55,7 @@ func (m *Civ) placeNCultures(n int) {
 	var distSeedFunc func() []int
 
 	regCultureFunc := m.getRegionCultureTypeFunc()
-	climateFitness := m.getFitnessClimate()
+	climateFitness := m.GetFitnessClimate()
 	scoreFunc = func(r int) float64 {
 		if m.Elevation[r] <= 0 {
 			return 0
@@ -75,7 +76,7 @@ func (m *Civ) placeNCultures(n int) {
 	stopRegions := make(map[int]bool)
 
 	// Place n cultures of any type.
-	regDistanceC := m.assignDistanceField(distSeedFunc(), stopRegions)
+	regDistanceC := m.AssignDistanceField(distSeedFunc(), stopRegions)
 	for i := 0; i < n; i++ {
 		// We use the city score since it identifies regions that are well suited for
 		// settlement or general survival.
@@ -98,7 +99,7 @@ func (m *Civ) ExpandCultures() {
 		originToCulture[c.ID] = c
 	}
 
-	rCellType := m.getRegCellTypes()
+	rCellType := m.GetRegCellTypes()
 	_, maxElev := minMax(m.Elevation)
 	territoryWeightFunc := m.getTerritoryWeightFunc()
 	biomeWeight := m.getTerritoryBiomeWeightFunc()
@@ -106,7 +107,7 @@ func (m *Civ) ExpandCultures() {
 		c := originToCulture[o]
 
 		// Get the cost to expand to this biome.
-		gotBiome := m.getAzgaarRegionBiome(v, m.Elevation[v]/maxElev, maxElev)
+		gotBiome := m.GetAzgaarRegionBiome(v, m.Elevation[v]/maxElev, maxElev)
 		biomePenalty := biomeWeight(o, u, v) * float64(genbiome.AzgaarBiomeMovementCost[gotBiome]) / 100
 
 		// Check if we have a non-native biome, if so we apply an additional penalty.
@@ -134,7 +135,7 @@ func (m *Civ) ExpandCultures() {
 				c.Regions = append(c.Regions, r)
 			}
 		}
-		c.Stats = m.getStats(c.Regions)
+		c.Stats = m.GetStats(c.Regions)
 	}
 
 	// TODO: Move this somewhere else or improve how it is handled.
@@ -205,7 +206,7 @@ type Culture struct {
 
 	// TODO: DO NOT CACHE THIS!
 	Regions []int
-	*Stats
+	*geo.Stats
 }
 
 func (c *Culture) Log() {
@@ -254,7 +255,7 @@ func (m *Civ) placeCultureWithScore(regCultureFunc func(int) CultureType, scores
 func (m *Civ) PlaceCultureAt(r int) *Culture {
 	c := m.newCulture(r, m.getRegionCultureTypeFunc()(r))
 	c.Regions = []int{r}
-	c.Stats = m.getStats(c.Regions)
+	c.Stats = m.GetStats(c.Regions)
 	m.Cultures = append(m.Cultures, c)
 	// m.RegionToCulture[r] = r
 	// NOTE: This might be quite expensive, so we might want to
@@ -266,16 +267,16 @@ func (m *Civ) PlaceCultureAt(r int) *Culture {
 
 // getRegionCutureTypeFunc returns a function that returns the culture type suitable for a given region.
 func (m *Civ) getRegionCultureTypeFunc() func(int) CultureType {
-	cellType := m.getRegCellTypes()
-	getType := m.getRegionFeatureTypeFunc()
-	biomeFunc := m.getRegWhittakerModBiomeFunc()
+	cellType := m.GetRegCellTypes()
+	getType := m.GetRegionFeatureTypeFunc()
+	biomeFunc := m.GetRegWhittakerModBiomeFunc()
 	_, maxElev := minMax(m.Elevation)
 	log.Println("TODO: Map whittaker to azgaar biomes")
 
 	// Return culture type based on culture center region.
 	return func(r int) CultureType {
 		eleVal := m.Elevation[r] / maxElev
-		gotBiome := m.getAzgaarRegionBiome(r, eleVal, maxElev)
+		gotBiome := m.GetAzgaarRegionBiome(r, eleVal, maxElev)
 		log.Println(gotBiome)
 		log.Println(biomeFunc(r))
 
@@ -296,26 +297,26 @@ func (m *Civ) getRegionCultureTypeFunc() func(int) CultureType {
 		// Get the region (if any) that represents the haven for this region.
 		// A haven is the closest neighbor that is a water body.
 		// NOTE: harborSize indicates the number of neighbors that are water.
-		rHaven, harborSize := m.getRegHaven(r)
+		rHaven, harborSize := m.GetRegHaven(r)
 		havenType := getType(rHaven) // Get the type of the haven region.
 		regionType := getType(r)
 		log.Println(havenType, regionType)
 
 		// Ensure only larger lakes will result in the 'lake' culture type.
-		if havenType == FeatureTypeLake && m.WaterbodySize[rHaven] > 5 {
+		if havenType == geo.FeatureTypeLake && m.WaterbodySize[rHaven] > 5 {
 			return CultureTypeLake // low water cross penalty and high for growth not along coastline
 		}
 
 		// If we have a harbor (more than 1 water neighbor), or are on an island,
 		// we are potentially a naval culture.
-		if (harborSize > 0 && P(0.1) && havenType != FeatureTypeLake) ||
+		if (harborSize > 0 && P(0.1) && havenType != geo.FeatureTypeLake) ||
 			(harborSize == 1 && P(0.6)) ||
-			(regionType == FeatureTypeIsle && P(0.4)) {
+			(regionType == geo.FeatureTypeIsle && P(0.4)) {
 			return CultureTypeNaval // low water cross penalty and high for non-along-coastline growth
 		}
 
 		// If we are on a big river (flux > 2*rainfall), we are a river culture.
-		if m.isRegBigRiver(r) {
+		if m.IsRegBigRiver(r) {
 			return CultureTypeRiver // no River cross penalty, penalty for non-River growth
 		}
 

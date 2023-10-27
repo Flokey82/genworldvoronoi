@@ -1,4 +1,4 @@
-package genworldvoronoi
+package geo
 
 import (
 	"log"
@@ -23,7 +23,7 @@ type Stats struct {
 	Wetlands   int
 }
 
-func (m *Geo) getStats(rr []int) *Stats {
+func (m *Geo) GetStats(rr []int) *Stats {
 	// TODO:
 	// Calculate defensibility
 	// - Stone availability for better walls.
@@ -41,7 +41,7 @@ func (m *Geo) getStats(rr []int) *Stats {
 		NumRegions: len(rr),
 		Biomes:     make(map[int]int),
 	}
-	biomeFunc := m.getRegWhittakerModBiomeFunc()
+	biomeFunc := m.GetRegWhittakerModBiomeFunc()
 	for _, r := range rr {
 		st.TotalArea += m.GetRegArea(r)
 		for i := 0; i < ResMaxMetals; i++ {
@@ -90,16 +90,16 @@ func (m *Geo) getStats(rr []int) *Stats {
 func (s *Stats) Log() {
 	log.Printf("Total Area: %.2f km2", s.TotalArea*gameconstants.EarthSurface/gameconstants.SphereSurface)
 	for i := 0; i < ResMaxMetals; i++ {
-		log.Printf("Metal %s: %d (%.6f%%)", metalToString(i), s.ResMetal[i], float64(s.ResMetal[i])/float64(s.NumRegions))
+		log.Printf("Metal %s: %d (%.6f%%)", MetalToString(i), s.ResMetal[i], float64(s.ResMetal[i])/float64(s.NumRegions))
 	}
 	for i := 0; i < ResMaxGems; i++ {
-		log.Printf("Gem %s: %d (%.6f%%)", gemToString(i), s.ResGems[i], float64(s.ResGems[i])/float64(s.NumRegions))
+		log.Printf("Gem %s: %d (%.6f%%)", GemToString(i), s.ResGems[i], float64(s.ResGems[i])/float64(s.NumRegions))
 	}
 	for i := 0; i < ResMaxStones; i++ {
-		log.Printf("Stone %s: %d (%.6f%%)", stoneToString(i), s.ResStones[i], float64(s.ResStones[i])/float64(s.NumRegions))
+		log.Printf("Stone %s: %d (%.6f%%)", StoneToString(i), s.ResStones[i], float64(s.ResStones[i])/float64(s.NumRegions))
 	}
 	for i := 0; i < ResMaxWoods; i++ {
-		log.Printf("Wood %s: %d (%.6f%%)", woodToString(i), s.ResWood[i], float64(s.ResWood[i])/float64(s.NumRegions))
+		log.Printf("Wood %s: %d (%.6f%%)", WoodToString(i), s.ResWood[i], float64(s.ResWood[i])/float64(s.NumRegions))
 	}
 	log.Printf("Desert: %.2f%%", 100*float64(s.Desert)/float64(s.NumRegions))
 	log.Printf("RainForest: %.2f%%", 100*float64(s.RainForest)/float64(s.NumRegions))

@@ -1,6 +1,10 @@
-package genworldvoronoi
+package geo
 
-import "math"
+import (
+	"math"
+
+	"github.com/Flokey82/genworldvoronoi/various"
+)
 
 type fitCache struct {
 	f       func(int) float64
@@ -20,6 +24,7 @@ func (fc *fitCache) getFunc() func(int) float64 {
 	return fc.f
 }
 
+/*
 type fitCaches struct {
 	climate *fitCache
 	city    *fitCache
@@ -39,22 +44,23 @@ func (m *Civ) getFitCaches() *fitCaches {
 		arable:  newFitCache(m.getFitnessArableLand),
 	}
 }
+*/
 
 // getFitnessProximityToWater returns a fitness function with high scores for
 // terrain close to water.
-func (m *Geo) getFitnessProximityToWater() func(int) float64 {
+func (m *Geo) GetFitnessProximityToWater() func(int) float64 {
 	var seedWater []int
 	for r := range m.Elevation {
-		if m.isRegLakeOrWaterBody(r) || m.isRegBigRiver(r) {
+		if m.IsRegLakeOrWaterBody(r) || m.IsRegBigRiver(r) {
 			seedWater = append(seedWater, r)
 		}
 	}
 
 	// Make sure we normalize the distance field so that the highest value is 1.
-	distWater := m.assignDistanceField(seedWater, m.RegionIsMountain)
+	distWater := m.AssignDistanceField(seedWater, m.RegionIsMountain)
 	_, maxDist := minMax(distWater)
 	return func(r int) float64 {
-		if m.isRegLakeOrWaterBody(r) || distWater[r] < 0 {
+		if m.IsRegLakeOrWaterBody(r) || distWater[r] < 0 {
 			return -1.0
 		}
 		if math.IsInf(distWater[r], 0) {
@@ -64,12 +70,12 @@ func (m *Geo) getFitnessProximityToWater() func(int) float64 {
 	}
 }
 
-// getFitnessSteepMountains returns a fitness function with high scores for
+// GetFitnessSteepMountains returns a fitness function with high scores for
 // steep terrain close to mountains.
-func (m *Geo) getFitnessSteepMountains() func(int) float64 {
+func (m *Geo) GetFitnessSteepMountains() func(int) float64 {
 	steepness := m.GetSteepness()
-	seedMountains := m.mountain_r
-	distMountains := m.assignDistanceField(seedMountains, make(map[int]bool))
+	seedMountains := m.Mountain_r
+	distMountains := m.AssignDistanceField(seedMountains, make(map[int]bool))
 	return func(r int) float64 {
 		if m.Elevation[r] <= 0 {
 			return -1.0
@@ -80,21 +86,21 @@ func (m *Geo) getFitnessSteepMountains() func(int) float64 {
 	}
 }
 
-// getFitnessInlandValleys returns a fitness function with high scores for
+// GetFitnessInlandValleys returns a fitness function with high scores for
 // terrain that is not steep and far away from coastlines, mountains, and
 // oceans.
-func (m *Geo) getFitnessInlandValleys() func(int) float64 {
+func (m *Geo) GetFitnessInlandValleys() func(int) float64 {
 	steepness := m.GetSteepness()
-	seedMountains := m.mountain_r
-	seedCoastlines := m.coastline_r
-	seedOceans := m.ocean_r
+	seedMountains := m.Mountain_r
+	seedCoastlines := m.Coastline_r
+	seedOceans := m.Ocean_r
 
 	// Combine all seed points so we can find the spots furthest away from them.
 	var seedAll []int
 	seedAll = append(seedAll, seedMountains...)
 	seedAll = append(seedAll, seedCoastlines...)
 	seedAll = append(seedAll, seedOceans...)
-	distAll := m.assignDistanceField(seedAll, make(map[int]bool))
+	distAll := m.AssignDistanceField(seedAll, make(map[int]bool))
 	return func(r int) float64 {
 		if m.Elevation[r] <= 0 {
 			return -1.0
@@ -105,7 +111,7 @@ func (m *Geo) getFitnessInlandValleys() func(int) float64 {
 	}
 }
 
-func (m *Geo) getFitnessArableLand() func(int) float64 {
+func (m *Geo) GetFitnessArableLand() func(int) float64 {
 	// Prefer flat terrain with reasonable precipitation and at
 	// lower altitudes.
 	steepness := m.GetSteepness()
@@ -113,7 +119,7 @@ func (m *Geo) getFitnessArableLand() func(int) float64 {
 	_, maxRain := minMax(m.Rainfall)
 	_, maxFlux := minMax(m.Flux)
 	return func(r int) float64 {
-		temp := m.getRegTemperature(r, maxElev)
+		temp := m.GetRegTemperature(r, maxElev)
 		if m.Elevation[r] <= 0 {
 			return -1.0
 		}
@@ -128,19 +134,19 @@ func (m *Geo) getFitnessArableLand() func(int) float64 {
 	}
 }
 
-// getFitnessClimate returns a fitness function that returns high
+// GetFitnessClimate returns a fitness function that returns high
 // scores for regions with high rainfall high temperatures, and alternatively high flux.
-func (m *Geo) getFitnessClimate() func(int) float64 {
+func (m *Geo) GetFitnessClimate() func(int) float64 {
 	_, maxRain := minMax(m.Rainfall)
 	_, maxElev := minMax(m.Elevation)
 	_, maxFlux := minMax(m.Flux)
 
 	return func(r int) float64 {
-		temp := m.getRegTemperature(r, maxElev)
+		temp := m.GetRegTemperature(r, maxElev)
 		if temp < 0 {
 			return 0.1
 		}
-		scoreTemp := math.Sqrt(temp / maxTemp)
+		scoreTemp := math.Sqrt(temp / MaxTemp)
 		scoreRain := m.Rainfall[r] / maxRain
 		scoreFlux := math.Sqrt(m.Flux[r] / maxFlux)
 		return 0.1 + 0.9*(scoreTemp*(scoreFlux+scoreRain)/2)
@@ -155,7 +161,7 @@ func (m *Geo) getFitnessClimate() func(int) float64 {
 // calculating the fitness score.
 func (m *Geo) CalcFitnessScore(sf func(int) float64, distSeedFunc func() []int) []float64 {
 	// Get distance to other seed regions returned by the distSeedFunc.
-	return m.CalcFitnessScoreWithDistanceField(sf, m.assignDistanceField(distSeedFunc(), make(map[int]bool)))
+	return m.CalcFitnessScoreWithDistanceField(sf, m.AssignDistanceField(distSeedFunc(), make(map[int]bool)))
 }
 
 func (m *Geo) CalcFitnessScoreWithDistanceField(sf func(int) float64, regDistanceC []float64) []float64 {
@@ -192,7 +198,7 @@ func (m *Geo) CalcFitnessScoreWithDistanceField(sf func(int) float64, regDistanc
 
 	useGoRoutines := true
 	if useGoRoutines {
-		kickOffChunkWorkers(m.SphereMesh.NumRegions, chunkProcessor)
+		various.KickOffChunkWorkers(m.SphereMesh.NumRegions, chunkProcessor)
 	} else {
 		chunkProcessor(0, m.SphereMesh.NumRegions)
 	}

@@ -1,4 +1,4 @@
-package genworldvoronoi
+package geo
 
 import (
 	"container/list"
@@ -13,7 +13,7 @@ import (
 // generatePlates generates a number of plate seed points and starts growing the plates
 // starting from those seeds in a random order.
 func (m *Geo) generatePlates() {
-	m.resetRand()
+	m.ResetRand()
 	mesh := m.SphereMesh
 	regPlate := make([]int, mesh.NumRegions)
 	for i := range regPlate {
@@ -21,7 +21,7 @@ func (m *Geo) generatePlates() {
 	}
 
 	// Pick random regions as seed points for plate generation.
-	plateRegs := m.pickRandomRegions(utils.Min(m.NumPlates, m.NumPoints))
+	plateRegs := m.PickRandomRegions(utils.Min(m.NumPlates, m.NumPoints))
 
 	var queue []int
 	for _, r := range plateRegs {
@@ -41,7 +41,7 @@ func (m *Geo) generatePlates() {
 	// queue[pos] and queue[queue_out].
 	outReg := make([]int, 0, 6)
 	for queueOut := 0; queueOut < len(queue); queueOut++ {
-		pos := queueOut + m.rand.Intn(len(queue)-queueOut)
+		pos := queueOut + m.Rand.Intn(len(queue)-queueOut)
 		currentReg := queue[pos]
 		queue[pos] = queue[queueOut]
 		outReg = mesh.R_circulate_r(outReg, currentReg)
@@ -70,10 +70,10 @@ func (m *Geo) generatePlates() {
 
 // assignOceanPlates randomly assigns approx. 50% of the plates as ocean plates.
 func (m *Geo) assignOceanPlates() {
-	m.resetRand()
+	m.ResetRand()
 	m.PlateIsOcean = make(map[int]bool)
 	for _, r := range m.PlateRegs {
-		if m.rand.Intn(10) < 5 {
+		if m.Rand.Intn(10) < 5 {
 			m.PlateIsOcean[r] = true
 			// TODO: either make tiny plates non-ocean, or make sure tiny plates don't create seeds for rivers
 		}
@@ -212,9 +212,9 @@ func (m *Geo) findCollisions() ([]int, []int, []int, map[int]float64) {
 	return mountainRegs, coastlineRegs, oceanRegs, compressionReg
 }
 
-// propagateCompression propagates the compression values from the seed regions
+// PropagateCompression propagates the compression values from the seed regions
 // to all other regions.
-func (m *BaseObject) propagateCompression(compression map[int]float64) []float64 {
+func (m *BaseObject) PropagateCompression(compression map[int]float64) []float64 {
 	// Get the min and max compression value so that we can
 	// normalize the compression value, also we need to copy
 	// the compression values into a slice so that we can
@@ -287,18 +287,18 @@ func (m *BaseObject) propagateCompression(compression map[int]float64) []float64
 // To ensure variation, opensimplex noise is used to break up any uniformity.
 func (m *Geo) assignRegionElevation() {
 	// TODO: Use collision values to determine intensity of generated landscape features.
-	m.mountain_r, m.coastline_r, m.ocean_r, m.RegionCompression = m.findCollisions()
+	m.Mountain_r, m.Coastline_r, m.Ocean_r, m.RegionCompression = m.findCollisions()
 
 	// Sort mountains by compression.
-	sort.Slice(m.mountain_r, func(i, j int) bool {
-		return m.RegionCompression[m.mountain_r[i]] > m.RegionCompression[m.mountain_r[j]]
+	sort.Slice(m.Mountain_r, func(i, j int) bool {
+		return m.RegionCompression[m.Mountain_r[i]] > m.RegionCompression[m.Mountain_r[j]]
 	})
 
 	// Take note of all mountains.
 	// Since they are sorted by compression, we can use the first m.NumVolcanoes
 	// as volcanoes.
 	var gotVolcanoes int
-	for _, r := range m.mountain_r {
+	for _, r := range m.Mountain_r {
 		m.RegionIsMountain[r] = true
 		if gotVolcanoes < m.NumVolcanoes {
 			m.RegionIsVolcano[r] = true
@@ -310,26 +310,26 @@ func (m *Geo) assignRegionElevation() {
 	// I do not quite know how that works, but it is based on:
 	// See: https://www.redblobgames.com/x/1728-elevation-control/
 	stopReg := make(map[int]bool)
-	for _, r := range m.mountain_r {
+	for _, r := range m.Mountain_r {
 		stopReg[r] = true
 	}
-	for _, r := range m.coastline_r {
+	for _, r := range m.Coastline_r {
 		stopReg[r] = true
 	}
-	for _, r := range m.ocean_r {
+	for _, r := range m.Ocean_r {
 		stopReg[r] = true
 	}
 
 	// Calculate distance fields.
 	// Graph distance from mountains (stops at ocean regions).
-	rDistanceA := m.assignDistanceField(m.mountain_r, convToMap(m.ocean_r))
+	rDistanceA := m.AssignDistanceField(m.Mountain_r, convToMap(m.Ocean_r))
 	// Graph distance from ocean (stops at coastline regions).
-	rDistanceB := m.assignDistanceField(m.ocean_r, convToMap(m.coastline_r))
+	rDistanceB := m.AssignDistanceField(m.Ocean_r, convToMap(m.Coastline_r))
 	// Graph distance from coastline (stops at all other regions).
-	rDistanceC := m.assignDistanceField(m.coastline_r, stopReg)
+	rDistanceC := m.AssignDistanceField(m.Coastline_r, stopReg)
 
 	// Propagate the compression values.
-	compPerReg := m.propagateCompression(m.RegionCompression)
+	compPerReg := m.PropagateCompression(m.RegionCompression)
 
 	// This code below calculates the height of a given region based on a linear
 	// interpolation of the three distance values above.

@@ -1,4 +1,4 @@
-package genworldvoronoi
+package geo
 
 import (
 	"container/list"

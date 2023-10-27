@@ -5,6 +5,7 @@ import (
 	"math"
 	"sort"
 
+	"github.com/Flokey82/genworldvoronoi/various"
 	goastar "github.com/beefsack/go-astar"
 )
 
@@ -223,9 +224,9 @@ func (n *TradeTile) PathNeighborCost(to goastar.Pather) float64 {
 		}
 	}
 
-	if n.r.isRegRiver(n.index) && n.r.isRegRiver(nIdx) {
+	if n.r.IsRegRiver(n.index) && n.r.IsRegRiver(nIdx) {
 		cost *= 0.8 // Bonus if along rivers.
-	} else if n.r.isRegRiver(n.index) != n.r.isRegRiver(nIdx) {
+	} else if n.r.IsRegRiver(n.index) != n.r.IsRegRiver(nIdx) {
 		cost *= 1.4 // Cost of crossing rivers.
 	}
 
@@ -283,5 +284,5 @@ func (m *Civ) getTradeRoutesInLatLonBB(minLat, minLon, maxLat, maxLon float64) [
 		}
 		filtered = append(filtered, link)
 	}
-	return mergeIndexSegments(filtered)
+	return various.MergeIndexSegments(filtered)
 }

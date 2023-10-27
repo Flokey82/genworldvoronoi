@@ -1,4 +1,4 @@
-package genworldvoronoi
+package geo
 
 import (
 	"math"
@@ -59,7 +59,7 @@ func (m *Geo) GetSeason(lat float64) int {
 // GetSolarRadiation returns the solar radiation for the current day of the year
 // and the given latitude.
 func (m *Geo) GetSolarRadiation(lat float64) float64 {
-	return calcSolarRadiation(various.DegToRad(lat), m.GetDayOfYear())
+	return CalcSolarRadiation(various.DegToRad(lat), m.GetDayOfYear())
 }
 
 // calcMinMaxTemperature calculates the minimum and maximum temperature for
@@ -76,12 +76,12 @@ func (m *Geo) calcMinMaxTemperature() [][2]float64 {
 // GetMinMaxTemperature returns the minimum and maximum temperature for the
 // current day of the year and the given latitude.
 func (m *Geo) GetMinMaxTemperature(lat float64) (min, max float64) {
-	return m.getMinMaxTemperatureOfDay(lat, m.GetDayOfYear())
+	return m.GetMinMaxTemperatureOfDay(lat, m.GetDayOfYear())
 }
 
-func (m *Geo) getMinMaxTemperatureOfDay(lat float64, dayOfYear int) (min, max float64) {
+func (m *Geo) GetMinMaxTemperatureOfDay(lat float64, dayOfYear int) (min, max float64) {
 	// Get yearly average temperature for the given latitude.
-	tmp := getMeanAnnualTemp(lat)
+	tmp := GetMeanAnnualTemp(lat)
 	// TODO: Compensate for altitude.
 
 	// Now get the average day and night duration for the given latitude.
@@ -130,10 +130,10 @@ func (m *Geo) getMinMaxTemperatureOfDay(lat float64, dayOfYear int) (min, max fl
 // https://github.com/woodcrafty/PyETo/blob/0b7ac9f149f4c89c5b5759a875010c521aa07f0f/pyeto/fao.py#L198 !!!
 // https://github.com/willbeason/worldproc/blob/28fd3f0188082ade001110a6a73edda4b987ccdd/pkg/climate/temperature.go
 
-func (m *Geo) calcSolarRadiation(dayOfYear int) []float64 {
+func (m *Geo) CalcSolarRadiation(dayOfYear int) []float64 {
 	res := make([]float64, m.SphereMesh.NumRegions)
 	for i := range res {
-		res[i] = calcSolarRadiation(various.DegToRad(m.LatLon[i][0]), dayOfYear)
+		res[i] = CalcSolarRadiation(various.DegToRad(m.LatLon[i][0]), dayOfYear)
 	}
 	return res
 }
@@ -146,7 +146,7 @@ func (m *Geo) calcSolarRadiation(dayOfYear int) []float64 {
 // 'dayOfYear': Day of year integer between 1 and 365 or 366).
 //
 // Returns incoming solar (or shortwave) radiation [MJ m-2 day-1]
-func calcSolarRadiation(latRad float64, dayOfYear int) float64 {
+func CalcSolarRadiation(latRad float64, dayOfYear int) float64 {
 	daylightHours := calcDaylightHoursByLatitudeAndDayOfYear(latRad, dayOfYear)
 	sunshineHours := daylightHours * 0.7 // 70% of daylight hours
 

@@ -6,11 +6,12 @@ import (
 	"time"
 
 	"github.com/Flokey82/genbiome"
+	"github.com/Flokey82/genworldvoronoi/geo"
 )
 
 type Civ struct {
 	*CivConfig
-	*Geo
+	*geo.Geo
 	*History
 	nextPersonID      int
 	People            []*Person    // People in the world
@@ -25,24 +26,24 @@ type Civ struct {
 	Religions         []*Religion  // (cultural) Religion seed points / regions
 	Settled           []int64      // (cultural) Time of settlement per region
 	// SettledBySpecies []int // (cultural) Which species settled the region first
-	NameGen     *NameGenerators
+	NameGen     *geo.NameGenerators
 	tradeRoutes [][]int
 }
 
-func NewCiv(geo *Geo, cfg *CivConfig) *Civ {
+func NewCiv(g *geo.Geo, cfg *CivConfig) *Civ {
 	if cfg == nil {
 		cfg = NewCivConfig()
 	}
 	return &Civ{
 		CivConfig:         cfg,
-		Geo:               geo,
-		History:           NewHistory(geo.Calendar),
-		RegionToEmpire:    initRegionSlice(geo.SphereMesh.NumRegions),
-		RegionToCityState: initRegionSlice(geo.SphereMesh.NumRegions),
-		RegionToCulture:   initRegionSlice(geo.SphereMesh.NumRegions),
-		RegionToReligion:  initRegionSlice(geo.SphereMesh.NumRegions),
-		Settled:           initTimeSlice(geo.SphereMesh.NumRegions),
-		NameGen:           NewNameGenerators(geo.Seed),
+		Geo:               g,
+		History:           NewHistory(g.Calendar),
+		RegionToEmpire:    initRegionSlice(g.SphereMesh.NumRegions),
+		RegionToCityState: initRegionSlice(g.SphereMesh.NumRegions),
+		RegionToCulture:   initRegionSlice(g.SphereMesh.NumRegions),
+		RegionToReligion:  initRegionSlice(g.SphereMesh.NumRegions),
+		Settled:           initTimeSlice(g.SphereMesh.NumRegions),
+		NameGen:           geo.NewNameGenerators(g.Seed),
 	}
 }
 
@@ -176,7 +177,7 @@ func (m *Civ) Tick() {
 
 // getRegName attempts to generate a name for the given region.
 func (m *Civ) getRegName(r int) string {
-	switch m.getRegWhittakerModBiomeFunc()(r) {
+	switch m.GetRegWhittakerModBiomeFunc()(r) {
 	case genbiome.WhittakerModBiomeBorealForestTaiga,
 		genbiome.WhittakerModBiomeTemperateRainforest,
 		genbiome.WhittakerModBiomeTemperateSeasonalForest,
@@ -209,7 +210,7 @@ func (m *Civ) generateTimeOfSettlement() {
 	// more suitable regions nearby. So we will use a priority queue
 	// to determine the next region to expand to.
 
-	var queue ascPriorityQueue
+	var queue geo.AscPriorityQueue
 	heap.Init(&queue)
 
 	// 'settleTime' is the time when a region was settled.
@@ -219,8 +220,8 @@ func (m *Civ) generateTimeOfSettlement() {
 	// We will use the climate fitness function and filter by biome.
 	bestRegion := -1
 	bestFitness := 0.0
-	fa := m.getFitnessClimate()
-	bf := m.getRegWhittakerModBiomeFunc()
+	fa := m.GetFitnessClimate()
+	bf := m.GetRegWhittakerModBiomeFunc()
 	for r := 0; r < m.SphereMesh.NumRegions; r++ {
 		if bf(r) == genbiome.WhittakerModBiomeTemperateGrassland {
 			fitness := fa(r)
@@ -287,38 +288,38 @@ func (m *Civ) generateTimeOfSettlement() {
 	// Now add the region neighbors to the queue.
 	out_r := make([]int, 0, 8)
 	for _, n := range m.R_circulate_r(out_r, bestRegion) {
-		heap.Push(&queue, &queueEntry{
-			origin:      bestRegion,
-			score:       weight(bestRegion, bestRegion, n),
-			destination: n,
+		heap.Push(&queue, &geo.QueueEntry{
+			Origin:      bestRegion,
+			Score:       weight(bestRegion, bestRegion, n),
+			Destination: n,
 		})
 	}
 
 	// Expand settlements until we have settled all regions.
 	for queue.Len() > 0 {
-		u := heap.Pop(&queue).(*queueEntry)
+		u := heap.Pop(&queue).(*geo.QueueEntry)
 
 		// Check if the region has already been settled.
-		if settleTime[u.destination] >= 0 {
+		if settleTime[u.Destination] >= 0 {
 			continue
 		}
 
 		// The higher the score, the more difficult it is to settle there,
 		// and the longer it took to settle there.
-		settleTime[u.destination] = int64(u.score)
-		for _, v := range m.SphereMesh.R_circulate_r(out_r, u.destination) {
+		settleTime[u.Destination] = int64(u.Score)
+		for _, v := range m.SphereMesh.R_circulate_r(out_r, u.Destination) {
 			// Check if the region has already been settled.
 			if settleTime[v] >= 0 {
 				continue
 			}
-			newdist := weight(u.origin, u.destination, v)
+			newdist := weight(u.Origin, u.Destination, v)
 			if newdist < 0 {
 				continue
 			}
-			heap.Push(&queue, &queueEntry{
-				score:       newdist,
-				origin:      u.destination,
-				destination: v,
+			heap.Push(&queue, &geo.QueueEntry{
+				Score:       newdist,
+				Origin:      u.Destination,
+				Destination: v,
 			})
 		}
 	}

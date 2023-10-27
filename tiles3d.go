@@ -6,9 +6,12 @@ import (
 	"log"
 	"math"
 
+	"github.com/Flokey82/genworldvoronoi/geo"
 	"github.com/Flokey82/genworldvoronoi/various"
 	"github.com/Flokey82/geoquad"
 )
+
+var byteorder = binary.LittleEndian
 
 func (m *Map) GetHeightMapTile(x, y, zoom int) []byte {
 	// The tiles are 65x65 vertices and overlap their neighbors at their edges.
@@ -113,7 +116,7 @@ func (m *Map) GetHeightMapTile(x, y, zoom int) []byte {
 			log.Println("no triangle found")
 			return 0
 		}
-		if m.triElevation[minDistIndex] <= 0 {
+		if m.TriElevation[minDistIndex] <= 0 {
 			return 0
 		}
 		// Now we measure the distance of each point in the triangle from the point
@@ -125,7 +128,7 @@ func (m *Map) GetHeightMapTile(x, y, zoom int) []byte {
 		if height <= 0 {
 			return 0
 		}
-		return 5 * maxAltitudeFactor * height
+		return 5 * geo.MaxAltitudeFactor * height
 	}
 
 	// Get the lat long of each point in the tile, but we skip every second point

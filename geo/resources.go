@@ -1,4 +1,4 @@
-package genworldvoronoi
+package geo
 
 import (
 	"log"
@@ -7,13 +7,13 @@ import (
 	"github.com/Flokey82/genbiome"
 )
 
-// sumResources returns the sum of the resource flag IDs in the byte.
+// SumResources returns the sum of the resource flag IDs in the byte.
 // This is a convenience function for determining the approximate
 // value of local resources.
 // NOTE: In theory one could just cast the int to a byte and use the
 // value like that, but the value would be a power of 2, which might
 // be too stark a difference.
-func sumResources(r byte) int {
+func SumResources(r byte) int {
 	sum := 0
 	for i := 0; i < 8; i++ {
 		if r&(1<<i) != 0 {
@@ -72,12 +72,12 @@ func newResources(size int) *Resources {
 }
 
 func (res *Resources) sumRegion(r int) int {
-	return sumResources(res.Metals[r]) + sumResources(res.Gems[r]) + sumResources(res.Stones[r]) + sumResources(res.Various[r]) + sumResources(res.Wood[r])
+	return SumResources(res.Metals[r]) + SumResources(res.Gems[r]) + SumResources(res.Stones[r]) + SumResources(res.Various[r]) + SumResources(res.Wood[r])
 }
 
 func (m *Geo) resourceFitness() []float64 {
 	fitness := make([]float64, m.SphereMesh.NumRegions)
-	f := m.getFitnessSteepMountains()
+	f := m.GetFitnessSteepMountains()
 	for r := range fitness {
 		fitness[r] = f(r)
 	}
@@ -134,7 +134,7 @@ const (
 
 const ResMaxMetals = 7
 
-func metalToString(metalID int) string {
+func MetalToString(metalID int) string {
 	switch 1 << metalID {
 	case ResMetIron:
 		return "Iron"
@@ -170,7 +170,7 @@ func (m *Geo) placeMetals() {
 		chanceIron     = chanceTin + 0.4
 	)
 	fn := m.fbmNoiseCustom(2, 1, 2, 2, 2, 0, 0, 0)
-	fm := m.getFitnessSteepMountains()
+	fm := m.GetFitnessSteepMountains()
 
 	// NOTE: By encoding the resources as bit flags, we can easily
 	// determine the value of a region given the assumption that
@@ -178,13 +178,13 @@ func (m *Geo) placeMetals() {
 	// resource. This will be handy for fitness functions and such.
 	//
 	// I feel pretty clever about this one, but it's not realistic.
-	m.resetRand()
+	m.ResetRand()
 	metals := make([]byte, len(steepness))
 
 	// TODO: Use noise intersection instead of rand.
 	for r := 0; r < m.SphereMesh.NumRegions; r++ {
 		if fm(r) > 0.9 {
-			switch rv := math.Abs(m.rand.NormFloat64() * fn(r)); {
+			switch rv := math.Abs(m.Rand.NormFloat64() * fn(r)); {
 			case rv < chancePlatinum:
 				metals[r] |= ResMetPlatinum
 			case rv < chanceGold:
@@ -254,7 +254,7 @@ const (
 
 const ResMaxGems = 6
 
-func gemToString(gemsID int) string {
+func GemToString(gemsID int) string {
 	switch 1 << gemsID {
 	case ResGemAmethyst:
 		return "Amethyst"
@@ -289,7 +289,7 @@ func (m *Geo) placeGems() {
 	gems := make([]byte, len(steepness))
 	for r := 0; r < m.SphereMesh.NumRegions; r++ {
 		if steepness[r] > 0.9 && m.Elevation[r] > 0.5 {
-			switch rv := math.Abs(m.rand.NormFloat64()); {
+			switch rv := math.Abs(m.Rand.NormFloat64()); {
 			case rv < chanceDiamond:
 				gems[r] |= ResGemDiamond
 			case rv < chanceRuby:
@@ -327,7 +327,7 @@ const (
 
 const ResMaxStones = 7
 
-func stoneToString(stoneID int) string {
+func StoneToString(stoneID int) string {
 	switch 1 << stoneID {
 	case ResStoSandstone:
 		return "Sandstone"
@@ -396,7 +396,7 @@ func (m *Geo) placeStones() {
 	// Initialize the stone map.
 	stones := make([]byte, m.SphereMesh.NumRegions)
 
-	biomeFunc := m.getRegWhittakerModBiomeFunc()
+	biomeFunc := m.GetRegWhittakerModBiomeFunc()
 	steepness := m.GetSteepness()
 
 	// Generate a distance field for volcanoes, mountains, and faultlines.
@@ -428,9 +428,9 @@ func (m *Geo) placeStones() {
 		}
 	}
 
-	distVolcanoes := m.assignDistanceField(volcanoes, stopSea)
-	distMountains := m.assignDistanceField(mountains, stopSea)
-	distFaultlines := m.assignDistanceField(faultlines, stopSea)
+	distVolcanoes := m.AssignDistanceField(volcanoes, stopSea)
+	distMountains := m.AssignDistanceField(mountains, stopSea)
+	distFaultlines := m.AssignDistanceField(faultlines, stopSea)
 
 	// Loop through all the regions and place stones based on the region's
 	// properties.
@@ -453,7 +453,7 @@ func (m *Geo) placeStones() {
 			// If we are close to mountains, we have marble.
 			if distMountains[r] < 2 {
 				stones[r] |= ResStoMarble
-			} else if !m.isRegRiver(r) && !m.isRegLakeOrWaterBody(r) {
+			} else if !m.IsRegRiver(r) && !m.IsRegLakeOrWaterBody(r) {
 				// Check if we have limestone (dryer, hilly grassland)
 				stones[r] |= ResStoLimestone
 			} else if m.Rainfall[r] > 0.5 {
@@ -502,7 +502,7 @@ const (
 
 const ResMaxVarious = 6
 
-func variousToString(v int) string {
+func VariousToString(v int) string {
 	switch 1 << v {
 	case ResVarClay:
 		return "clay"
@@ -523,7 +523,7 @@ func variousToString(v int) string {
 
 func (m *Geo) placeVarious() {
 	varRes := make([]byte, m.SphereMesh.NumRegions)
-	biomeFunc := m.getRegWhittakerModBiomeFunc()
+	biomeFunc := m.GetRegWhittakerModBiomeFunc()
 	steepness := m.GetSteepness()
 	for r := 0; r < m.SphereMesh.NumRegions; r++ {
 		if m.Elevation[r] <= 0.0 {
@@ -539,7 +539,7 @@ func (m *Geo) placeVarious() {
 			varRes[r] |= ResVarCoal
 		}
 
-		if m.isRegRiver(r) && steepness[r] > 0.1 && steepness[r] < 0.3 {
+		if m.IsRegRiver(r) && steepness[r] > 0.1 && steepness[r] < 0.3 {
 			varRes[r] |= ResVarClay
 		}
 
@@ -566,7 +566,7 @@ const (
 
 const ResMaxWoods = 8
 
-func woodToString(v int) string {
+func WoodToString(v int) string {
 	switch 1 << v {
 	case ResWoodOak:
 		return "oak"
@@ -593,7 +593,7 @@ func (m *Geo) placeForests() {
 	// Get all biomes that are forested.
 	// Place trees in those biomes based on the biome's tree type(s).
 	// Of course it can't be too steep.
-	biomeFunc := m.getRegWhittakerModBiomeFunc()
+	biomeFunc := m.GetRegWhittakerModBiomeFunc()
 	//steepness := m.GetSteepness()
 
 	wood := make([]byte, m.SphereMesh.NumRegions)

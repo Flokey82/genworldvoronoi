@@ -7,6 +7,7 @@ import (
 	"math/rand"
 
 	"github.com/Flokey82/genbiome"
+	"github.com/Flokey82/genworldvoronoi/geo"
 	"github.com/Flokey82/genworldvoronoi/various"
 )
 
@@ -24,7 +25,7 @@ func (b *Bio) expandSpecies2() map[SpeciesFamily][]int {
 		originToSpecFit[s.Origin] = b.getToleranceScoreFunc(s.SpeciesTolerances)
 		originToSecies[s.Origin] = s
 	}
-	var queue ascPriorityQueue
+	var queue geo.AscPriorityQueue
 	heap.Init(&queue)
 	outReg := make([]int, 0, 8)
 
@@ -90,34 +91,34 @@ func (b *Bio) expandSpecies2() map[SpeciesFamily][]int {
 			if newdist < 0 {
 				continue
 			}
-			heap.Push(&queue, &queueEntry{
-				score:       newdist,
-				origin:      seedPoints[i],
-				destination: v,
+			heap.Push(&queue, &geo.QueueEntry{
+				Score:       newdist,
+				Origin:      seedPoints[i],
+				Destination: v,
 			})
 		}
 	}
 
 	// Extend territories until the queue is empty.
 	for queue.Len() > 0 {
-		u := heap.Pop(&queue).(*queueEntry)
-		s := originToSecies[u.origin]
-		if terr[s.Family][u.destination] >= 0 {
+		u := heap.Pop(&queue).(*geo.QueueEntry)
+		s := originToSecies[u.Origin]
+		if terr[s.Family][u.Destination] >= 0 {
 			continue
 		}
-		terr[s.Family][u.destination] = u.origin
-		for _, v := range b.SphereMesh.R_circulate_r(outReg, u.destination) {
+		terr[s.Family][u.Destination] = u.Origin
+		for _, v := range b.SphereMesh.R_circulate_r(outReg, u.Destination) {
 			if terr[s.Family][v] >= 0 {
 				continue
 			}
-			newdist := weight(u.origin, u.destination, v)
+			newdist := weight(u.Origin, u.Destination, v)
 			if newdist < 0 {
 				continue
 			}
-			heap.Push(&queue, &queueEntry{
-				score:       u.score + newdist,
-				origin:      u.origin,
-				destination: v,
+			heap.Push(&queue, &geo.QueueEntry{
+				Score:       u.Score + newdist,
+				Origin:      u.Origin,
+				Destination: v,
 			})
 		}
 	}

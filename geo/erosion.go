@@ -1,4 +1,4 @@
-package genworldvoronoi
+package geo
 
 import (
 	"math"
@@ -145,7 +145,7 @@ func (m *Geo) GetErosionRate() []float64 {
 
 		// If we have avg. temp. below 0, we need to imitate glacial erosion, which
 		// is carving "wider" valleys than hydraulic erosion.
-		if m.getRegTemperature(r, maxH) < 0 {
+		if m.GetRegTemperature(r, maxH) < 0 {
 			erodeNbs = erodeNeighborsGlacier
 		}
 

@@ -19,7 +19,7 @@ func (m *Civ) getRegCityType(r int) TownType {
 	}
 
 	// TODO: Cache this somehow.
-	if m.getFitnessArableLand()(r) > 0.5 {
+	if m.GetFitnessArableLand()(r) > 0.5 {
 		return TownTypeFarming
 	}
 	// TODO: Add more types of cities.
@@ -84,7 +84,7 @@ func (t TownType) GetFitnessFunction(m *Civ) func(int) float64 {
 	//   - ...
 	switch t {
 	case TownTypeDefault:
-		fa := m.getFitnessClimate()
+		fa := m.GetFitnessClimate()
 		fb := m.getFitnessCityDefault()
 		return func(r int) float64 {
 			return fa(r) * fb(r)
@@ -92,9 +92,9 @@ func (t TownType) GetFitnessFunction(m *Civ) func(int) float64 {
 	case TownTypeTrading:
 		return m.getFitnessTradingTowns()
 	case TownTypeQuarry:
-		fa := m.getFitnessSteepMountains()
-		fb := m.getFitnessClimate()
-		fc := m.getFitnessProximityToWater()
+		fa := m.GetFitnessSteepMountains()
+		fb := m.GetFitnessClimate()
+		fc := m.GetFitnessProximityToWater()
 		fd := m.getFitnessProximityToCities(TownTypeMining, TownTypeMiningGems, TownTypeQuarry)
 		return func(r int) float64 {
 			if m.Stones[r] == 0 {
@@ -103,9 +103,9 @@ func (t TownType) GetFitnessFunction(m *Civ) func(int) float64 {
 			return fd(r) * (fa(r)*fb(r) + fc(r)) / 2
 		}
 	case TownTypeMining:
-		fa := m.getFitnessSteepMountains()
-		fb := m.getFitnessClimate()
-		fc := m.getFitnessProximityToWater()
+		fa := m.GetFitnessSteepMountains()
+		fb := m.GetFitnessClimate()
+		fc := m.GetFitnessProximityToWater()
 		fd := m.getFitnessProximityToCities(TownTypeMining, TownTypeMiningGems, TownTypeQuarry)
 		return func(r int) float64 {
 			if m.Metals[r] == 0 {
@@ -114,9 +114,9 @@ func (t TownType) GetFitnessFunction(m *Civ) func(int) float64 {
 			return fd(r) * (fa(r)*fb(r) + fc(r)) / 2
 		}
 	case TownTypeMiningGems:
-		fa := m.getFitnessSteepMountains()
-		fb := m.getFitnessClimate()
-		fc := m.getFitnessProximityToWater()
+		fa := m.GetFitnessSteepMountains()
+		fb := m.GetFitnessClimate()
+		fc := m.GetFitnessProximityToWater()
 		fd := m.getFitnessProximityToCities(TownTypeMining, TownTypeMiningGems, TownTypeQuarry)
 		return func(r int) float64 {
 			if m.Gems[r] == 0 {
@@ -125,7 +125,7 @@ func (t TownType) GetFitnessFunction(m *Civ) func(int) float64 {
 			return fd(r) * (fa(r)*fb(r) + fc(r)) / 2
 		}
 	case TownTypeFarming:
-		return m.getFitnessArableLand()
+		return m.GetFitnessArableLand()
 	case TownTypeDesertOasis:
 		// TODO: Improve this fitness function.
 		// Right now the oasis are placed at the very edges of
@@ -133,8 +133,8 @@ func (t TownType) GetFitnessFunction(m *Civ) func(int) float64 {
 		// However, we want them to be trade hubs for desert
 		// crossings... so we'll need to place them in the middle
 		// of deserts instead.
-		fa := m.getFitnessClimate()
-		bf := m.getRegWhittakerModBiomeFunc()
+		fa := m.GetFitnessClimate()
+		bf := m.GetRegWhittakerModBiomeFunc()
 		return func(r int) float64 {
 			biome := bf(r)
 			if biome == genbiome.WhittakerModBiomeColdDesert ||

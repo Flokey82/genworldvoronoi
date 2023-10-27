@@ -4,12 +4,15 @@ import (
 	"log"
 	"math/rand"
 	"time"
+
+	"github.com/Flokey82/genworldvoronoi/geo"
+	"github.com/Flokey82/genworldvoronoi/various"
 )
 
 // Bio handles the generation of life on the map (plants, animals, etc.).
 type Bio struct {
 	*BioConfig
-	*Geo
+	*geo.Geo
 	Species                []*Species              // All species on the map.
 	SpeciesFamilyToRegions map[SpeciesFamily][]int // Regions where each species is found.
 	SpeciesRegions         []int                   // Regions where each species is found.
@@ -18,7 +21,7 @@ type Bio struct {
 	rand                   *rand.Rand              // Random number generator.
 }
 
-func newBio(geo *Geo, cfg *BioConfig) *Bio {
+func newBio(geo *geo.Geo, cfg *BioConfig) *Bio {
 	if cfg == nil {
 		cfg = NewBioConfig()
 	}
@@ -78,7 +81,7 @@ func (b *Bio) calcGrowthPeriod() {
 	useGoRoutines := true
 	// Use go routines to process a chunk of regions at a time.
 	if useGoRoutines {
-		kickOffChunkWorkers(b.SphereMesh.NumRegions, b.calcGrowthPeriodChunk)
+		various.KickOffChunkWorkers(b.SphereMesh.NumRegions, b.calcGrowthPeriodChunk)
 	} else {
 		b.calcGrowthPeriodChunk(0, b.SphereMesh.NumRegions)
 	}
@@ -92,7 +95,7 @@ func (b *Bio) calcGrowthPeriodChunk(start, end int) {
 		var totalInsolation float64
 		for i := 0; i < 356; i++ {
 			// Calculate daily average temperature.
-			min, max := b.getMinMaxTemperatureOfDay(b.LatLon[r][0], i)
+			min, max := b.GetMinMaxTemperatureOfDay(b.LatLon[r][0], i)
 			avg := (min + max) / 2
 
 			// TODO: Right now we only count days where the average temperature
@@ -101,7 +104,7 @@ func (b *Bio) calcGrowthPeriodChunk(start, end int) {
 			// We should also take in account when there is precipitation.
 			if avg > 0 && b.Rainfall[r] > 0 {
 				growthDays++
-				totalInsolation += calcSolarRadiation(b.LatLon[r][0], i)
+				totalInsolation += geo.CalcSolarRadiation(b.LatLon[r][0], i)
 			}
 		}
 		b.GrowthDays[r] = growthDays

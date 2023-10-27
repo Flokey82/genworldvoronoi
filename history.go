@@ -1,13 +1,17 @@
 package genworldvoronoi
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/Flokey82/genworldvoronoi/geo"
+)
 
 type History struct {
-	*Calendar
+	*geo.Calendar
 	Events []*Event
 }
 
-func NewHistory(c *Calendar) *History {
+func NewHistory(c *geo.Calendar) *History {
 	return &History{
 		Calendar: c,
 	}

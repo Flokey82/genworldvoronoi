@@ -9,6 +9,7 @@ import (
 	"sort"
 
 	"github.com/Flokey82/genbiome"
+	"github.com/Flokey82/genworldvoronoi/geo"
 	"github.com/Flokey82/genworldvoronoi/various"
 	"github.com/Flokey82/geoquad"
 	"github.com/Flokey82/go_gens/gameconstants"
@@ -101,7 +102,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 			rLat := m.LatLon[i][0]
 			valElev := elev / max
 			valMois := m.Moisture[i] / maxMois
-			return getWhittakerModBiomeColor(rLat, valElev, valMois, math.Pow(val, 1/n))
+			return geo.GetWhittakerModBiomeColor(rLat, valElev, valMois, math.Pow(val, 1/n))
 		}
 	case 19, 20, 21: // Temperatures and elevation.
 		// Create a blue to red color gradient.
@@ -151,7 +152,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 	default:
 		vals := m.Elevation
 		if displayMode == 1 {
-			vals = m.calcCurrentPressure(m.RegionToOceanVec)
+			vals = m.CalcCurrentPressure(m.RegionToOceanVec)
 		} else if displayMode == 2 {
 			vals = m.Moisture
 		} else if displayMode == 3 {
@@ -159,15 +160,15 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 		} else if displayMode == 4 {
 			vals = m.Flux
 		} else if displayMode == 5 {
-			vals = m.propagateCompression(m.RegionCompression)
+			vals = m.PropagateCompression(m.RegionCompression)
 		} else if displayMode == 6 {
-			vals = m.getEarthquakeChance()
+			vals = m.GetEarthquakeChance()
 		} else if displayMode == 7 {
-			vals = m.getVolcanoEruptionChance()
+			vals = m.GetVolcanoEruptionChance()
 		} else if displayMode == 8 {
-			vals = m.getRockSlideAvalancheChance()
+			vals = m.GetRockSlideAvalancheChance()
 		} else if displayMode == 9 {
-			vals = m.getFloodChance()
+			vals = m.GetFloodChance()
 		} else if displayMode == 10 {
 			vals = m.GetErosionRate()
 		} else if displayMode == 11 {
@@ -196,7 +197,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 			rLat := m.LatLon[i][0]
 			valElev := elev / max
 			valMois := m.Moisture[i] / maxMois
-			return getWhittakerModBiomeColor(rLat, valElev, valMois, math.Pow(val, 1/n))
+			return geo.GetWhittakerModBiomeColor(rLat, valElev, valMois, math.Pow(val, 1/n))
 		}
 	}
 
@@ -388,7 +389,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 			regions := m.T_circulate_r(out_t, i)
 
 			// Get the normal of the triangle.
-			normal := m.regTriNormal(i, regions)
+			normal := m.RegTriNormal(i, regions)
 
 			// Now take the dot product of the slope and our global light
 			// direction to get the amount of light on the triangle.
@@ -629,7 +630,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 	// fetch all the rivers and filter them by the tile.
 	// We should filter this stuff before we generate the rivers.
 	if drawRivers {
-		rivers := m.getRiversInLatLonBB(0.001/float64(int(1)<<zoom), la1Margin, lo1Margin, la2Margin, lo2Margin)
+		rivers := m.GetRiversInLatLonBB(0.001/float64(int(1)<<zoom), la1Margin, lo1Margin, la2Margin, lo2Margin)
 		_, maxFlux := minMax(m.Flux)
 
 		// Set our stroke color to a nice river blue.
@@ -907,11 +908,11 @@ func (m *Map) GetGeoJSONCities(la1, lo1, la2, lo2 float64, zoom int) ([]byte, er
 	_, maxSettled := minMax64(m.Settled)
 	distRegion := math.Sqrt(4 * math.Pi / float64(m.NumRegions))
 
-	biomeFunc := m.getRegWhittakerModBiomeFunc()
+	biomeFunc := m.GetRegWhittakerModBiomeFunc()
 	_, maxElev := minMax(m.Elevation)
 	_, maxMois := minMax(m.Moisture)
 
-	regPropertyFunc := m.getRegPropertyFunc()
+	regPropertyFunc := m.GetRegPropertyFunc()
 
 	// Depending on the zoom level we want to show more or less cities.
 	sortedCities := make([]*City, len(m.Cities))
@@ -970,9 +971,9 @@ func (m *Map) GetGeoJSONCities(la1, lo1, la2, lo2 float64, zoom int) ([]byte, er
 		f.SetProperty("maxpop", c.MaxPopulation)
 		f.SetProperty("maxpoplimit", c.MaxPopulationLimit())
 		f.SetProperty("settled", maxSettled-c.Founded)
-		temperature := m.getRegTemperature(c.ID, maxElev)
-		precip := maxPrecipitation * m.Moisture[c.ID] / maxMois
-		elev := maxAltitudeFactor * m.Elevation[c.ID] / maxElev
+		temperature := m.GetRegTemperature(c.ID, maxElev)
+		precip := geo.MaxPrecipitation * m.Moisture[c.ID] / maxMois
+		elev := geo.MaxAltitudeFactor * m.Elevation[c.ID] / maxElev
 		f.SetProperty("biome", genbiome.WhittakerModBiomeToString(biomeFunc(c.ID))+
 			fmt.Sprintf(" (%.1f°C, %.1fdm, %.1fm)", temperature, precip, elev))
 		f.SetProperty("coordinates", fmt.Sprintf("lat %.2f, lon %.2f", cLat, cLon))
@@ -1017,33 +1018,33 @@ func (m *Map) GetGeoJSONCities(la1, lo1, la2, lo2 float64, zoom int) ([]byte, er
 		// Generate the list of local resources.
 		var resources []string
 		// Metals.
-		for i := 0; i < ResMaxMetals; i++ {
+		for i := 0; i < geo.ResMaxMetals; i++ {
 			if m.Metals[c.ID]&(1<<i) != 0 {
-				resources = append(resources, metalToString(i))
+				resources = append(resources, geo.MetalToString(i))
 			}
 		}
 		// Gems.
-		for i := 0; i < ResMaxGems; i++ {
+		for i := 0; i < geo.ResMaxGems; i++ {
 			if m.Gems[c.ID]&(1<<i) != 0 {
-				resources = append(resources, gemToString(i))
+				resources = append(resources, geo.GemToString(i))
 			}
 		}
 		// Stones.
-		for i := 0; i < ResMaxStones; i++ {
+		for i := 0; i < geo.ResMaxStones; i++ {
 			if m.Stones[c.ID]&(1<<i) != 0 {
-				resources = append(resources, stoneToString(i))
+				resources = append(resources, geo.StoneToString(i))
 			}
 		}
 		// Woods.
-		for i := 0; i < ResMaxWoods; i++ {
+		for i := 0; i < geo.ResMaxWoods; i++ {
 			if m.Wood[c.ID]&(1<<i) != 0 {
-				resources = append(resources, woodToString(i))
+				resources = append(resources, geo.WoodToString(i))
 			}
 		}
 		// Various.
-		for i := 0; i < ResMaxVarious; i++ {
+		for i := 0; i < geo.ResMaxVarious; i++ {
 			if m.Various[c.ID]&(1<<i) != 0 {
-				resources = append(resources, variousToString(i))
+				resources = append(resources, geo.VariousToString(i))
 			}
 		}
 		f.SetProperty("reslist", resources)
@@ -1209,32 +1210,4 @@ func (m *merc) MetersToLatLon(x, y float64) (float64, float64) {
 	lat := (y / m.originShift) * 180
 	lat = 180 / math.Pi * (2*math.Atan(math.Exp(lat*math.Pi/180)) - math.Pi/2)
 	return lat, lon
-}
-
-// boundingBoxResult contains the results of a bounding box query.
-type boundingBoxResult struct {
-	Regions   []int // Regions withi the bounding box.
-	Triangles []int // Triangles within the bounding box.
-}
-
-// getBoundingBoxRegions returns all regions and triangles within the given lat/lon bounding box.
-//
-// TODO: Add margin in order to also return regions/triangles that are partially
-// within the bounding box.
-func (m *BaseObject) getBoundingBoxRegions(lat1, lon1, lat2, lon2 float64) *boundingBoxResult {
-	r := &boundingBoxResult{}
-	// TODO: Add convenience function to check against bounding box.
-	for i, ll := range m.LatLon {
-		if l0, l1 := ll[0], ll[1]; l0 < lat1 || l0 >= lat2 || l1 < lon1 || l1 >= lon2 {
-			continue
-		}
-		r.Regions = append(r.Regions, i)
-	}
-	for i, ll := range m.TriLatLon {
-		if l0, l1 := ll[0], ll[1]; l0 < lat1 || l0 >= lat2 || l1 < lon1 || l1 >= lon2 {
-			continue
-		}
-		r.Triangles = append(r.Triangles, i)
-	}
-	return r
 }

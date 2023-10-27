@@ -1,4 +1,4 @@
-package genworldvoronoi
+package geo
 
 // assignWaterbodies finds all continous waterbodies and assigns them a unique ID
 // and takes note of their respective sizes.
@@ -84,9 +84,9 @@ func (m *BaseObject) getLakeSizes() map[int]int {
 	return lakeSize
 }
 
-// getRegLakeOrWaterBodySize returns the size of the lake or waterbody that the
+// GetRegLakeOrWaterBodySize returns the size of the lake or waterbody that the
 // provided region is part of.
-func (m *BaseObject) getRegLakeOrWaterBodySize(r int) int {
+func (m *BaseObject) GetRegLakeOrWaterBodySize(r int) int {
 	if m.Waterbodies[r] >= 0 {
 		return m.WaterbodySize[m.Waterbodies[r]]
 	}

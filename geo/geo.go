@@ -1,4 +1,4 @@
-package genworldvoronoi
+package geo
 
 import (
 	"log"
@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Flokey82/genworldvoronoi/spheremesh"
+	"github.com/Flokey82/genworldvoronoi/various"
 	"github.com/Flokey82/go_gens/vectors"
 )
 
@@ -22,13 +23,13 @@ type Geo struct {
 	RegionToWindVecLocal [][2]float64   // Point / region wind vector (local)
 	RegionToOceanVec     [][2]float64   // Point / region ocean current vector
 	RegionToPlate        []int          // Point / region to plate mapping
-	ocean_r              []int          // Ocean regions
-	mountain_r           []int          // Mountain regions
-	coastline_r          []int          // Coastline regions
+	Ocean_r              []int          // Ocean regions
+	Mountain_r           []int          // Mountain regions
+	Coastline_r          []int          // Coastline regions
 	QuadGeom             *QuadGeometry  // Quad geometry generated from the mesh (?)
 }
 
-func newGeo(seed int64, cfg *GeoConfig) (*Geo, error) {
+func NewGeo(seed int64, cfg *GeoConfig) (*Geo, error) {
 	if cfg == nil {
 		cfg = NewGeoConfig()
 	}
@@ -49,7 +50,7 @@ func newGeo(seed int64, cfg *GeoConfig) (*Geo, error) {
 	}, nil
 }
 
-func (m *Geo) generateGeology() {
+func (m *Geo) GenerateGeology() {
 	// Generate tectonic plates.
 	start := time.Now()
 	m.generatePlates()
@@ -178,12 +179,12 @@ func (m *Geo) GetCustomContour(f func(idxA, idxB int) bool) [][]int {
 		}
 	}
 
-	return mergeIndexSegments(edges)
+	return various.MergeIndexSegments(edges)
 }
 
-// getVectorSortOrder returns a list of regions sorted by their vector order.
+// GetVectorSortOrder returns a list of regions sorted by their vector order.
 // This allows us to sort regions "up wind" or "down wind", for example.
-func (m *Geo) getVectorSortOrder(vecs [][2]float64, reverse bool) ([]float64, []int) {
+func (m *Geo) GetVectorSortOrder(vecs [][2]float64, reverse bool) ([]float64, []int) {
 	orderedRegs := make([]int, m.SphereMesh.NumRegions) // sorted regions
 	regSort := make([]float64, m.SphereMesh.NumRegions) // numeric sort order
 	for r := 0; r < m.SphereMesh.NumRegions; r++ {
