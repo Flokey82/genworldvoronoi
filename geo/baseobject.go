@@ -10,6 +10,7 @@ import (
 	"github.com/Flokey82/genworldvoronoi/noise"
 	"github.com/Flokey82/genworldvoronoi/spheremesh"
 	"github.com/Flokey82/genworldvoronoi/various"
+	"github.com/Flokey82/geoquad"
 	"github.com/Flokey82/go_gens/utils"
 	"github.com/Flokey82/go_gens/vectors"
 )
@@ -108,11 +109,31 @@ func (m *BaseObject) PickRandomRegions(n int) []int {
 	// Reset the random number generator.
 	m.ResetRand()
 
+	// Use lat/lon coordinates to pick random regions.
+	// This will allow us to get stable results even if the number of mesh regions changes.
+	// Like a result? Save the seed and you can get the same result again, even with higher
+	// mesh resolutions.
+	useLatLon := true
+
 	// Pick n random regions.
 	res := make([]int, 0, n)
+
 	numRegs := m.SphereMesh.NumRegions
-	for len(res) < n && len(res) < numRegs {
-		res = append(res, m.Rand.Intn(numRegs))
+	if useLatLon {
+		for len(res) < n && len(res) < numRegs {
+			// Pick random regions based on their lat/lon coordinates.
+			randLat, randLon := m.Rand.Float64()*180-90, m.Rand.Float64()*360-180
+			// Find the closest region to the random lat/lon.
+			reg, found := m.RegQuadTree.FindNearestNeighbor(geoquad.Point{Lat: randLat, Lon: randLon})
+			if !found {
+				continue
+			}
+			res = append(res, reg.Data.(int))
+		}
+	} else {
+		for len(res) < n && len(res) < numRegs {
+			res = append(res, m.Rand.Intn(numRegs))
+		}
 	}
 	sort.Ints(res)
 	return res
