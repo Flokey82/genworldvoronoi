@@ -18,7 +18,7 @@ func (m *Civ) GetCityState(id int) *CityState {
 	return nil
 }
 
-func (m *Civ) rPlaceNCityStates(n int) {
+func (m *Civ) PlaceNCityStates(n int) {
 	m.ResetRand()
 	for i, c := range m.Cities {
 		if i >= n {

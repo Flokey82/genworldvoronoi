@@ -39,9 +39,8 @@ func (m *Civ) tickCityDays(c *City, gDisFunc func(int) geo.GeoDisasterChance, cf
 	// - The population growth should be dependent on the economic power
 	//   and if there is famine, war, drought, sickness, etc.
 	// - Also take in account what size of population the city can sustain.
-	//
-	// TODO: Compare the actual population with the population we calculate
-	// here and kill off people if the actual population is larger.
+	// - Compare the actual population with the population we calculate
+	//   here and kill off people if the actual population is larger.
 
 	// Calculate the new population.
 
@@ -61,7 +60,7 @@ func (m *Civ) tickCityDays(c *City, gDisFunc func(int) geo.GeoDisasterChance, cf
 	// the city can sustain.
 	if maxPop := c.MaxPopulationLimit(); c.Population > maxPop {
 		log.Println("City population limit reached:", c.Name, c.Population, maxPop)
-		log.Printf("Attractiveness: %.2f, Economic Potential: %.2f, Agriculture: %.2f", c.Attractiveness, c.EconomicPotential, c.Agriculture)
+		log.Printf("Attractiveness: %.2f, Economic Potential: %.2f, Agriculture: %.2f", c.Attractiveness, c.PotentialEconomic, c.PotentialAgricultural)
 
 		// The excess population can migrate to other cities or a new
 		// settlement might be founded nearby.
@@ -274,7 +273,7 @@ func (m *Civ) relocateFromCity(c *City, population int) {
 
 				// If the city is abandoned, set the economic potential to 1 temporarily.
 				if city.Population == 0 {
-					city.EconomicPotential = 1
+					city.PotentialEconomic = 1
 				}
 
 				// Move the population to the closest city.
@@ -361,10 +360,10 @@ func (m *Civ) relocateFromCity(c *City, population int) {
 
 	// Check if any survived and founded a new city.
 	if survived := population - dead; survived > 0 {
-		city := m.placeCityAt(bestReg, m.getRegCityType(bestReg), survived, bestScore)
-		city.Founded = m.History.GetYear() + 1 // The city is founded next year.
-		city.EconomicPotential = 1             // Set the economic potential to 1 temporarily.
-		city.Attractiveness = bestScore        // Set the attractiveness to the best score.
+		// The city is founded next year.
+		city := m.placeCityAt(bestReg, m.History.GetYear()+1, m.getRegCityType(bestReg), survived, bestScore)
+		city.PotentialEconomic = 1      // Set the economic potential to 1 temporarily.
+		city.Attractiveness = bestScore // Set the attractiveness to the best score.
 
 		// The rest of the population survives and migrates to the new city.
 		// m.moveNFromToCity(c, city, survived)
@@ -376,23 +375,23 @@ func (m *Civ) relocateFromCity(c *City, population int) {
 
 // City represents a city in the world.
 type City struct {
-	ID                int                   // Region where the city is located
-	Name              string                // Name of the city
-	Type              TownType              // Type of city
-	Score             float64               // Score of the fitness function
-	Population        int                   // Population of the city
-	MaxPopulation     int                   // Maximum population of the city
-	Culture           *Culture              // Culture of the city region
-	Language          *genlanguage.Language // Language of the city
-	Religion          *Religion             // Religion originating from the city
-	Founded           int64                 // Year when the city was founded
-	EconomicPotential float64               // Economic potential of the city (DYNAMIC)
-	Trade             float64               // Trade value of the city (DYNAMIC)
-	Resources         float64               // Resources value of the city (PARTLY DYNAMIC)
-	Agriculture       float64               // Agriculture value of the city (STATIC)
-	Attractiveness    float64               // Attractiveness of the city (STATIC)
-	TradePartners     int                   // Number of cities within trade range
-	People            []*Person             // People living in the city
+	ID                    int                   // Region where the city is located
+	Name                  string                // Name of the city
+	Type                  TownType              // Type of city
+	Score                 float64               // Score of the fitness function
+	Population            int                   // Population of the city
+	MaxPopulation         int                   // Maximum population of the city
+	Culture               *Culture              // Culture of the city region
+	Language              *genlanguage.Language // Language of the city
+	Religion              *Religion             // Religion originating from the city
+	Founded               int64                 // Year when the city was founded
+	PotentialEconomic     float64               // Economic potential of the city (DYNAMIC)
+	PotentialTrade        float64               // Trade value of the city (DYNAMIC)
+	PotentialResources    float64               // Resources value of the city (PARTLY DYNAMIC)
+	PotentialAgricultural float64               // Agriculture value of the city (STATIC)
+	Attractiveness        float64               // Attractiveness of the city (STATIC)
+	TradePartners         []int                 // IDs of cities within trade range
+	People                []*Person             // People living in the city
 }
 
 // Ref returns the object reference of the city.
@@ -418,12 +417,12 @@ func (c *City) String() string {
 
 // MaxPopulationLimit returns the maximum population sustainable by the city.
 func (c *City) MaxPopulationLimit() int {
-	return 200 + int(20000*math.Pow((c.EconomicPotential+c.Attractiveness), 2))
+	return 200 + int(20000*math.Pow((c.PotentialEconomic+c.Attractiveness), 2))
 }
 
 // PopulationGrowthRate returns the population growth rate per year.
 func (c *City) PopulationGrowthRate() float64 {
-	return 0.0005 + 0.0025*(c.EconomicPotential+c.Attractiveness)/2
+	return 0.0005 + 0.0025*(c.PotentialEconomic+c.Attractiveness)/2
 }
 
 // PlaceNCities places n cities with the highest fitness scores.
@@ -484,10 +483,15 @@ func (m *Civ) placeCityWithScore(cType TownType, cityScore []float64) *City {
 	// TODO: Calculate population based on suitability for habitation.
 	basePop := cType.FoundingPopulation()
 	basePop += 2 * m.Rand.Intn(basePop) / (len(m.Cities) + 1)
-	return m.placeCityAt(newcity, cType, basePop, lastMax)
+	return m.placeCityAt(newcity, m.Settled[newcity]+m.Rand.Int63n(100), cType, basePop, lastMax)
 }
 
-func (m *Civ) placeCityAt(r int, cType TownType, pop int, score float64) *City {
+func (m *Civ) placeCityAt(r int, founded int64, cType TownType, pop int, score float64) *City {
+	// If founded is not set, use the current year.
+	if founded == 0 {
+		founded = m.History.GetYear()
+	}
+
 	// TODO:
 	// - Trigger event for city founding.
 	// - Allow optionally specifying a founding year.
@@ -500,7 +504,7 @@ func (m *Civ) placeCityAt(r int, cType TownType, pop int, score float64) *City {
 		MaxPopulation: pop,
 		Type:          cType,
 		Culture:       m.GetCulture(r),
-		Founded:       m.Settled[r] + m.Rand.Int63n(100),
+		Founded:       founded,
 	}
 
 	// If there is no known culture, generate a new one.

@@ -30,6 +30,21 @@
 <body>
   <div id="cesiumContainer"></div>
   <script>
+    function altitudeToZoom(altitude) {
+      var A = 40487.57;
+      var B = 0.00007096758;
+      var C = 91610.74;
+      var D = -40467.74;
+
+      return D + (A - D) / (1 + Math.pow(altitude / C, B));
+    }
+
+    function getCameraAltitude(camera) {
+      var ellipsoid = viewer.scene.globe.ellipsoid;
+      var cartographic = ellipsoid.cartesianToCartographic(camera.position);
+      return cartographic.height;
+    }
+  
     const viewer = new Cesium.Viewer('cesiumContainer', {
       animation: false,
       baseLayerPicker: false,
@@ -116,7 +131,7 @@
       var south = Cesium.Math.toDegrees(rect.south).toFixed(4);
       var east = Cesium.Math.toDegrees(rect.east).toFixed(4);
       var north = Cesium.Math.toDegrees(rect.north).toFixed(4);
-      var zoom = 0;
+      var zoom = altitudeToZoom(getCameraAltitude(viewer.camera)).toFixed(0);
       var params = zoom + '/' + north + '/' + west + '/' + south + '/' + east;
 
       // only reload if the zoom level or the view rectangle changed

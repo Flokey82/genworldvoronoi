@@ -22,7 +22,7 @@ func (m *Civ) GetEmpire(id int) *Empire {
 	return nil
 }
 
-func (m *Civ) regPlaceNEmpires(n int) {
+func (m *Civ) PlaceNEmpires(n int) {
 	// NOTE: This is not very thought through.
 	// This will need quite a bit of tweaking.
 	//
@@ -35,20 +35,27 @@ func (m *Civ) regPlaceNEmpires(n int) {
 	if numEmpires > m.NumCityStates {
 		numEmpires = m.NumCityStates
 	}
+
+	// Copy all cities that are city state capitals.
 	sortCities := make([]*City, m.NumCityStates)
 	copy(sortCities, m.Cities)
 
-	// TODO: Use city states with high expansionism and high score.
+	// Sort city states by high expansionism and high score.
+	// E.g. the city states that want to expand the most and
+	// have the highest score will be the first to be placed.
 	sort.Slice(sortCities, func(i, j int) bool {
-		return m.getCityScoreForexp(sortCities[i]) > m.getCityScoreForexp(sortCities[j])
+		return m.getCityScoreForExpansion(sortCities[i]) > m.getCityScoreForExpansion(sortCities[j])
 	})
 
-	// Truncate the list of cities to the number of empires we want to create.
+	// Truncate the sorted list of cities to the number of empires we want to create.
 	sortCities = sortCities[:numEmpires]
-	// Start off with the city states with the highest expansionism score.
+
+	// Start off with placing the city states with the highest expansionism score.
 	for _, c := range sortCities {
 		m.placeEmpireAt(c.ID, c)
 	}
+
+	// Now expand the empires.
 	m.expandEmpires()
 }
 
@@ -67,7 +74,11 @@ func (m *Civ) expandEmpires() {
 	// Start off with the city states with the highest expansionism score.
 	for _, c := range m.Empires {
 		terr[cityIDToIndex[c.ID]] = c.ID
+
+		// Get the martial score of the city state we are expanding from.
 		cityScore := m.getCityScoreForMartial(c.Capital)
+
+		// Check if there are any neighbors that we can expand to.
 		for _, r := range m.getTerritoryNeighbors(c.ID, m.RegionToCityState) {
 			newdist := m.getCityScoreForMartial(cityIDToCity[r])
 			if newdist > cityScore {
@@ -90,17 +101,29 @@ func (m *Civ) expandEmpires() {
 			continue
 		}
 		terr[cityIDToIndex[u.Destination]] = u.Origin
+
+		// Get the martial score of the city state we are expanding from.
+		originScore := m.getCityScoreForMartial(cityIDToCity[u.Origin])
+
+		// Check if there are any neighbors that we can expand to.
 		for _, v := range m.getTerritoryNeighbors(u.Destination, m.RegionToCityState) {
 			if terr[cityIDToIndex[v]] >= 0 {
 				continue
 			}
-			newdist := m.getCityScoreForMartial(cityIDToCity[v])
-			cityScore := m.getCityScoreForMartial(cityIDToCity[u.Origin])
-			if newdist < 0 || newdist > cityScore {
+
+			// Get the martial score of the city state we want to expand to.
+			destScore := m.getCityScoreForMartial(cityIDToCity[v])
+
+			// If the destination score is higher than the origin score,
+			// we can't expand to this city state since they would resist
+			// our expansion successfully.
+			if destScore < 0 || destScore > originScore {
 				continue // We can't expand to a city with a higher score.
 			}
+
+			// Add the city state to the queue.
 			heap.Push(&queue, &geo.QueueEntry{
-				Score:       newdist + u.Score,
+				Score:       destScore + u.Score,
 				Origin:      u.Origin,
 				Destination: v,
 			})
@@ -110,7 +133,6 @@ func (m *Civ) expandEmpires() {
 	// Now overwrite the territories with the new territories.
 	// For this we will have to copy the city states and
 	// set new territories.
-
 	m.RegionToEmpire = initRegionSlice(m.SphereMesh.NumRegions)
 	for i, t := range m.RegionToCityState {
 		cIdx, ok := cityIDToIndex[t]
@@ -148,7 +170,7 @@ func (m *Civ) expandEmpires() {
 	}
 }
 
-func (m *Civ) getCityScoreForexp(c *City) float64 {
+func (m *Civ) getCityScoreForExpansion(c *City) float64 {
 	cc := m.GetCulture(c.ID)
 	if cc == nil {
 		// If there is no culture, we assume a base expansionism of 1.0.
@@ -167,7 +189,7 @@ func (m *Civ) getCityScoreForMartial(c *City) float64 {
 	}
 	// Use the culture's martialism as an indicator of
 	// how well the city can defend itself or its offensive
-	// capabilities.
+	// or defensive capabilities.
 	return c.Score * cc.Martialism * float64(len(c.Culture.Regions))
 }
 
@@ -175,13 +197,13 @@ func (m *Civ) getCityScoreForMartial(c *City) float64 {
 // TODO: Maybe drop the regions since we can get that info
 // relatively cheaply.
 type Empire struct {
-	ID       int     // Region where the empire originates (capital)
-	Name     string  // Name of the empire
-	Emperor  string  // Name of the ruler
-	Capital  *City   // Capital city
-	Cities   []*City // Cities within the territory
-	Culture  *Culture
-	Language *genlanguage.Language
+	ID       int                   // Region where the empire originates (capital)
+	Name     string                // Name of the empire
+	Emperor  string                // Name of the ruler
+	Capital  *City                 // Capital city
+	Cities   []*City               // Cities within the territory
+	Culture  *Culture              // Primary culture of the empire
+	Language *genlanguage.Language // Primary language of the empire
 
 	// TODO: DO NOT CACHE THIS!
 	Regions []int // Regions that are part of the empire

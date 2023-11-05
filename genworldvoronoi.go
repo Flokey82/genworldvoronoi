@@ -80,7 +80,7 @@ func (m *Map) generateMap() {
 	m.GenerateGeology()
 
 	// Build civilization.
-	m.generateCivilization()
+	m.GenerateCivilization()
 
 	// Build plants / animals / funghi.
 	m.GenerateBiology()

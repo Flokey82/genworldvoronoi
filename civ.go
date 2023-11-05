@@ -47,12 +47,12 @@ func NewCiv(g *geo.Geo, cfg *CivConfig) *Civ {
 	}
 }
 
-func (m *Civ) generateCivilization() {
+func (m *Civ) GenerateCivilization() {
 	// TODO: The generation should happen somewhat like this...
 	// 0. Calculate time of settlement per region through flood fill.
 	// This will allow us to determine the founding date of the cities and
 	// settlements.
-	m.generateTimeOfSettlement()
+	m.GenerateTimeOfSettlement()
 
 	// 1. Generate (species and) cultures.
 	// 2. Spread cultures.
@@ -64,14 +64,14 @@ func (m *Civ) generateCivilization() {
 	// 8. Generate city states.
 	// 9. Generate empires.
 
-	// Place cultures.
+	// Place cultures (and folk religions).
 	start := time.Now()
 	m.PlaceNCultures(m.NumCultures)
 	log.Println("Done cultures in ", time.Since(start).String())
 
 	// Place / expand folk religions.
 	start = time.Now()
-	m.ExpandReligions()
+	m.PlaceNFolkReligions(m.NumCultures)
 	log.Println("Done expanding religions in ", time.Since(start).String())
 
 	// Place cities and territories in regions.
@@ -86,11 +86,11 @@ func (m *Civ) generateCivilization() {
 	log.Println("Done cities in ", time.Since(start).String())
 
 	start = time.Now()
-	m.rPlaceNCityStates(m.NumCityStates)
+	m.PlaceNCityStates(m.NumCityStates)
 	log.Println("Done city states in ", time.Since(start).String())
 
 	start = time.Now()
-	m.regPlaceNEmpires(m.NumEmpires)
+	m.PlaceNEmpires(m.NumEmpires)
 	log.Println("Done empires in ", time.Since(start).String())
 
 	// Once we have established the territories, we can add trade towns
@@ -191,7 +191,7 @@ func (m *Civ) getRegName(r int) string {
 	return ""
 }
 
-func (m *Civ) generateTimeOfSettlement() {
+func (m *Civ) GenerateTimeOfSettlement() {
 	// First we pick a "suitable" region where the cradle of civilization
 	// will be located.
 	// There are some theories where, if we put the origin of civilization

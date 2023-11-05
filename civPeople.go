@@ -45,11 +45,11 @@ func (m *Civ) tickPeople(people []*Person, nDays int, cf func(int) *Culture) []*
 // placePopulationAt places a population of n randomly generated people at the given region.
 // The people are assigned a culture based on the given culture function.
 //
-// NOTE: 'cf' is a function that returns a culture for a given location.
+// NOTE:
+// - 'cf' is a function that returns a culture for a given location.
 // We use this function to determine the culture of a newborn based on the region
 // it is born in.
-//
-// NOTE: This function does not assign the people to any city that might be at the region.
+// - This function does not assign the people to any city that might be at the region.
 //
 // TODO: Assign people to cities!
 func (m *Civ) placePopulationAt(r, n int, cf func(int) *Culture) []*Person {
@@ -95,11 +95,12 @@ func (m *Civ) killNPeople(people []*Person, n int, reason string) []*Person {
 // It returns the list of people that are still alive in the original region and the list of people
 // that were migrated to the new region.
 //
-// NOTE: This function filters out dead people.
+// NOTE:
+// - This function filters out dead people.
+// - This function does not assign the people to any city that might be at the region.
 //
-// NOTE: This function does not assign the people to any city that might be at the region.
-//
-// TODO: Assign people to / remove people from cities!
+// TODO:
+// - Assign people to / remove people from cities!
 func (m *Civ) migrateNPeopleFromTo(pFrom []*Person, rTo, n int) (pFromAfter, pToMigrate []*Person) {
 	pFromAfter = make([]*Person, 0, len(pFrom))
 	pToMigrate = make([]*Person, 0, n)

@@ -101,6 +101,28 @@ func (t CultureType) Martialism() float64 {
 	return various.RoundToDecimals(((rand.Float64()*powerInputValue)/2+1)*base, 1)
 }
 
+// Spirituality returns the spirituality of a given culture type.
+// TODO: Replace this with a more meaningful value.
+func (t CultureType) Spirituality() float64 {
+	powerInputValue := 1.0
+	base := 1.0 // Generic
+	switch t {
+	case CultureTypeLake:
+		base = 1.2
+	case CultureTypeNaval:
+		base = 1.2
+	case CultureTypeRiver:
+		base = 1.2
+	case CultureTypeNomadic:
+		base = 1.2
+	case CultureTypeHunting:
+		base = 1.2
+	case CultureTypeHighland:
+		base = 1.2
+	}
+	return various.RoundToDecimals(((rand.Float64()*powerInputValue)/2+1)*base, 1)
+}
+
 // CellTypeCost returns the cost of crossing / navigating a given cell type for a given culture.
 func (t CultureType) CellTypeCost(cellType int) float64 {
 	// Land near coast / coastline / coastal land strip / "beach"?.

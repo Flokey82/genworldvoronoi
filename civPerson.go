@@ -16,7 +16,9 @@ func (m *Civ) getNextPersonID() int {
 }
 
 // tickPerson advances the person by nDays and returns any new born child.
-// TODO: Twins, triplets, etc.
+//
+// TODO:
+// - Twins, triplets, etc.
 func (m *Civ) tickPerson(p *Person, nDays int, cf func(int) *Culture) *Person {
 	if !m.doesPersonExist(p) {
 		return nil

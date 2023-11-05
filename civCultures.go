@@ -195,6 +195,7 @@ type Culture struct {
 	Type         CultureType // Type of the culture
 	Expansionism float64     // Expansionism of the culture
 	Martialism   float64     // Martial skills of the culture
+	Spirituality float64     // Spirituality of the culture (religion, superstition, etc.)
 	// Sophistication float64
 	// Extremism      float64 ?
 	// Openness       float64 ?
@@ -217,16 +218,15 @@ func (c *Culture) Log() {
 
 func (m *Civ) newCulture(r int, cultureType CultureType) *Culture {
 	lang := GenLanguage(m.Seed + int64(r))
-	c := &Culture{
+	return &Culture{
 		ID:           r,
 		Name:         lang.MakeName(),
 		Type:         cultureType,
 		Expansionism: cultureType.Expansionism(),
 		Martialism:   cultureType.Martialism(),
+		Spirituality: cultureType.Spirituality(),
 		Language:     lang,
 	}
-	c.Religion = m.genFolkReligion(c)
-	return c
 }
 
 // PlaceCulture places another culture on the map at the region with the highest fitness score.
@@ -298,9 +298,8 @@ func (m *Civ) getRegionCultureTypeFunc() func(int) CultureType {
 		// A haven is the closest neighbor that is a water body.
 		// NOTE: harborSize indicates the number of neighbors that are water.
 		rHaven, harborSize := m.GetRegHaven(r)
-		havenType := getType(rHaven) // Get the type of the haven region.
-		regionType := getType(r)
-		log.Println(havenType, regionType)
+		havenType := getType(rHaven) // Get the haven type of the region.
+		regionType := getType(r)     // Get the region type of the region.
 
 		// Ensure only larger lakes will result in the 'lake' culture type.
 		if havenType == geo.FeatureTypeLake && m.WaterbodySize[rHaven] > 5 {
@@ -332,9 +331,9 @@ func (m *Civ) getRegionCultureTypeFunc() func(int) CultureType {
 			return CultureTypeHunting // high penalty in non-native biomes
 		}
 
-		// TODO: Wildlands?
-		// TODO: What culture would have originated in seasonal forests?
-		log.Println(gotBiome, gotBiome, gotBiome, gotBiome)
+		// TODO:
+		// - Wildlands?
+		// - What culture would have originated in seasonal forests?
 		return CultureTypeGeneric
 	}
 }

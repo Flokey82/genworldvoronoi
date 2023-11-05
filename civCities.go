@@ -132,7 +132,7 @@ func (m *Civ) calculateEconomicPotential() {
 
 	economicPotential := make([]float64, len(cities))
 	for i, c := range cities {
-		economicPotential[i] = c.Resources + c.Agriculture
+		economicPotential[i] = c.PotentialResources + c.PotentialAgricultural
 	}
 
 	// Now we go through all the cities, and see if they might be able to
@@ -183,17 +183,17 @@ func (m *Civ) calculateEconomicPotential() {
 	// DEBUG: Count the number of cities in range.
 	// Loop through all cities and check if we can trade with them.
 	for i, c := range cities {
-		var count int
+		var tradePartners []int
 		for j, c2 := range cities {
 			if i == j {
 				continue // We don't trade with ourselves.
 			}
 			dist := m.GetDistance(c.ID, c2.ID)
 			if dist <= tradeRadius[i] {
-				count++
+				tradePartners = append(tradePartners, c2.ID)
 			}
 		}
-		c.TradePartners = count
+		c.TradePartners = tradePartners
 	}
 
 	// Now normalize trade potential.
@@ -205,8 +205,8 @@ func (m *Civ) calculateEconomicPotential() {
 
 	// Assign the economic potential.
 	for i, c := range cities {
-		c.EconomicPotential = economicPotential[i] + tradePotential[i]
-		c.Trade = tradePotential[i]
+		c.PotentialEconomic = economicPotential[i] + tradePotential[i]
+		c.PotentialTrade = tradePotential[i]
 	}
 }
 
@@ -230,7 +230,7 @@ func (m *Civ) calculateAgriculturalPotential(cities []*City) {
 	fitnessArableFunc := m.GetFitnessArableLand()
 	for _, c := range cities {
 		if agrPotential := fitnessArableFunc(c.ID); agrPotential > 0 {
-			c.Agriculture = agrPotential
+			c.PotentialAgricultural = agrPotential
 		}
 	}
 }
@@ -240,13 +240,13 @@ func (m *Civ) calculateResourcePotential(cities []*City) {
 	calcResourceValues := func(res []byte) {
 		for _, c := range cities {
 			// Sum up the normalized resource values.
-			c.Resources += float64(geo.SumResources(res[c.ID])) / 36 // 36 is the maximum value.
+			c.PotentialResources += float64(geo.SumResources(res[c.ID])) / 36 // 36 is the maximum value.
 		}
 	}
 
 	// Reset the resource potential.
 	for _, c := range cities {
-		c.Resources = 0
+		c.PotentialResources = 0
 	}
 
 	// Calculate the resource potential for each resource.
