@@ -4,6 +4,7 @@ import (
 	"container/heap"
 	"math"
 
+	"github.com/Flokey82/genworldvoronoi/geo"
 	"github.com/Flokey82/genworldvoronoi/various"
 )
 
@@ -30,8 +31,8 @@ func (m *Civ) getTerritoryCultureWeightFunc() func(o, u, v int) float64 {
 // getTerritoryBiomeWeightFunc returns a weight function which returns a penalty
 // for expanding from a region into a region with a different biome.
 func (m *Civ) getTerritoryBiomeWeightFunc() func(o, u, v int) float64 {
-	biomeFunc := m.getRegWhittakerModBiomeFunc()
-	climatFunc := m.getFitnessClimate()
+	biomeFunc := m.GetRegWhittakerModBiomeFunc()
+	climatFunc := m.GetFitnessClimate()
 	return func(o, u, v int) float64 {
 		var penalty float64
 
@@ -96,7 +97,7 @@ func (m *Civ) getTerritoryWeightFunc() func(o, u, v int) float64 {
 // u: The region we expand from
 // v: The region we expand to
 func (m *Civ) regPlaceNTerritoriesCustom(terr, seedPoints []int, weight func(o, u, v int) float64) []int {
-	var queue ascPriorityQueue
+	var queue geo.AscPriorityQueue
 	heap.Init(&queue)
 	outReg := make([]int, 0, 8)
 
@@ -116,33 +117,33 @@ func (m *Civ) regPlaceNTerritoriesCustom(terr, seedPoints []int, weight func(o, 
 			if newdist < 0 {
 				continue
 			}
-			heap.Push(&queue, &queueEntry{
-				score:       newdist,
-				origin:      seedPoints[i],
-				destination: v,
+			heap.Push(&queue, &geo.QueueEntry{
+				Score:       newdist,
+				Origin:      seedPoints[i],
+				Destination: v,
 			})
 		}
 	}
 
 	// Extend territories until the queue is empty.
 	for queue.Len() > 0 {
-		u := heap.Pop(&queue).(*queueEntry)
-		if terr[u.destination] >= 0 {
+		u := heap.Pop(&queue).(*geo.QueueEntry)
+		if terr[u.Destination] >= 0 {
 			continue
 		}
-		terr[u.destination] = u.origin
-		for _, v := range m.SphereMesh.R_circulate_r(outReg, u.destination) {
+		terr[u.Destination] = u.Origin
+		for _, v := range m.SphereMesh.R_circulate_r(outReg, u.Destination) {
 			if terr[v] >= 0 {
 				continue
 			}
-			newdist := weight(u.origin, u.destination, v)
+			newdist := weight(u.Origin, u.Destination, v)
 			if newdist < 0 {
 				continue
 			}
-			heap.Push(&queue, &queueEntry{
-				score:       u.score + newdist,
-				origin:      u.origin,
-				destination: v,
+			heap.Push(&queue, &geo.QueueEntry{
+				Score:       u.Score + newdist,
+				Origin:      u.Origin,
+				Destination: v,
 			})
 		}
 	}

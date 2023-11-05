@@ -11,6 +11,7 @@ import (
 	"os"
 
 	"github.com/Flokey82/genbiome"
+	"github.com/Flokey82/genworldvoronoi/geo"
 	"github.com/Flokey82/genworldvoronoi/various"
 	"github.com/mazznoer/colorgrad"
 	"github.com/sizeofint/webpanimation"
@@ -147,13 +148,13 @@ func (m *Map) ExportSVG(path string) error {
 			} else {
 				valElev := elev / max
 				valMois := em.Moisture[i] / maxMois
-				col = getWhittakerModBiomeColor(rLat, valElev, valMois, val)
+				col = geo.GetWhittakerModBiomeColor(rLat, valElev, valMois, val)
 			}
 			svg.Path(svgGenD(path), fmt.Sprintf("fill: rgb(%d, %d, %d)", col.R, col.G, col.B), "class=\"terrain\"")
 		}
 	} else {
-		min, max := minMax(m.triElevation)
-		_, maxMois := minMax(m.triMoisture)
+		min, max := minMax(m.TriElevation)
+		_, maxMois := minMax(m.TriMoisture)
 		for i := 0; i < len(em.SphereMesh.Triangles); i += 3 {
 			// Hacky way to filter paths/triangles that wrap around the entire SVG.
 			triLat := em.TriLatLon[i/3][0]
@@ -180,7 +181,7 @@ func (m *Map) ExportSVG(path string) error {
 				x, y := latLonToPixels(em.LatLon[j][0], em.LatLon[j][1], zoom)
 				path = append(path, [2]float64{x, y})
 			}
-			elev := em.triElevation[i/3]
+			elev := em.TriElevation[i/3]
 			val := (elev - min) / (max - min)
 			var col color.NRGBA
 			if elev <= 0 || poolCount > 2 {
@@ -189,8 +190,8 @@ func (m *Map) ExportSVG(path string) error {
 				valElev := elev / max
 				// Hacky: Modify elevation based on latitude to compensate for colder weather at the poles and warmer weather at the equator.
 				// valElev := math.Max(math.Min((elev/max)+(math.Sqrt(math.Abs(triLat)/90.0)-0.5), max), 0)
-				valMois := em.triMoisture[i/3] / maxMois
-				col = getWhittakerModBiomeColor(triLat, valElev, valMois, val)
+				valMois := em.TriMoisture[i/3] / maxMois
+				col = geo.GetWhittakerModBiomeColor(triLat, valElev, valMois, val)
 			}
 			svg.Path(svgGenD(path), fmt.Sprintf("fill: rgb(%d, %d, %d)", col.R, col.G, col.B), "class=\"terrain\"")
 		}
@@ -257,7 +258,7 @@ func (m *Map) ExportSVG(path string) error {
 
 	// Rivers (based on regions)
 	if drawRiversA {
-		drawPath(m.getRivers(0.001), false, "class=\"river\"")
+		drawPath(m.GetRivers(0.001), false, "class=\"river\"")
 
 		// Skip frozen regions
 		// TODO: Fix maxElev caching!!!
@@ -274,19 +275,19 @@ func (m *Map) ExportSVG(path string) error {
 	}
 
 	if drawTradeRoutes {
-		paths, _ := m.getTradeRoutes()
+		paths, _ := m.GetTradeRoutes()
 		drawPath(paths, false, "class=\"traderoute\"")
 	}
 
 	// Rivers (based on triangles)
 	if drawRiversB {
 		for i := 0; i < m.SphereMesh.NumSides; i++ {
-			if m.sideFlow[i] < 10000 {
+			if m.SideFlow[i] < 10000 {
 				continue
 			}
 			inner_t := m.SphereMesh.S_inner_t(i)
 			outer_t := m.SphereMesh.S_outer_t(i)
-			if m.triElevation[inner_t] < 0 && m.triElevation[outer_t] < 0 {
+			if m.TriElevation[inner_t] < 0 && m.TriElevation[outer_t] < 0 {
 				continue
 			}
 			x1, y1 := latLonToPixels(m.TriLatLon[inner_t][0], m.TriLatLon[inner_t][1], zoom)
@@ -308,7 +309,7 @@ func (m *Map) ExportSVG(path string) error {
 	}
 
 	if drawWindOrder {
-		wind_sort, ord := m.getWindSortOrder()
+		wind_sort, ord := m.GetWindSortOrder()
 		minFlux, maxFlux := minMax(wind_sort)
 		for _, r := range ord {
 			rdh := wind_sort[r]
@@ -339,13 +340,13 @@ func (m *Map) ExportSVG(path string) error {
 				maxComp = comp
 			}
 		}
-		for _, r := range m.mountain_r {
+		for _, r := range m.Mountain_r {
 			drawCircle(m.LatLon[r][0], m.LatLon[r][1], 2, "fill: rgb(255, 128, 128)")
 		}
-		for _, r := range m.coastline_r {
+		for _, r := range m.Coastline_r {
 			drawCircle(m.LatLon[r][0], m.LatLon[r][1], 2, "fill: rgb(128, 255, 128)")
 		}
-		for _, r := range m.ocean_r {
+		for _, r := range m.Ocean_r {
 			drawCircle(m.LatLon[r][0], m.LatLon[r][1], 2, "fill: rgb(128, 128, 255)")
 		}
 		for r := 0; r < m.SphereMesh.NumSides; r++ {
@@ -426,8 +427,8 @@ func (m *Map) ExportSVG(path string) error {
 		_, maxHeight := minMax(er)
 		for r, rdh := range m.Elevation {
 			if rdh > 0 && r%2 == 0 {
-				t := m.getRegTemperature(r, maxHeight)
-				col := genBlue((t - minTemp) / (maxTemp - minTemp))
+				t := m.GetRegTemperature(r, maxHeight)
+				col := genBlue((t - geo.MinTemp) / (geo.MaxTemp - geo.MinTemp))
 				drawCircle(m.LatLon[r][0], m.LatLon[r][1], 1, fmt.Sprintf("fill: rgb(%d, %d, %d)", col.R, col.G, col.G))
 			}
 		}
@@ -467,13 +468,13 @@ func (m *Map) ExportSVG(path string) error {
 
 	if drawResources {
 		grad := colorgrad.Rainbow()
-		cols := grad.Colors(uint(ResMaxMetals))
+		cols := grad.Colors(uint(geo.ResMaxMetals))
 
 		// NOTE: This sucks right now.
 		res := m.Metals
 		radius := 1
-		count := make([]int, ResMaxMetals)
-		for i := 0; i < ResMaxMetals; i++ {
+		count := make([]int, geo.ResMaxMetals)
+		for i := 0; i < geo.ResMaxMetals; i++ {
 			cr, cg, cb, _ := cols[i].RGBA()
 			col := fmt.Sprintf("fill: rgb(%d, %d, %d)", cr/(0xffff/255), cg/(0xffff/255), cb/(0xffff/255))
 			for r, t := range res {
@@ -483,8 +484,8 @@ func (m *Map) ExportSVG(path string) error {
 				}
 			}
 		}
-		for i := 0; i < ResMaxMetals; i++ {
-			log.Printf("Metal %s: %d", metalToString(i), count[i])
+		for i := 0; i < geo.ResMaxMetals; i++ {
+			log.Printf("Metal %s: %d", geo.MetalToString(i), count[i])
 		}
 	}
 
@@ -646,9 +647,9 @@ func (m *Map) getImage(drawTerritories, drawSeasonalBiome bool) image.Image {
 			} else if drawSeasonalBiome {
 				temMin, temMax := m.GetMinMaxTemperature(lat)
 				temAvg := (temMin + temMax) / 2
-				col = genbiome.GetWhittakerModBiomeColor(int(temAvg-getTempFalloffFromAltitude(maxAltitudeFactor*valElev)), int(valMois*maxPrecipitation), val)
+				col = genbiome.GetWhittakerModBiomeColor(int(temAvg-geo.GetTempFalloffFromAltitude(geo.MaxAltitudeFactor*valElev)), int(valMois*geo.MaxPrecipitation), val)
 			} else {
-				col = getWhittakerModBiomeColor(lat, valElev, valMois, val)
+				col = geo.GetWhittakerModBiomeColor(lat, valElev, valMois, val)
 			}
 			// col = GetWhittakerModBiomeColor(int(getMeanAnnualTemp(lat)-getTempFalloffFromAltitude(8850*valElev)), int(valMois*45), val)
 		}
@@ -727,7 +728,7 @@ func (m *Map) ExportOBJ(path string) error {
 	// Triangle vertices
 	if drawPlates || drawRivers {
 		for i := 0; i < len(m.TriXYZ); i += 3 {
-			ve := various.ConvToVec3(m.TriXYZ[i:]).Mul(1.03 + 0.01*m.triElevation[i/3])
+			ve := various.ConvToVec3(m.TriXYZ[i:]).Mul(1.03 + 0.01*m.TriElevation[i/3])
 			w.WriteString(fmt.Sprintf("v %f %f %f \n", ve.X, ve.Y, ve.Z))
 		}
 		w.Flush()
@@ -743,10 +744,10 @@ func (m *Map) ExportOBJ(path string) error {
 	// Rivers
 	if drawRivers {
 		for i := 0; i < m.SphereMesh.NumSides; i++ {
-			if m.sideFlow[i] > 1 {
+			if m.SideFlow[i] > 1 {
 				inner_t := m.SphereMesh.S_inner_t(i)
 				outer_t := m.SphereMesh.S_outer_t(i)
-				if m.triElevation[inner_t] < 0 && m.triElevation[outer_t] < 0 {
+				if m.TriElevation[inner_t] < 0 && m.TriElevation[outer_t] < 0 {
 					continue
 				}
 				w.WriteString(fmt.Sprintf("l %d %d \n", (len(m.XYZ)/3)+inner_t+1, (len(m.XYZ)/3)+outer_t+1))

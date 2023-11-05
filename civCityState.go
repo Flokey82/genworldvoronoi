@@ -2,6 +2,8 @@ package genworldvoronoi
 
 import (
 	"log"
+
+	"github.com/Flokey82/genworldvoronoi/geo"
 )
 
 func (m *Civ) GetCityState(id int) *CityState {
@@ -16,8 +18,8 @@ func (m *Civ) GetCityState(id int) *CityState {
 	return nil
 }
 
-func (m *Civ) rPlaceNCityStates(n int) {
-	m.resetRand()
+func (m *Civ) PlaceNCityStates(n int) {
+	m.ResetRand()
 	for i, c := range m.Cities {
 		if i >= n {
 			break
@@ -38,7 +40,7 @@ type CityState struct {
 
 	// TODO: DO NOT CACHE THIS!
 	Regions []int
-	*Stats
+	*geo.Stats
 }
 
 func (c *CityState) Log() {
@@ -54,7 +56,7 @@ func (m *Civ) PlaceCityStateAt(r int, c *City) *CityState {
 		Founded: c.Founded,            // TODO: Use current year.
 		Cities:  []*City{c},           // TODO: ??? Remove this?
 		Regions: []int{r},             // TODO: ??? Remove this?
-		Stats:   m.getStats([]int{r}), // TODO: ??? Remove this?
+		Stats:   m.GetStats([]int{r}), // TODO: ??? Remove this?
 	}
 
 	// If there is no known culture, generate a new one.
@@ -122,7 +124,7 @@ func (m *Civ) expandCityStates() {
 				c.Regions = append(c.Regions, r)
 			}
 		}
-		c.Stats = m.getStats(c.Regions)
+		c.Stats = m.GetStats(c.Regions)
 		c.Log()
 	}
 }

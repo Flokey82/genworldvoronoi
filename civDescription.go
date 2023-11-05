@@ -2,35 +2,45 @@ package genworldvoronoi
 
 import (
 	"log"
+
+	"github.com/Flokey82/genworldvoronoi/geo"
 )
 
 func (m *Civ) generateCitiesFlavorText() {
-	rpFunc := m.getRegPropertyFunc()
+	rpFunc := m.GetRegPropertyFunc()
 	for _, c := range m.Cities {
 		flvTxt := m.generateCityFlavorText(c, rpFunc(c.ID))
 		log.Println(c.Name, flvTxt)
 	}
 }
 
+const (
+	minPopCity    = 10000
+	minPopTown    = 1000
+	minPopVillage = 100
+)
+
 // generateCityFlavorText generates a flavor text for a city.
-func (m *Civ) generateCityFlavorText(c *City, p RegProperty) string {
+func (m *Civ) generateCityFlavorText(c *City, p geo.RegProperty) string {
 	str := c.Name + " is a "
 	if c.Population == 0 {
 		str += "deserted "
-		if c.MaxPopulation > 1000 {
+		if c.MaxPopulation > minPopCity {
+			str += "city"
+		} else if c.MaxPopulation > minPopTown {
 			str += "town"
 		} else {
 			str += "village"
 		}
-	} else if c.Population < 100 {
-		if c.MaxPopulation > 1000 {
+	} else if c.Population < minPopVillage {
+		if c.MaxPopulation > minPopTown {
 			str += "desolate town"
 		} else {
 			str += "small village"
 		}
-	} else if c.Population < 1000 {
+	} else if c.Population < minPopTown {
 		str += "small town"
-	} else if c.Population < 10000 {
+	} else if c.Population < minPopCity {
 		str += "large town"
 	} else {
 		str += "large city"
@@ -54,5 +64,5 @@ func (m *Civ) generateCityFlavorText(c *City, p RegProperty) string {
 	str += m.GenerateRegPropertyDescription(p)
 
 	// ... and finally add some flavor text for the biome.
-	return str + generateFlavorTextForBiome(int64(c.ID), p.Biome)
+	return str + geo.GenerateFlavorTextForBiome(int64(c.ID), p.Biome)
 }

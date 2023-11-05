@@ -1,42 +1,23 @@
 package genworldvoronoi
 
+import (
+	"github.com/Flokey82/genworldvoronoi/bio"
+	"github.com/Flokey82/genworldvoronoi/geo"
+)
+
 // Config is a struct that holds all configuration options for the map generation.
 type Config struct {
-	*GeoConfig
+	*geo.GeoConfig
 	*CivConfig
-	*BioConfig
+	*bio.BioConfig
 }
 
 // NewConfig returns a new Config with default values.
 func NewConfig() *Config {
 	return &Config{
-		GeoConfig: NewGeoConfig(),
+		GeoConfig: geo.NewGeoConfig(),
 		CivConfig: NewCivConfig(),
-		BioConfig: NewBioConfig(),
-	}
-}
-
-// GeoConfig is a struct that holds all configuration options for the geography / geology / climate generation.
-type GeoConfig struct {
-	NumPlates          int     // Number of generated plates
-	NumVolcanoes       int     // Number of generated volcanoes
-	NumPoints          int     // Number of generated points / regions
-	TectonicFalloff    bool    // Use square falloff to make mountains more peaky and flatlands more flat.
-	NormalizeElevation bool    // Normalize elevation to 0-1 range
-	MultiplyNoise      bool    // Multiply noise instead of adding
-	Jitter             float64 // Jitter factor (randomness in point distribution)
-}
-
-// NewGeoConfig returns a new config for geography / geology / climate generation.
-func NewGeoConfig() *GeoConfig {
-	return &GeoConfig{
-		NumPoints:          400000,
-		NumPlates:          25,
-		NumVolcanoes:       10,
-		TectonicFalloff:    true,
-		NormalizeElevation: true,
-		MultiplyNoise:      true,
-		Jitter:             0.0,
+		BioConfig: bio.NewBioConfig(),
 	}
 }
 
@@ -85,19 +66,5 @@ func NewCivConfig() *CivConfig {
 		MigrationToNClosestCities:                     10,
 		MigrationToNewSettlementWithinNRegions:        10,
 		MigrationFatalityChance:                       0.02,
-	}
-}
-
-// BioConfig is a struct that holds all configuration options for biology generation.
-type BioConfig struct {
-	EnableRandomSpecies bool // Enable random species generation
-	NumSpecies          int  // Number of randomly generated species
-}
-
-// NewBioConfig returns a new config for biology generation.
-func NewBioConfig() *BioConfig {
-	return &BioConfig{
-		EnableRandomSpecies: false,
-		NumSpecies:          100,
 	}
 }

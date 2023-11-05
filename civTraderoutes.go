@@ -5,10 +5,11 @@ import (
 	"math"
 	"sort"
 
+	"github.com/Flokey82/genworldvoronoi/various"
 	goastar "github.com/beefsack/go-astar"
 )
 
-func (m *Civ) getTradeRoutes() ([][]int, [][]int) {
+func (m *Civ) GetTradeRoutes() ([][]int, [][]int) {
 	// TODO: Allow persistent trading routes, so we can run multiple times without
 	//       destroying existing routes.
 	// Major cities will produce major trading routes that ensure that trade will be
@@ -223,9 +224,9 @@ func (n *TradeTile) PathNeighborCost(to goastar.Pather) float64 {
 		}
 	}
 
-	if n.r.isRegRiver(n.index) && n.r.isRegRiver(nIdx) {
+	if n.r.IsRegRiver(n.index) && n.r.IsRegRiver(nIdx) {
 		cost *= 0.8 // Bonus if along rivers.
-	} else if n.r.isRegRiver(n.index) != n.r.isRegRiver(nIdx) {
+	} else if n.r.IsRegRiver(n.index) != n.r.IsRegRiver(nIdx) {
 		cost *= 1.4 // Cost of crossing rivers.
 	}
 
@@ -252,7 +253,7 @@ func getSegment(a, b int) [2]int {
 
 func (m *Civ) getTradeRoutesInLatLonBB(minLat, minLon, maxLat, maxLon float64) [][]int {
 	// Convert the trade route paths to segments.
-	tr := m.tradeRoutes
+	tr := m.TradeRoutes
 	var links [][2]int
 	seen := make(map[[2]int]bool)
 	for _, path := range tr {
@@ -283,5 +284,5 @@ func (m *Civ) getTradeRoutesInLatLonBB(minLat, minLon, maxLat, maxLon float64) [
 		}
 		filtered = append(filtered, link)
 	}
-	return mergeIndexSegments(filtered)
+	return various.MergeIndexSegments(filtered)
 }

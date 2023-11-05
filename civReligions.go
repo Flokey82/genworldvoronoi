@@ -77,6 +77,9 @@ func (r *Religion) String() string {
 
 // genFolkReligion generates a folk religion for the given culture.
 func (m *Civ) genFolkReligion(c *Culture) *Religion {
+	// TODO:
+	// - Set foundation year.
+	// - Maybe randomize origin region within the culture's regions.
 	return m.placeReligionAt(c.ID, -1, genreligion.GroupFolk, c, c.Language, nil)
 }
 
@@ -92,6 +95,24 @@ func (m *Civ) genOrganizedReligion(c *City) *Religion {
 		}
 	}
 	return m.placeReligionAt(c.ID, -1, genreligion.GroupOrganized, c.Culture, c.Language, parent)
+}
+
+// PlaceNFolkReligions generates folk religions.
+func (m *Civ) PlaceNFolkReligions(n int) []*Religion {
+	var religions []*Religion
+	cultures := make([]*Culture, len(m.Cultures))
+	copy(cultures, m.Cultures)
+	sort.Slice(cultures, func(i, j int) bool {
+		return cultures[i].Spirituality > cultures[j].Spirituality
+	})
+	if len(cultures) > n {
+		cultures = cultures[:n]
+	}
+	for _, c := range cultures {
+		religions = append(religions, m.genFolkReligion(c))
+	}
+	m.ExpandReligions()
+	return religions
 }
 
 // PlaceNOrganizedReligions generates organized religions.
@@ -164,8 +185,9 @@ func (m *Civ) placeReligionAt(r int, founded int64, group string, culture *Cultu
 		relg.Expansionism = culture.Expansionism*rand.Float64()*1.5 + 0.5 // TODO: Move this to religion generator.
 
 		// This would look up geographically close religions and make this one a cult or heresy.
-		// if (!cells.burg[center] && cells.c[center].some(c => cells.burg[c]))
+		// if (!cells.burg[center] && cells.c[center].some(c => cells.burg[c])) {
 		//  center = cells.c[center].find(c => cells.burg[c]);
+		// }
 		// const [x, y] = cells.p[center];
 
 		// const s = spacing * gauss(1, 0.3, 0.2, 2, 2); // randomize to make the placement not uniform

@@ -4,6 +4,7 @@ import (
 	"math/rand"
 
 	"github.com/Flokey82/genbiome"
+	"github.com/Flokey82/genworldvoronoi/geo"
 	"github.com/Flokey82/genworldvoronoi/various"
 )
 
@@ -100,10 +101,32 @@ func (t CultureType) Martialism() float64 {
 	return various.RoundToDecimals(((rand.Float64()*powerInputValue)/2+1)*base, 1)
 }
 
+// Spirituality returns the spirituality of a given culture type.
+// TODO: Replace this with a more meaningful value.
+func (t CultureType) Spirituality() float64 {
+	powerInputValue := 1.0
+	base := 1.0 // Generic
+	switch t {
+	case CultureTypeLake:
+		base = 1.2
+	case CultureTypeNaval:
+		base = 1.2
+	case CultureTypeRiver:
+		base = 1.2
+	case CultureTypeNomadic:
+		base = 1.2
+	case CultureTypeHunting:
+		base = 1.2
+	case CultureTypeHighland:
+		base = 1.2
+	}
+	return various.RoundToDecimals(((rand.Float64()*powerInputValue)/2+1)*base, 1)
+}
+
 // CellTypeCost returns the cost of crossing / navigating a given cell type for a given culture.
 func (t CultureType) CellTypeCost(cellType int) float64 {
 	// Land near coast / coastline / coastal land strip / "beach"?.
-	if cellType == CellTypeCoastalLand {
+	if cellType == geo.CellTypeCoastalLand {
 		if t == CultureTypeNaval || t == CultureTypeLake {
 			// Naval cultures or lake cultures have an easier time navigating
 			// coastal areas or shores of lakes.
@@ -119,7 +142,7 @@ func (t CultureType) CellTypeCost(cellType int) float64 {
 	}
 
 	// Land slightly further inland.
-	if cellType == CellTypeInland {
+	if cellType == geo.CellTypeInland {
 		if t == CultureTypeNaval || t == CultureTypeNomadic {
 			// Small penalty for land with distance 2 to ocean for navals and nomads.
 			return 1.3
@@ -129,7 +152,7 @@ func (t CultureType) CellTypeCost(cellType int) float64 {
 	}
 
 	// Not water near coast (deep ocean/coastal land).
-	if cellType != CellTypeCoastalWater {
+	if cellType != geo.CellTypeCoastalWater {
 		if t == CultureTypeNaval || t == CultureTypeLake {
 			// Penalty for mainland for naval and lake cultures
 			return 2.0

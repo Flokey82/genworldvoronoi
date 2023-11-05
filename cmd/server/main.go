@@ -17,7 +17,7 @@ import (
 var worldmap *genworldvoronoi.Map
 
 var (
-	seed         int64   = 1234
+	seed         int64   = 2
 	numPlates    int     = 25
 	numPoints    int     = 400000
 	numVolcanoes int     = 10
