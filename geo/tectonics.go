@@ -6,7 +6,6 @@ import (
 	"sort"
 
 	"github.com/Flokey82/genworldvoronoi/various"
-	"github.com/Flokey82/go_gens/utils"
 	"github.com/Flokey82/go_gens/vectors"
 )
 
@@ -20,14 +19,28 @@ func (m *Geo) generatePlates() {
 		regPlate[i] = -1
 	}
 
-	// Pick random regions as seed points for plate generation.
-	plateRegs := m.PickRandomRegions(utils.Min(m.NumPlates, m.NumPoints))
+	// Pick random regions as seed points for plate generation and for plate vectors.
+	numPlates := min(m.NumPlates, m.NumPoints)
+	randRegs := m.PickRandomRegions(numPlates*2, true)
 
+	// Shuffle the regions.
+	m.Rand.Shuffle(len(randRegs), func(i, j int) {
+		randRegs[i], randRegs[j] = randRegs[j], randRegs[i]
+	})
+
+	// The first numPlates regions are the seed points for the plates.
+	plateRegs := randRegs[:numPlates]
+
+	// The remaining regions are used to calculate the plate vectors.
+	vectorRegs := randRegs[numPlates:]
+
+	// Assign seed regions to plates.
 	var queue []int
 	for _, r := range plateRegs {
 		queue = append(queue, r)
 		regPlate[r] = r
 	}
+
 	// In Breadth First Search (BFS) the queue will be all elements in
 	// queue[queue_out ... queue.length-1]. Pushing onto the queue
 	// adds an element to the end, increasing queue.length. Popping
@@ -40,6 +53,8 @@ func (m *Geo) generatePlates() {
 	// to pop instead of the earliest one. Do this by swapping
 	// queue[pos] and queue[queue_out].
 	outReg := make([]int, 0, 6)
+
+	// TODO: How can we make the growth consistent across different mesh resolutions?
 	for queueOut := 0; queueOut < len(queue); queueOut++ {
 		pos := queueOut + m.Rand.Intn(len(queue)-queueOut)
 		currentReg := queue[pos]
@@ -54,12 +69,16 @@ func (m *Geo) generatePlates() {
 	}
 
 	// Assign a random movement vector for each plate
+	// and normalize it.
 	regXYZ := m.XYZ
 	plateVectors := make([]vectors.Vec3, mesh.NumRegions)
-	for _, centerReg := range plateRegs {
-		nbReg := mesh.R_circulate_r(outReg, centerReg)[0]
+	for i, centerReg := range plateRegs {
+		// Get the random region that we use to calculate the vector.
+		distReg := vectorRegs[i]
+
+		// Get the vector from the center region to the random region.
 		p0 := various.ConvToVec3(regXYZ[3*centerReg : 3*centerReg+3])
-		p1 := various.ConvToVec3(regXYZ[3*nbReg : 3*nbReg+3])
+		p1 := various.ConvToVec3(regXYZ[3*distReg : 3*distReg+3])
 		plateVectors[centerReg] = vectors.Sub3(p1, p0).Normalize()
 	}
 
@@ -72,10 +91,22 @@ func (m *Geo) generatePlates() {
 func (m *Geo) assignOceanPlates() {
 	m.ResetRand()
 	m.PlateIsOcean = make(map[int]bool)
-	for _, r := range m.PlateRegs {
-		if m.Rand.Intn(10) < 5 {
-			m.PlateIsOcean[r] = true
+	useAlternateOceanPlates := false
+	if useAlternateOceanPlates {
+		numOceanPlates := (len(m.PlateRegs) + 1) / 2
+		for i, idx := range m.Rand.Perm(len(m.PlateRegs)) {
+			if i >= numOceanPlates {
+				break
+			}
 			// TODO: either make tiny plates non-ocean, or make sure tiny plates don't create seeds for rivers
+			m.PlateIsOcean[m.PlateRegs[idx]] = true
+		}
+	} else {
+		for _, r := range m.PlateRegs {
+			if m.Rand.Intn(10) < 5 {
+				m.PlateIsOcean[r] = true
+				// TODO: either make tiny plates non-ocean, or make sure tiny plates don't create seeds for rivers
+			}
 		}
 	}
 }

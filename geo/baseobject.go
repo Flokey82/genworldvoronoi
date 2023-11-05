@@ -105,34 +105,38 @@ func (m *BaseObject) ResetRand() {
 }
 
 // PickRandomRegions picks n random points/regions from the given mesh.
-func (m *BaseObject) PickRandomRegions(n int) []int {
-	// Reset the random number generator.
-	m.ResetRand()
-
-	// Use lat/lon coordinates to pick random regions.
-	// This will allow us to get stable results even if the number of mesh regions changes.
-	// Like a result? Save the seed and you can get the same result again, even with higher
-	// mesh resolutions.
-	useLatLon := true
-
+// 'n': The number of random regions to pick.
+// 'useLatLon': Use lat/lon coordinates to pick random regions.
+// This will allow us to get stable results even if the number of mesh regions changes.
+// Like a result? Save the seed and you can get the same result again, even with higher
+// mesh resolutions.
+func (m *BaseObject) PickRandomRegions(n int, useLatLon bool) []int {
 	// Pick n random regions.
 	res := make([]int, 0, n)
 
-	numRegs := m.SphereMesh.NumRegions
+	// Limit the number of regions to the maximum number of regions in the mesh.
+	n = min(n, m.SphereMesh.NumRegions)
+	seen := make(map[int]bool)
 	if useLatLon {
-		for len(res) < n && len(res) < numRegs {
+		for len(res) < n {
 			// Pick random regions based on their lat/lon coordinates.
 			randLat, randLon := m.Rand.Float64()*180-90, m.Rand.Float64()*360-180
 			// Find the closest region to the random lat/lon.
 			reg, found := m.RegQuadTree.FindNearestNeighbor(geoquad.Point{Lat: randLat, Lon: randLon})
-			if !found {
+			if !found || seen[reg.Data.(int)] {
 				continue
 			}
 			res = append(res, reg.Data.(int))
+			seen[reg.Data.(int)] = true
 		}
 	} else {
-		for len(res) < n && len(res) < numRegs {
-			res = append(res, m.Rand.Intn(numRegs))
+		for len(res) < n {
+			reg := m.Rand.Intn(m.SphereMesh.NumRegions)
+			if seen[reg] {
+				continue
+			}
+			res = append(res, reg)
+			seen[reg] = true
 		}
 	}
 	sort.Ints(res)
