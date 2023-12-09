@@ -50,7 +50,7 @@ func (m *Civ) PlaceNEmpires(n int) {
 	// Truncate the sorted list of cities to the number of empires we want to create.
 	sortCities = sortCities[:numEmpires]
 
-	// Start off with placing the city states with the highest expansionism score.
+	// Start off with placing the empires (city states) with the highest expansionism score.
 	for _, c := range sortCities {
 		m.placeEmpireAt(c.ID, c)
 	}

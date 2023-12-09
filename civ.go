@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Flokey82/genbiome"
+	"github.com/Flokey82/genideas/genlandmarknames"
 	"github.com/Flokey82/genworldvoronoi/geo"
 )
 
@@ -26,7 +27,7 @@ type Civ struct {
 	Religions         []*Religion  // (cultural) Religion seed points / regions
 	Settled           []int64      // (cultural) Time of settlement per region
 	// SettledBySpecies []int // (cultural) Which species settled the region first
-	NameGen     *geo.NameGenerators
+	NameGen     *genlandmarknames.NameGenerators
 	TradeRoutes [][]int
 }
 
@@ -43,7 +44,7 @@ func NewCiv(g *geo.Geo, cfg *CivConfig) *Civ {
 		RegionToCulture:   initRegionSlice(g.SphereMesh.NumRegions),
 		RegionToReligion:  initRegionSlice(g.SphereMesh.NumRegions),
 		Settled:           initTimeSlice(g.SphereMesh.NumRegions),
-		NameGen:           geo.NewNameGenerators(g.Seed),
+		NameGen:           genlandmarknames.NewNameGenerators(g.Seed),
 	}
 }
 
