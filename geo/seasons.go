@@ -1,9 +1,13 @@
 package geo
 
 import (
+	"log"
 	"math"
 
 	"github.com/Flokey82/genworldvoronoi/various"
+	"github.com/Flokey82/geoquad"
+	"github.com/Flokey82/go_gens/utils"
+	"github.com/davvo/mercator"
 )
 
 const (
@@ -54,6 +58,324 @@ func (m *Geo) GetSeason(lat float64) int {
 		return SeasonSpring
 	}
 	return SeasonSummer
+}
+
+func calculateSunPosition(latitude, longitude, altitude float64, dayOfYear int, hour float64) (elevation, azimuth float64) {
+	// See: https://gml.noaa.gov/grad/solcalc/solareqns.PDF
+
+	latRad := latitude * math.Pi / 180.0
+	lonRad := longitude * math.Pi / 180.0
+
+	// Calculate the fractional year in radians.
+	// We ignore leap yers for now.
+	fractionalYear := (2.0 * math.Pi / 365.0) * (float64(dayOfYear) - 1.0 + (hour / 24.0))
+
+	// Estimate the equation of time.
+	// See http://en.wikipedia.org/wiki/Equation_of_time
+	eqTime := 229.18 * (0.000075 + (0.001868 * math.Cos(fractionalYear)) - (0.032077 * math.Sin(fractionalYear)) - (0.014615 * math.Cos(2.0*fractionalYear)) - (0.040849 * math.Sin(2.0*fractionalYear)))
+
+	// Calculate the declination of the sun.
+	// See http://en.wikipedia.org/wiki/Position_of_the_Sun
+	declination := 0.006918 - (0.399912 * math.Cos(fractionalYear)) + (0.070257 * math.Sin(fractionalYear)) - (0.006758 * math.Cos(2.0*fractionalYear)) + (0.000907 * math.Sin(2.0*fractionalYear)) - (0.002697 * math.Cos(3.0*fractionalYear)) + (0.00148 * math.Sin(3.0*fractionalYear))
+
+	// Calculate the timezone coarsely by longitude.
+	timeZone := int(math.Floor(longitude/15.0 + 0.5))
+
+	// Next, the true solar time is calculated in the following two equations. First the time offset is
+	// found, in minutes, and then the true solar time, in minutes.
+	timeOffset := eqTime + 4.0*lonRad - 60.0*float64(timeZone)
+
+	// where eqtime is in minutes, longitude is in degrees (positive to the east of the Prime Meridian),
+	// timezone is in hours from UTC (U.S. Mountain Standard Time = –7 hours).
+	mn := 0.0 // minutes
+	sc := 0.0 // seconds
+	trueSolarTime := hour*60.0 + mn + sc/60 + timeOffset
+
+	// The hour angle is then calculated from the true solar time.
+	ha := trueSolarTime/4.0 - 180.0
+	// The solar zenith angle (phi) can then be found from the hour angle (ha), latitude (lat) and solar
+	// declination (decl) using the following equation:
+
+	phi := math.Acos(math.Sin(latRad)*math.Sin(declination) + math.Cos(latRad)*math.Cos(declination)*math.Cos(ha*math.Pi/180.0))
+
+	// The solar elevation angle (theta) can then be found from the solar zenith angle (phi) using the
+	// following equation:
+	theta := 90.0 - phi*180.0/math.Pi
+
+	// The solar azimuth angle (alpha) can then be found from the hour angle (ha), latitude (lat),
+	// solar declination (decl) using the following equation:
+	alpha := math.Atan2(-math.Sin(ha*math.Pi/180.0), math.Cos(latRad)*math.Tan(declination)-math.Sin(latRad)*math.Cos(ha*math.Pi/180.0))
+
+	// Now assign those values as elevation and azimuth.
+	elevation = theta
+	azimuth = alpha * 180.0 / math.Pi
+
+	// Log eqation of time and declination.
+	//log.Printf("Eqation of time: %f, Declination: %f", eqTime, declination*180.0/math.Pi)
+	//log.Printf("Elevation: %f, Azimuth: %f", elevation, azimuth)
+
+	return elevation, azimuth
+}
+
+func (m *Geo) GetAverageInsolation(day int) []float64 {
+	useGoRoutines := true
+	res := make([]float64, m.SphereMesh.NumRegions)
+
+	chunkProcessor := func(start, end int) {
+		outTri := make([]int, 0, 7)
+		outRegs := make([]int, 0, 7)
+		for i := start; i < end; i++ {
+			// Get the base insolation value for the given latitude.
+			lat := m.LatLon[i][0]
+			insolation := CalcSolarRadiation(various.DegToRad(lat), day)
+			//insolation := 1.0
+
+			// Now sum up the insolation for the given day.
+			var sum int
+			var count int
+			for hour := 0.0; hour < 24; hour += 0.25 {
+				// TODO: The normal vector of the terrain and the sun vector
+				// need to be taken into account. If they are not parallel,
+				// the sun intensity is reduced. We could use the dot product
+				// of the two vectors to calculate the intensity.
+				if m.HasInsolation(i, day, hour, outTri, outRegs) {
+					sum++
+				}
+				count++
+			}
+			// Calculate the average insolation for the given day.
+			res[i] = insolation * float64(sum) / float64(count)
+		}
+	}
+	if useGoRoutines {
+		various.KickOffChunkWorkers(m.SphereMesh.NumRegions, chunkProcessor)
+	} else {
+		chunkProcessor(0, m.SphereMesh.NumRegions)
+	}
+
+	// Normalize the insolation values.
+	min, max := utils.MinMax(res)
+	for i := range res {
+		res[i] = (res[i] - min) / (max - min)
+	}
+	return res
+}
+
+func latLonToPixels(lat, lon float64, zoom int) (x, y float64) {
+	return mercator.LatLonToPixels(-1*lat, lon, zoom)
+}
+
+func (m *Geo) TriangulateElevation(lat, lon float64, outTri, outRegs []int) float64 {
+	// Get the region at the given latitude and longitude.
+	res, ok := m.RegQuadTree.FindNearestNeighbor(geoquad.Point{Lat: lat, Lon: lon})
+	if !ok {
+		log.Printf("lat: %f, lon: %f", lat, lon)
+		panic("region not found")
+	}
+	zoom := 0
+	if outTri == nil {
+		outTri = make([]int, 0, 7)
+	}
+	if outRegs == nil {
+		outRegs = make([]int, 0, 7)
+	}
+	var regs []int
+
+	calcHeightMercator := func(p1, p2, p3, p [2]float64, z1, z2, z3 float64) float64 {
+		// Convert the points to mercator.
+		p1x, p1y := latLonToPixels(p1[0], p1[1], zoom)
+		p2x, p2y := latLonToPixels(p2[0], p2[1], zoom)
+		p3x, p3y := latLonToPixels(p3[0], p3[1], zoom)
+		px, py := latLonToPixels(p[0], p[1], zoom)
+
+		return various.CalcHeightInTriangle([2]float64{p1x, p1y}, [2]float64{p2x, p2y}, [2]float64{p3x, p3y}, [2]float64{px, py}, z1, z2, z3)
+	}
+
+	// inTriangleMercator uses the mercator projection to determine if a point is in a triangle.
+	inTriangleMercator := func(p1, p2, p3, p [2]float64) bool {
+		// Convert the points to mercator.
+		p1x, p1y := latLonToPixels(p1[0], p1[1], zoom)
+		p2x, p2y := latLonToPixels(p2[0], p2[1], zoom)
+		p3x, p3y := latLonToPixels(p3[0], p3[1], zoom)
+		px, py := latLonToPixels(p[0], p[1], zoom)
+
+		// Now we can use the regular inTriangle function.
+		return various.IsPointInTriangle([2]float64{p1x, p1y}, [2]float64{p2x, p2y}, [2]float64{p3x, p3y}, [2]float64{px, py})
+	}
+
+	//minDistIndex := -1
+	cReg := res.Data.(int)
+	latlon := [2]float64{lat, lon}
+	for _, tri := range m.SphereMesh.R_circulate_t(outTri, cReg) {
+		// Check if the point is inside the triangle.
+		regs = m.SphereMesh.T_circulate_r(outRegs, tri)
+		if inTriangleMercator(m.LatLon[regs[0]], m.LatLon[regs[1]], m.LatLon[regs[2]], latlon) {
+			//minDistIndex = tri
+			break
+		}
+	}
+
+	return calcHeightMercator(m.LatLon[regs[0]], m.LatLon[regs[1]], m.LatLon[regs[2]], latlon, m.Elevation[regs[0]], m.Elevation[regs[1]], m.Elevation[regs[2]])
+}
+
+func wrapLat(latitude float64) float64 {
+	// Ensure latitude is between -90 and 90 degrees
+	if latitude > 90 {
+		return 90
+	} else if latitude < -90 {
+		return -90
+	}
+	return latitude
+}
+
+func wrapLon(longitude float64) float64 {
+	// Ensure longitude is between -180 and 180 degrees
+	for longitude > 180 {
+		longitude -= 360
+	}
+	for longitude < -180 {
+		longitude += 360
+	}
+	return longitude
+}
+
+// HasInsolation returns true if the given region has insolation at the given
+// time of the day and day of the year.
+func (m *Geo) HasInsolation(region, day int, hour float64, outTri, outRegs []int) bool {
+	// Get latitude of region.
+	lat := m.LatLon[region][0]
+	lon := m.LatLon[region][1]
+
+	distSampleMultiplier := 1.0 / 10.0
+	elevMultiplier := 1.0
+
+	// Calculate sun position.
+	elevation, azimuth := calculateSunPosition(lat, lon, 0, day, hour)
+
+	// If the sun is below the horizon, there is no insolation.
+	if elevation < 0 {
+		return false
+	}
+
+	logDebug := false
+
+	// Now we need to check if there is something blocking the sun in the
+	// given direction.
+	// So we sample the direction in 10 steps and check if there is something
+	// blocking the sun.
+	if logDebug {
+		log.Printf("Lat: %f, Lon: %f, Elevation: %f, Azimuth: %f", lat, lon, elevation, azimuth)
+	}
+	// Convert elevation to radians.
+	elevation = elevation * math.Pi / 180.0
+
+	azCos := math.Cos(azimuth * math.Pi / 180.0)
+	azSin := math.Sin(azimuth * math.Pi / 180.0)
+	for i := 0; i < 5; i++ {
+		// Calculate the latitude and longitude of the sample point.
+		dist := float64(i + 1)
+		dist *= distSampleMultiplier
+
+		lat2 := lat + dist*azCos
+		lon2 := lon + dist*azSin
+		// Make sure lat is in the range -90 to 90 and wrap around.
+		lat2 = wrapLat(lat2)
+		// Make sure lon is in the range -180 to 180 and wrap around.
+		lon2 = wrapLon(lon2)
+
+		// Log the sample point.
+		if logDebug {
+			log.Printf("%d: Lat: %f, Lon: %f", i, lat2, lon2)
+		}
+
+		height1 := m.Elevation[region]
+		if height1 < 0 {
+			height1 = 0
+		}
+
+		// Get the elevation of the sample point.
+		height2 := m.TriangulateElevation(lat2, lon2, outTri, outRegs)
+		if height2 < 0 {
+			height2 = 0
+		}
+
+		deltaHeight := height2 - height1
+		if deltaHeight < 0 {
+			continue
+		}
+		deltaHeight *= elevMultiplier
+
+		// Calculate the distance between the two lat/lon points.
+		distReg := various.Haversine(lat, lon, lat2, lon2)
+		if logDebug {
+			log.Printf("Dist: %f, DeltaHeight: %f", distReg, deltaHeight)
+		}
+
+		// Calculate the angle between the two regions.
+		angle := math.Atan2(deltaHeight, distReg)
+
+		// If the angle is larger than the angle of the sun, there is
+		// something blocking the sun.
+		if angle > elevation {
+			if logDebug {
+				log.Printf("Angle: %f, Elevation: %f !!!!!!!!!!!!!!!!!!", angle, elevation)
+			}
+			return false
+		}
+
+		// NOTE: This isn't correct or accurate, but it's a start.
+		// The elevation of the regions need to be scaled since
+		// tha elevation is normalized to 0-1 and the radius of the
+		// sphere is 1 as well, which would be some extreme mountains.
+
+		/*
+			// Get the region at the sample point.
+			res, ok := m.RegQuadTree.FindNearestNeighbor(geoquad.Point{Lat: lat2, Lon: lon2})
+			if !ok {
+				log.Printf("lat: %f, lon: %f", lat2, lon2)
+				panic("region not found")
+			}
+
+			region2 := res.Data.(int)
+
+			// If the region is different, we get the height of the region and
+			// calculate the delta height between the two regions.
+			// This and given the distance between the two regions, we can
+			// calculate the angle between the two regions.
+			// If the angle is larger than the angle of the sun, there is
+			// something blocking the sun.
+			if region2 != region {
+				// Get the height of the two regions.
+				height1 := m.Elevation[region]
+				height2 := m.Elevation[region2]
+
+				// Calculate the delta height.
+				deltaHeight := height2 - height1
+				if deltaHeight < 0 {
+					continue
+				}
+
+				// Calculate the distance between the two regions.
+				dist := m.GetDistance(region, region2)
+
+				// Calculate the angle between the two regions.
+				angle := math.Atan2(deltaHeight, dist)
+
+				// If the angle is larger than the angle of the sun, there is
+				// something blocking the sun.
+				if angle > elevation {
+					return false
+				}
+
+				// NOTE: This isn't correct or accurate, but it's a start.
+				// The elevation of the regions need to be scaled since
+				// tha elevation is normalized to 0-1 and the radius of the
+				// sphere is 1 as well, which would be some extreme mountains.
+			}
+		*/
+	}
+
+	return true
 }
 
 // GetSolarRadiation returns the solar radiation for the current day of the year

@@ -38,7 +38,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 
 	var colorFunc func(int, float64) color.Color
 	switch displayMode {
-	case 14, 15, 16, 17, 18:
+	case 14, 15, 16, 17, 18, 19:
 		colorGrad := colorgrad.Rainbow()
 		terrToColor := make(map[int]int)
 		var territory []int
@@ -71,13 +71,20 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 				terrToColor[c.ID] = i
 			}
 			territory = m.RegionToReligion
-		} else {
+		} else if displayMode == 18 {
 			terr := m.Species
 			terrLen = len(terr)
 			for i, c := range terr {
 				terrToColor[c.Origin] = i
 			}
 			territory = m.SpeciesRegions
+		} else {
+			terr := m.PlateRegs
+			terrLen = len(terr)
+			for i, c := range terr {
+				terrToColor[c] = i
+			}
+			territory = m.RegionToPlate
 		}
 
 		min, max := minMax(m.Elevation)
@@ -105,7 +112,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 			valMois := m.Moisture[i] / maxMois
 			return geo.GetWhittakerModBiomeColor(rLat, valElev, valMois, math.Pow(val, 1/n))
 		}
-	case 19, 20, 21: // Temperatures and elevation.
+	case 20, 21, 22: // Temperatures and elevation.
 		// Create a blue to red color gradient.
 		colorGrad := colorgrad.NewGradient()
 		colorGrad.Colors(
@@ -120,7 +127,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 			log.Fatal(err)
 		}
 
-		if displayMode == 19 { // Elevation.
+		if displayMode == 20 { // Elevation.
 			_, max := minMax(m.Elevation)
 
 			// Create the color function.
@@ -129,7 +136,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 				val := m.Elevation[i] / max
 				return genColor(cb.At(val), math.Pow(val, 1/n))
 			}
-		} else if displayMode == 20 { // Air temperature.
+		} else if displayMode == 21 { // Air temperature.
 			temp := m.AirTemperature
 			minTemp, maxTemp := minMax(temp)
 
@@ -139,7 +146,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 				val := (temp[i] - minTemp) / (maxTemp - minTemp)
 				return genColor(cb.At(val), math.Pow(val, 1/n))
 			}
-		} else if displayMode == 21 { // Ocean temperature.
+		} else if displayMode == 22 { // Ocean temperature.
 			temp := m.OceanTemperature
 			minTemp, maxTemp := minMax(temp)
 
@@ -178,6 +185,8 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 			vals = m.GetSteepness()
 		} else if displayMode == 13 {
 			vals = m.GetSlope()
+		} else if displayMode == 23 {
+			vals = m.Geo.AvgInsolation
 		}
 
 		// Calculate the min and max elevation.
