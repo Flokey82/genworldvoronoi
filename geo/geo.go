@@ -26,6 +26,7 @@ type Geo struct {
 	Ocean_r              []int          // Ocean regions
 	Mountain_r           []int          // Mountain regions
 	Coastline_r          []int          // Coastline regions
+	AvgInsolation        []float64      // Average daily insolation values
 	QuadGeom             *QuadGeometry  // Quad geometry generated from the mesh (?)
 }
 
@@ -143,6 +144,11 @@ func (m *Geo) GenerateGeology() {
 		m.assignRegionAirTemperature()
 	}
 	log.Println("Done temperatures in ", time.Since(start).String())
+
+	// Average daily insolation. (currently with a set day of year)
+	start = time.Now()
+	m.AvgInsolation = m.GetAverageInsolation(90)
+	log.Println("Done insolation in ", time.Since(start).String())
 }
 
 func (m *Geo) Tick() {

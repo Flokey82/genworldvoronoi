@@ -17,12 +17,14 @@ import (
 var worldmap *genworldvoronoi.Map
 
 var (
-	seed         int64   = 2
-	numPlates    int     = 25
-	numPoints    int     = 400000
-	numVolcanoes int     = 10
-	jitter       float64 = 0.0
-	useGlobe     bool    = false
+	seed                    int64   = 12345
+	numPlates               int     = 25
+	oceanPlatesFraction     float64 = 0.65
+	oceanPlatesAltSelection bool    = true
+	numPoints               int     = 400000
+	numVolcanoes            int     = 10
+	jitter                  float64 = 0.0
+	useGlobe                bool    = false
 )
 
 func init() {
@@ -40,6 +42,8 @@ func main() {
 	// Initialize the config.
 	cfg := genworldvoronoi.NewConfig()
 	cfg.GeoConfig.NumPlates = numPlates
+	cfg.GeoConfig.OceanPlatesFraction = oceanPlatesFraction
+	cfg.GeoConfig.OceanPlatesAltSelection = oceanPlatesAltSelection
 	cfg.GeoConfig.NumPoints = numPoints
 	cfg.GeoConfig.NumVolcanoes = numVolcanoes
 	cfg.GeoConfig.Jitter = jitter

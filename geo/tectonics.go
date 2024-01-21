@@ -1,12 +1,21 @@
 package geo
 
 import (
+	"container/heap"
 	"container/list"
 	"math"
 	"sort"
 
+	"github.com/Flokey82/genideas/genfibonaccisphere"
+	"github.com/Flokey82/genworldvoronoi/noise"
 	"github.com/Flokey82/genworldvoronoi/various"
 	"github.com/Flokey82/go_gens/vectors"
+)
+
+const (
+	tecTypeFibonacci = iota
+	tecTypeNoise
+	tecTypeRandom
 )
 
 // generatePlates generates a number of plate seed points and starts growing the plates
@@ -19,8 +28,11 @@ func (m *Geo) generatePlates() {
 		regPlate[i] = -1
 	}
 
+	//useAlternativePlates := false
+
 	// Pick random regions as seed points for plate generation and for plate vectors.
 	numPlates := min(m.NumPlates, m.NumPoints)
+	// randRegsLatLon := m.PickRandomRegions2(numPlates * 2)
 	randRegs := m.PickRandomRegions(numPlates*2, true)
 
 	// Shuffle the regions.
@@ -34,42 +46,121 @@ func (m *Geo) generatePlates() {
 	// The remaining regions are used to calculate the plate vectors.
 	vectorRegs := randRegs[numPlates:]
 
-	// Assign seed regions to plates.
-	var queue []int
-	for _, r := range plateRegs {
-		queue = append(queue, r)
-		regPlate[r] = r
-	}
-
 	// In Breadth First Search (BFS) the queue will be all elements in
 	// queue[queue_out ... queue.length-1]. Pushing onto the queue
 	// adds an element to the end, increasing queue.length. Popping
 	// from the queue removes an element from the beginning by
 	// increasing queue_out.
 
-	// To add variety, use a random search instead of a breadth first
-	// search. The frontier of elements to be expanded is still
-	// queue[queue_out ... queue.length-1], but pick a random element
-	// to pop instead of the earliest one. Do this by swapping
-	// queue[pos] and queue[queue_out].
-	outReg := make([]int, 0, 6)
+	mode := tecTypeRandom
 
-	// TODO: How can we make the growth consistent across different mesh resolutions?
-	for queueOut := 0; queueOut < len(queue); queueOut++ {
-		pos := queueOut + m.Rand.Intn(len(queue)-queueOut)
-		currentReg := queue[pos]
-		queue[pos] = queue[queueOut]
-		outReg = mesh.R_circulate_r(outReg, currentReg)
-		for _, nbReg := range outReg {
-			if regPlate[nbReg] == -1 {
-				regPlate[nbReg] = regPlate[currentReg]
-				queue = append(queue, nbReg)
+	switch mode {
+	case tecTypeFibonacci:
+		seedLatLons := make([][2]float64, numPlates)
+		for i, r := range plateRegs {
+			seedLatLons[i] = m.LatLon[r]
+		}
+		s := genfibonaccisphere.NewSphereWithContinents(seedLatLons, 12345)
+
+		for n := 0; n < m.NumRegions; n++ {
+			idx := s.FindIndexToPoint(m.LatLon[n][0], m.LatLon[n][1])
+			regPlate[n] = plateRegs[idx]
+		}
+	case tecTypeNoise:
+		// To add variety, use a random search instead of a breadth first
+		// search. The frontier of elements to be expanded is still
+		// queue[queue_out ... queue.length-1], but pick a random element
+		// to pop instead of the earliest one. Do this by swapping
+		// queue[pos] and queue[queue_out].
+		outReg := make([]int, 0, 6)
+
+		// Set up a new noise generator.
+		noise := noise.NewNoise(5, 2.0/3.0, m.Seed)
+
+		// Use a priority queue with noise value and distance to seed point as priority.
+		var queue AscPriorityQueue
+		heap.Init(&queue)
+
+		plateRegionCount := make(map[int]int)
+		// Initialize the queue with the seed regions.
+		// TODO: Start with the noise value of the true LAT/LON coordinates of the seed regions
+		// (the lat/lon that we used initially to find the closest region).
+		for _, r := range plateRegs {
+			heap.Push(&queue, &QueueEntry{
+				Destination: r,
+				Score:       0,
+				Origin:      r,
+			})
+		}
+
+		// Work through the queue.
+		for queue.Len() > 0 {
+			// Pop the region with the highest priority.
+			currentItem := heap.Pop(&queue).(*QueueEntry)
+			currentReg := currentItem.Destination
+
+			// If the region is already assigned to a plate, skip it.
+			if regPlate[currentReg] != -1 {
+				continue
+			}
+
+			// Assign the region to the current plate.
+			regPlate[currentReg] = currentItem.Origin
+			plateRegionCount[currentItem.Origin]++
+
+			// Get the Neighbors of the current region.
+			outReg = mesh.R_circulate_r(outReg, currentReg)
+
+			// Iterate through the neighbors.
+			for _, nbReg := range outReg {
+				// If the neighbor is already assigned to a plate, skip it.
+				if regPlate[nbReg] != -1 {
+					continue
+				}
+
+				// Calculate the priority of the neighbor.
+				// The priority is the distance to the seed point plus some noise.
+				// This is to ensure that the plate growth is not uniform.
+				score := noise.Eval3(m.XYZ[3*nbReg], m.XYZ[3*nbReg+1], m.XYZ[3*nbReg+2])
+				score *= float64(plateRegionCount[currentItem.Origin])
+				// score *= m.GetDistance(currentItem.Origin, nbReg)
+
+				// Push the neighbor onto the queue.
+				heap.Push(&queue, &QueueEntry{
+					Destination: nbReg,
+					Score:       score,
+					Origin:      currentItem.Origin,
+				})
+			}
+		}
+	case tecTypeRandom:
+		outReg := make([]int, 0, 6)
+
+		// Assign seed regions to plates.
+		var queue []int
+		for _, r := range plateRegs {
+			queue = append(queue, r)
+			regPlate[r] = r
+		}
+
+		// TODO: How can we make the growth consistent across different mesh resolutions?
+		for queueOut := 0; queueOut < len(queue); queueOut++ {
+			pos := queueOut + m.Rand.Intn(len(queue)-queueOut)
+			currentReg := queue[pos]
+			queue[pos] = queue[queueOut]
+			outReg = mesh.R_circulate_r(outReg, currentReg)
+			for _, nbReg := range outReg {
+				if regPlate[nbReg] == -1 {
+					regPlate[nbReg] = regPlate[currentReg]
+					queue = append(queue, nbReg)
+				}
 			}
 		}
 	}
 
 	// Assign a random movement vector for each plate
 	// and normalize it.
+	// TODO: Use raw lat/lon to calculate the plate vectors.
 	regXYZ := m.XYZ
 	plateVectors := make([]vectors.Vec3, mesh.NumRegions)
 	for i, centerReg := range plateRegs {
@@ -91,9 +182,8 @@ func (m *Geo) generatePlates() {
 func (m *Geo) assignOceanPlates() {
 	m.ResetRand()
 	m.PlateIsOcean = make(map[int]bool)
-	useAlternateOceanPlates := false
-	if useAlternateOceanPlates {
-		numOceanPlates := (len(m.PlateRegs) + 1) / 2
+	if m.GeoConfig.OceanPlatesAltSelection {
+		numOceanPlates := int(math.Ceil(float64(m.NumPlates) * m.GeoConfig.OceanPlatesFraction))
 		for i, idx := range m.Rand.Perm(len(m.PlateRegs)) {
 			if i >= numOceanPlates {
 				break
@@ -103,9 +193,9 @@ func (m *Geo) assignOceanPlates() {
 		}
 	} else {
 		for _, r := range m.PlateRegs {
-			if m.Rand.Intn(10) < 5 {
-				m.PlateIsOcean[r] = true
+			if m.Rand.Float64() < m.GeoConfig.OceanPlatesFraction {
 				// TODO: either make tiny plates non-ocean, or make sure tiny plates don't create seeds for rivers
+				m.PlateIsOcean[r] = true
 			}
 		}
 	}

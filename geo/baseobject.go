@@ -143,6 +143,32 @@ func (m *BaseObject) PickRandomRegions(n int, useLatLon bool) []int {
 	return res
 }
 
+type GenRegion struct {
+	Region   int
+	Lat, Lon float64
+}
+
+func (m *BaseObject) PickRandomRegions2(n int) []GenRegion {
+	// Pick n random regions.
+	res := make([]GenRegion, 0, n)
+
+	// Limit the number of regions to the maximum number of regions in the mesh.
+	n = min(n, m.SphereMesh.NumRegions)
+	seen := make(map[int]bool)
+	for len(res) < n {
+		reg := m.Rand.Intn(m.SphereMesh.NumRegions)
+		if seen[reg] {
+			continue
+		}
+		res = append(res, GenRegion{Region: reg, Lat: m.LatLon[reg][0], Lon: m.LatLon[reg][1]})
+		seen[reg] = true
+	}
+	sort.Slice(res, func(i, j int) bool {
+		return res[i].Region < res[j].Region
+	})
+	return res
+}
+
 // assignTriValues averages out the values of the mesh points / regions and assigns them
 // to the triangles of the mesh (or the triangle centroid).
 func (m *BaseObject) assignTriValues() {
