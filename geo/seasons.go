@@ -7,6 +7,7 @@ import (
 	"github.com/Flokey82/genworldvoronoi/various"
 	"github.com/Flokey82/geoquad"
 	"github.com/Flokey82/go_gens/utils"
+	"github.com/Flokey82/go_gens/vectors"
 	"github.com/davvo/mercator"
 )
 
@@ -58,6 +59,89 @@ func (m *Geo) GetSeason(lat float64) int {
 		return SeasonSpring
 	}
 	return SeasonSummer
+}
+
+// calculateSunVectorWithoutTrueSolarTime calculates the sun vector for the
+// given latitude, longitude, altitude, day of the year and hour of the day
+// where the hour is the true hour of the location, not the hour according to
+// a timezone.
+func calculateSunVectorWithoutTrueSolarTime(lat, lon, altitude float64, day int, hour float64) vectors.Vec3 {
+	elevation, azimuth := calculateSunPositionWithoutTrueSolarTime(lat, lon, altitude, day, hour)
+	return sunVectorFromElevationAndAzimuth(elevation, azimuth)
+}
+
+// calculateSunVector calculates the sun vector for the given latitude,
+// longitude, altitude, day of the year and hour of the day.
+// The hour is based on the timezone of the location.
+func calculateSunVector(lat, lon, altitude float64, day int, hour float64) vectors.Vec3 {
+	elevation, azimuth := calculateSunPosition(lat, lon, altitude, day, hour)
+	return sunVectorFromElevationAndAzimuth(elevation, azimuth)
+}
+
+// sunVectorFromElevationAndAzimuth converts the elevation and azimuth to a
+// vector. The vector is pointing towards the sun.
+// Both elevation and azimuth are in degrees.
+func sunVectorFromElevationAndAzimuth(elevation, azimuth float64) vectors.Vec3 {
+	// Convert elevation to radians.
+	elevation = elevation * math.Pi / 180.0
+
+	// Convert azimuth to radians.
+	azimuth = azimuth * math.Pi / 180.0
+
+	// Calculate the x,y,z coordinates of the sun vector.
+	// The sun vector is pointing towards the sun.
+	// The sun vector is normalized.
+	x := math.Cos(azimuth) * math.Cos(elevation)
+	y := math.Sin(azimuth) * math.Cos(elevation)
+	z := math.Sin(elevation)
+
+	// Return the sun vector.
+	return vectors.Vec3{X: x, Y: y, Z: z}
+}
+
+// TODO: Merge this with the calculateSunPosition function.
+func calculateSunPositionWithoutTrueSolarTime(latitude, longitude, altitude float64, dayOfYear int, hour float64) (elevation, azimuth float64) {
+	// See: https://gml.noaa.gov/grad/solcalc/solareqns.PDF
+	latRad := latitude * math.Pi / 180.0
+
+	// Calculate the fractional year in radians.
+	// We ignore leap yers for now.
+	fractionalYear := (2.0 * math.Pi / 365.0) * (float64(dayOfYear) - 1.0 + (hour / 24.0))
+
+	// Calculate the declination of the sun.
+	// See http://en.wikipedia.org/wiki/Position_of_the_Sun
+	declination := 0.006918 - (0.399912 * math.Cos(fractionalYear)) + (0.070257 * math.Sin(fractionalYear)) - (0.006758 * math.Cos(2.0*fractionalYear)) + (0.000907 * math.Sin(2.0*fractionalYear)) - (0.002697 * math.Cos(3.0*fractionalYear)) + (0.00148 * math.Sin(3.0*fractionalYear))
+
+	// where eqtime is in minutes, longitude is in degrees (positive to the east of the Prime Meridian),
+	// timezone is in hours from UTC (U.S. Mountain Standard Time = –7 hours).
+	mn := 0.0 // minutes
+	sc := 0.0 // seconds
+	trueSolarTime := hour*60.0 + mn + sc/60
+
+	// The hour angle is then calculated from the true solar time.
+	ha := trueSolarTime/4.0 - 180.0
+	// The solar zenith angle (phi) can then be found from the hour angle (ha), latitude (lat) and solar
+	// declination (decl) using the following equation:
+
+	phi := math.Acos(math.Sin(latRad)*math.Sin(declination) + math.Cos(latRad)*math.Cos(declination)*math.Cos(ha*math.Pi/180.0))
+
+	// The solar elevation angle (theta) can then be found from the solar zenith angle (phi) using the
+	// following equation:
+	theta := 90.0 - phi*180.0/math.Pi
+
+	// The solar azimuth angle (alpha) can then be found from the hour angle (ha), latitude (lat),
+	// solar declination (decl) using the following equation:
+	alpha := math.Atan2(-math.Sin(ha*math.Pi/180.0), math.Cos(latRad)*math.Tan(declination)-math.Sin(latRad)*math.Cos(ha*math.Pi/180.0))
+
+	// Now assign those values as elevation and azimuth.
+	elevation = theta
+	azimuth = alpha * 180.0 / math.Pi
+
+	// Log eqation of time and declination.
+	//log.Printf("Eqation of time: %f, Declination: %f", eqTime, declination*180.0/math.Pi)
+	//log.Printf("Elevation: %f, Azimuth: %f", elevation, azimuth)
+
+	return elevation, azimuth
 }
 
 func calculateSunPosition(latitude, longitude, altitude float64, dayOfYear int, hour float64) (elevation, azimuth float64) {
@@ -119,32 +203,77 @@ func calculateSunPosition(latitude, longitude, altitude float64, dayOfYear int, 
 
 func (m *Geo) GetAverageInsolation(day int) []float64 {
 	useGoRoutines := true
+	enableNormals := true
+	enableInsolation := true
+	enableHourlyInsolation := true
 	res := make([]float64, m.SphereMesh.NumRegions)
 
+	// Time of the day used for calculating the angle at which the sun hits
+	// the terrain. This is used to calculate the intensity of the sun.
+	fixedNormalsDayHour := 12.0
+
 	chunkProcessor := func(start, end int) {
+		nbs := make([]int, 0, 7)
 		outTri := make([]int, 0, 7)
 		outRegs := make([]int, 0, 7)
 		for i := start; i < end; i++ {
-			// Get the base insolation value for the given latitude.
 			lat := m.LatLon[i][0]
-			insolation := CalcSolarRadiation(various.DegToRad(lat), day)
-			//insolation := 1.0
 
-			// Now sum up the insolation for the given day.
-			var sum int
-			var count int
-			for hour := 0.0; hour < 24; hour += 0.25 {
-				// TODO: The normal vector of the terrain and the sun vector
-				// need to be taken into account. If they are not parallel,
-				// the sun intensity is reduced. We could use the dot product
-				// of the two vectors to calculate the intensity.
-				if m.HasInsolation(i, day, hour, outTri, outRegs) {
-					sum++
-				}
-				count++
+			insolation := 1.0
+
+			// Calculate average insolation for the given day and latitude.
+			if enableInsolation {
+				// Get the base insolation value for the given latitude.
+				insolation = CalcSolarRadiation(various.DegToRad(lat), day)
 			}
-			// Calculate the average insolation for the given day.
-			res[i] = insolation * float64(sum) / float64(count)
+
+			strength := 1.0
+
+			// Calculate the strength of the sun based on the angle at which
+			// the sun hits the terrain.
+			// TODO: We should move this to the hourly insolation calculation.
+			if enableNormals {
+				normVec := m.regPolySlopeVec3(nbs, i)
+				sunVec := calculateSunVectorWithoutTrueSolarTime(lat, m.LatLon[i][1], 0, day, fixedNormalsDayHour).Normalize()
+
+				// If the vectors are exactly opposite, the insolation is 1.0.
+				// If the vectors are exactly the same, the insolation is 0.0.
+				strength := 1.0 - math.Abs(normVec.Dot(sunVec))
+				if strength < 0 {
+					strength = 0
+				}
+				strength = math.Sqrt(strength)
+				strength += 1.0
+			}
+			res[i] = insolation * strength
+
+			// Now optionally sum up the insolation for the given day.
+			if enableHourlyInsolation {
+				var sum int
+				var count int
+				for hour := 0.0; hour < 24; hour += 0.25 {
+					// TODO: The darkness of the shadow would depend on the distance
+					// between the location and the point that blocks the sun.
+
+					// TODO: The normal vector of the terrain and the sun vector
+					// need to be taken into account. If they are not parallel,
+					// the sun intensity is reduced. We could use the dot product
+					// of the two vectors to calculate the intensity.
+					if dist := m.GetInsolationShadowDistance(i, day, hour, outTri, outRegs); dist >= 0 {
+						// If the distance is larger than 0, there is something
+						// blocking the sun.
+						sum += int(dist)
+					} else {
+						sum++
+					}
+					//if m.HasInsolation(i, day, hour, outTri, outRegs) {
+					//	sum++
+					//}
+					count++
+				}
+				// Calculate the average insolation for the given day.
+				res[i] *= float64(sum) / float64(count)
+			}
 		}
 	}
 	if useGoRoutines {
@@ -239,22 +368,22 @@ func wrapLon(longitude float64) float64 {
 	return longitude
 }
 
-// HasInsolation returns true if the given region has insolation at the given
-// time of the day and day of the year.
-func (m *Geo) HasInsolation(region, day int, hour float64, outTri, outRegs []int) bool {
+// GetInsolationShadowDistance returns the distance to the first region that
+// blocks the sun for the given region, day and hour.
+func (m *Geo) GetInsolationShadowDistance(region, day int, hour float64, outTri, outRegs []int) float64 {
 	// Get latitude of region.
 	lat := m.LatLon[region][0]
 	lon := m.LatLon[region][1]
 
-	distSampleMultiplier := 1.0 / 10.0
+	distSampleMultiplier := 1.0 / 8.0
 	elevMultiplier := 1.0
 
 	// Calculate sun position.
-	elevation, azimuth := calculateSunPosition(lat, lon, 0, day, hour)
+	elevation, azimuth := calculateSunPositionWithoutTrueSolarTime(lat, lon, 0, day, hour)
 
 	// If the sun is below the horizon, there is no insolation.
 	if elevation < 0 {
-		return false
+		return 1.0
 	}
 
 	logDebug := false
@@ -271,7 +400,7 @@ func (m *Geo) HasInsolation(region, day int, hour float64, outTri, outRegs []int
 
 	azCos := math.Cos(azimuth * math.Pi / 180.0)
 	azSin := math.Sin(azimuth * math.Pi / 180.0)
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 4; i++ {
 		// Calculate the latitude and longitude of the sample point.
 		dist := float64(i + 1)
 		dist *= distSampleMultiplier
@@ -320,62 +449,11 @@ func (m *Geo) HasInsolation(region, day int, hour float64, outTri, outRegs []int
 			if logDebug {
 				log.Printf("Angle: %f, Elevation: %f !!!!!!!!!!!!!!!!!!", angle, elevation)
 			}
-			return false
+			return distReg
 		}
-
-		// NOTE: This isn't correct or accurate, but it's a start.
-		// The elevation of the regions need to be scaled since
-		// tha elevation is normalized to 0-1 and the radius of the
-		// sphere is 1 as well, which would be some extreme mountains.
-
-		/*
-			// Get the region at the sample point.
-			res, ok := m.RegQuadTree.FindNearestNeighbor(geoquad.Point{Lat: lat2, Lon: lon2})
-			if !ok {
-				log.Printf("lat: %f, lon: %f", lat2, lon2)
-				panic("region not found")
-			}
-
-			region2 := res.Data.(int)
-
-			// If the region is different, we get the height of the region and
-			// calculate the delta height between the two regions.
-			// This and given the distance between the two regions, we can
-			// calculate the angle between the two regions.
-			// If the angle is larger than the angle of the sun, there is
-			// something blocking the sun.
-			if region2 != region {
-				// Get the height of the two regions.
-				height1 := m.Elevation[region]
-				height2 := m.Elevation[region2]
-
-				// Calculate the delta height.
-				deltaHeight := height2 - height1
-				if deltaHeight < 0 {
-					continue
-				}
-
-				// Calculate the distance between the two regions.
-				dist := m.GetDistance(region, region2)
-
-				// Calculate the angle between the two regions.
-				angle := math.Atan2(deltaHeight, dist)
-
-				// If the angle is larger than the angle of the sun, there is
-				// something blocking the sun.
-				if angle > elevation {
-					return false
-				}
-
-				// NOTE: This isn't correct or accurate, but it's a start.
-				// The elevation of the regions need to be scaled since
-				// tha elevation is normalized to 0-1 and the radius of the
-				// sphere is 1 as well, which would be some extreme mountains.
-			}
-		*/
 	}
 
-	return true
+	return -1.0
 }
 
 // GetSolarRadiation returns the solar radiation for the current day of the year
