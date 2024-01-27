@@ -514,6 +514,12 @@ func (m *BaseObject) GetSteepness() []float64 {
 
 // regPolySlope calculates the slope of a region, taking in account all neighbors (which form a polygon).
 func (m *BaseObject) regPolySlope(outRegs []int, i int) [2]float64 {
+	normal := m.regPolySlopeVec3(outRegs, i)
+	return [2]float64{normal.X / -normal.Z, normal.Y / -normal.Z} // TODO: Normalize
+}
+
+// regPolySlopeVec3 calculates the slope of a region, taking in account all neighbors (which form a polygon).
+func (m *BaseObject) regPolySlopeVec3(outRegs []int, i int) vectors.Vec3 {
 	// See: https://www.khronos.org/opengl/wiki/Calculating_a_Surface_Normal
 	//
 	// Begin Function CalculateSurfaceNormal (Input Polygon) Returns Vector
@@ -557,8 +563,7 @@ func (m *BaseObject) regPolySlope(outRegs []int, i int) [2]float64 {
 		normal.Y += (current.Y - next.Y) * (current.X + next.X)
 		normal.Z += (current.X - next.X) * (current.Z + next.Z)
 	}
-	normal = normal.Normalize()
-	return [2]float64{normal.X / -normal.Z, normal.Y / -normal.Z} // TODO: Normalize
+	return normal.Normalize()
 }
 
 // RegSlope returns the x/y vector for a given region by averaging the

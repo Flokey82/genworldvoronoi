@@ -248,16 +248,6 @@
       return control;
     }
 
-    // Add our custom control for cycling display modes.
-    var displayControl = newCustomControl('D:' + displayModeNames[displayMode], 'Display Mode', function (link) {
-      // Loop though all display modes.
-      displayMode = (displayMode + 1) % displayModeMax;
-      link.innerText = 'D:' + displayModeNames[displayMode];
-      tl.redraw();
-    });
-
-    map.addControl(new displayControl());
-
     // Add our custom control for cycling borders.
     var borderControl = newCustomControl('B:' + displayModeBordersNames[displayModeBorders], 'Borders', function (link) {
       // Loop though all display modes.
@@ -394,6 +384,29 @@
     };
     var measureControl = new L.Control.Measure(options);
     measureControl.addTo(map);
+
+    // Add our custom control for selecting display modes.
+    var displayModeSelect = L.control({ position: 'topright' });
+    displayModeSelect.onAdd = function (map) {
+      var div = L.DomUtil.create('div', 'info legend');
+      var optionString = displayModeNames.map(function (name, index) {
+        if (index == displayMode) {
+          return '<option value="' + index + '" selected>' + name + '</option>';
+        }
+        return '<option value="' + index + '">' + name + '</option>';
+      }).join('');
+      div.innerHTML = '<select>' + optionString + '</select>';
+      div.firstChild.onmousedown = div.firstChild.ondblclick = L.DomEvent.stopPropagation;
+      div.firstChild.onchange = function () {
+        var e = div.firstChild;
+        var value = e.options[e.selectedIndex].value;
+        console.log(value);
+        displayMode = value;
+        tl.redraw();
+      };
+      return div;
+    };
+    displayModeSelect.addTo(map);
   </script>
 </body>
 
