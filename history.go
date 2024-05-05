@@ -30,6 +30,7 @@ const (
 	ObjectTypeSea
 	ObjectTypeVolcano
 	ObjectTypePerson
+	ObjectTypeTribe
 )
 
 type ObjectReference struct {

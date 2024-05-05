@@ -75,6 +75,38 @@ func (r *Religion) String() string {
 	return fmt.Sprintf("%s (%s, %s, %s)\n=%s", r.Name, r.Group, r.Expansion, r.Form, r.Deity.FullName())
 }
 
+func (r *Religion) compare(other *Religion) float64 {
+	if r == other {
+		return 1.0
+	}
+	if r == nil || other == nil {
+		return -1.0
+	}
+	// Sum up the expansionism of both religions.
+	// This will increase negative effects if the religions are very different.
+	expSum := 1.0 + r.Expansionism + other.Expansionism
+
+	var value float64
+	// If the relations are closely related, we give a bonus.
+	if r == other.Parent || r.Parent == other || r.Parent == other.Parent {
+		value += 0.1
+	} else {
+		value -= 0.1 * expSum
+	}
+
+	// If they are of different types, we give a penalty.
+	if r.Group != other.Group {
+		value -= 0.1 * expSum
+	}
+	if r.Form != other.Form {
+		value -= 0.5 * expSum
+	}
+	if r.Type != other.Type {
+		value -= 0.1 * expSum
+	}
+	return value
+}
+
 // genFolkReligion generates a folk religion for the given culture.
 func (m *Civ) genFolkReligion(c *Culture) *Religion {
 	// TODO:

@@ -7,12 +7,16 @@ import (
 	"github.com/Flokey82/go_gens/gameconstants"
 )
 
+type ResStats struct {
+	ResMetal  [ResMaxMetals]int
+	ResGems   [ResMaxGems]int
+	ResStones [ResMaxStones]int
+	ResWood   [ResMaxWoods]int
+}
+
 type Stats struct {
 	NumRegions int
-	ResMetal   [ResMaxMetals]int
-	ResGems    [ResMaxGems]int
-	ResStones  [ResMaxStones]int
-	ResWood    [ResMaxWoods]int
+	ResStats
 	TotalArea  float64
 	Biomes     map[int]int
 	Desert     int
@@ -21,6 +25,13 @@ type Stats struct {
 	Snow       int
 	Swamp      int
 	Wetlands   int
+}
+
+// NewStats returns a new Stats object.
+func NewStats() *Stats {
+	return &Stats{
+		Biomes: make(map[int]int),
+	}
 }
 
 func (m *Geo) GetStats(rr []int) *Stats {
@@ -37,10 +48,9 @@ func (m *Geo) GetStats(rr []int) *Stats {
 	// Calculate wealth
 	// - Gems and metals can be sold or traded
 	// - Metals can be used for weapons.
-	st := &Stats{
-		NumRegions: len(rr),
-		Biomes:     make(map[int]int),
-	}
+	st := NewStats()
+	st.NumRegions = len(rr)
+
 	biomeFunc := m.GetRegWhittakerModBiomeFunc()
 	for _, r := range rr {
 		st.TotalArea += m.GetRegArea(r)
@@ -90,16 +100,16 @@ func (m *Geo) GetStats(rr []int) *Stats {
 func (s *Stats) Log() {
 	log.Printf("Total Area: %.2f km2", s.TotalArea*gameconstants.EarthSurface/gameconstants.SphereSurface)
 	for i := 0; i < ResMaxMetals; i++ {
-		log.Printf("Metal %s: %d (%.6f%%)", MetalToString(i), s.ResMetal[i], float64(s.ResMetal[i])/float64(s.NumRegions))
+		log.Printf("Metal %s: %d (%.3f%%)", MetalToString(i), s.ResMetal[i], 100*float64(s.ResMetal[i])/float64(s.NumRegions))
 	}
 	for i := 0; i < ResMaxGems; i++ {
-		log.Printf("Gem %s: %d (%.6f%%)", GemToString(i), s.ResGems[i], float64(s.ResGems[i])/float64(s.NumRegions))
+		log.Printf("Gem %s: %d (%.3f%%)", GemToString(i), s.ResGems[i], 100*float64(s.ResGems[i])/float64(s.NumRegions))
 	}
 	for i := 0; i < ResMaxStones; i++ {
-		log.Printf("Stone %s: %d (%.6f%%)", StoneToString(i), s.ResStones[i], float64(s.ResStones[i])/float64(s.NumRegions))
+		log.Printf("Stone %s: %d (%.3f%%)", StoneToString(i), s.ResStones[i], 100*float64(s.ResStones[i])/float64(s.NumRegions))
 	}
 	for i := 0; i < ResMaxWoods; i++ {
-		log.Printf("Wood %s: %d (%.6f%%)", WoodToString(i), s.ResWood[i], float64(s.ResWood[i])/float64(s.NumRegions))
+		log.Printf("Wood %s: %d (%.3f%%)", WoodToString(i), s.ResWood[i], 100*float64(s.ResWood[i])/float64(s.NumRegions))
 	}
 	log.Printf("Desert: %.2f%%", 100*float64(s.Desert)/float64(s.NumRegions))
 	log.Printf("RainForest: %.2f%%", 100*float64(s.RainForest)/float64(s.NumRegions))

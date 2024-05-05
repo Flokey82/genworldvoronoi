@@ -10,8 +10,8 @@ import (
 
 type Map struct {
 	*geo.Geo // Geography / geology
-	*Civ     // Civilization
 	*bio.Bio // Plants / animals / funghi
+	*Civ     // Civilization
 
 	// *TileCache
 	// CoarseMeshes []*SphereMesh // Coarse meshes for each zoom level.
@@ -31,8 +31,8 @@ func NewMapFromConfig(seed int64, cfg *Config) (*Map, error) {
 	// Initialize the map.
 	m := &Map{
 		Geo: geo,
-		Civ: NewCiv(geo, cfg.CivConfig),
 		Bio: bio.NewBio(geo, cfg.BioConfig),
+		Civ: NewCiv(geo, cfg.CivConfig),
 	}
 	m.generateMap()
 
@@ -79,11 +79,11 @@ func (m *Map) generateMap() {
 	// Build geography / geology / climate.
 	m.GenerateGeology()
 
-	// Build civilization.
-	m.GenerateCivilization()
-
 	// Build plants / animals / funghi.
 	m.GenerateBiology()
+
+	// Build civilization.
+	m.GenerateCivilization()
 }
 
 // Tick advances the map by one tick.

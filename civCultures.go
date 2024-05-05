@@ -1,6 +1,7 @@
 package genworldvoronoi
 
 import (
+	"fmt"
 	"log"
 	"math"
 
@@ -80,7 +81,7 @@ func (m *Civ) placeNCultures(n int) {
 	for i := 0; i < n; i++ {
 		// We use the city score since it identifies regions that are well suited for
 		// settlement or general survival.
-		c := m.placeCultureWithScore(regCultureFunc, m.CalcCityScoreWithDistanceField(scoreFunc, regDistanceC))
+		c := m.placeCultureWithScore(regCultureFunc, m.CalcCityScoreWithDistanceField(scoreFunc, regDistanceC), nil)
 		log.Printf("placing culture %d: %s", i, c.Name)
 
 		// Update the distance field to ensure we evenly distribute the cultures.
@@ -91,11 +92,17 @@ func (m *Civ) placeNCultures(n int) {
 // ExpandCultures expands the cultures on the map based on their expansionism,
 // terrain preference, and distance to other cultures.
 func (m *Civ) ExpandCultures() {
-	// The cultural centers will be the seed points for the expansion.
 	seeds := make([]int, 0, len(m.Cultures))
-	originToCulture := make(map[int]*Culture)
 	for _, c := range m.Cultures {
 		seeds = append(seeds, c.ID)
+	}
+	m.expandCultures(false, seeds)
+}
+
+func (m *Civ) expandCultures(aggressive bool, seeds []int) {
+	// The cultural centers will be the seed points for the expansion.
+	originToCulture := make(map[int]*Culture)
+	for _, c := range m.Cultures {
 		originToCulture[c.ID] = c
 	}
 
@@ -103,8 +110,16 @@ func (m *Civ) ExpandCultures() {
 	_, maxElev := minMax(m.Elevation)
 	territoryWeightFunc := m.getTerritoryWeightFunc()
 	biomeWeight := m.getTerritoryBiomeWeightFunc()
-	m.RegionToCulture = m.regPlaceNTerritoriesCustom(m.RegionToCulture, seeds, func(o, u, v int) float64 {
+
+	placeFunc := m.regPlaceNTerritoriesCustom
+	if aggressive {
+		placeFunc = m.expandTerritoriesAggressive
+	}
+	m.RegionToCulture = placeFunc(m.RegionToCulture, seeds, func(o, u, v int) float64 {
 		c := originToCulture[o]
+		if c == nil {
+			panic(fmt.Sprintf("culture %d not found", o))
+		}
 
 		// Get the cost to expand to this biome.
 		gotBiome := m.GetAzgaarRegionBiome(v, m.Elevation[v]/maxElev, maxElev)
@@ -216,26 +231,96 @@ func (c *Culture) Log() {
 	c.Stats.Log()
 }
 
-func (m *Civ) newCulture(r int, cultureType CultureType) *Culture {
-	lang := GenLanguage(m.Seed + int64(r))
-	return &Culture{
-		ID:           r,
-		Name:         lang.MakeName(),
-		Type:         cultureType,
-		Expansionism: cultureType.Expansionism(),
-		Martialism:   cultureType.Martialism(),
-		Spirituality: cultureType.Spirituality(),
-		Language:     lang,
+func (c *Culture) compare(b *Culture) float64 {
+	if c == b {
+		return 1.0
 	}
+	if c == nil || b == nil {
+		return -1.0
+	}
+	// Sum up the expansionism of both cultures.
+	// This will increase negative effects if the cultures are very different.
+	expSum := 1.0 + c.Expansionism + b.Expansionism
+
+	// Sum up martialism.
+	martialSum := 1.0 + c.Martialism + b.Martialism
+
+	// Sum up spirituality.
+	spiritSum := 1.0 + c.Spirituality + b.Spirituality
+
+	// Check if the languages are identical.
+	langVal := compareLanguage(c.Language, b.Language)
+
+	// Check if the Religions are identical.
+	// The more spiritual the culture is, the more important this score is.
+	relVal := c.Religion.compare(b.Religion) * spiritSum
+
+	var value float64
+
+	value += langVal + relVal
+
+	log.Printf("Comparing %s and %s: langVal: %f, relVal: %f", c.Name, b.Name, langVal, relVal)
+
+	// Check if the types are identical.
+	if c.Type == b.Type {
+		value += 0.5
+	} else {
+		value -= 0.5 * expSum * martialSum
+	}
+
+	return value
+}
+
+func (c *Culture) Fork(newID int) *Culture {
+	if c == nil {
+		return nil
+	}
+	useLangClone := false
+	lang := c.Language
+	log.Println("TODO: Clone language")
+	if useLangClone {
+		// TODO: This needs to better randomize subsequemt names. It'll generate the same names than the original.
+		lang = c.Language.Fork(int64(newID))
+	}
+
+	cNew := &Culture{
+		ID:       newID,
+		Name:     c.Language.MakeName(), // Give the new culture a new name.
+		Language: lang,
+		Religion: c.Religion,
+		Stats:    geo.NewStats(), // TODO: This will need to be regenerated.
+	}
+	cNew.SetNewType(c.Type)
+	return cNew
+}
+
+func (c *Culture) SetNewType(t CultureType) {
+	c.Type = t
+	c.Expansionism = t.Expansionism()
+	c.Martialism = t.Martialism()
+	c.Spirituality = t.Spirituality()
+}
+
+func (m *Civ) newCulture(r int, cultureType CultureType, lang *genlanguage.Language) *Culture {
+	if lang == nil {
+		lang = GenLanguage(m.Seed + int64(r))
+	}
+	c := &Culture{
+		ID:       r,
+		Name:     lang.MakeName(),
+		Language: lang,
+	}
+	c.SetNewType(cultureType)
+	return c
 }
 
 // PlaceCulture places another culture on the map at the region with the highest fitness score.
-func (m *Civ) PlaceCulture(regCultureFunc func(int) CultureType, scoreFunc func(int) float64, distSeedFunc func() []int) *Culture {
-	return m.placeCultureWithScore(regCultureFunc, m.CalcCityScore(scoreFunc, distSeedFunc))
+func (m *Civ) PlaceCulture(regCultureFunc func(int) CultureType, scoreFunc func(int) float64, distSeedFunc func() []int, lang *genlanguage.Language) *Culture {
+	return m.placeCultureWithScore(regCultureFunc, m.CalcCityScore(scoreFunc, distSeedFunc), lang)
 }
 
 // placeCultureWithScore places a culture at the given region using the computed scores.
-func (m *Civ) placeCultureWithScore(regCultureFunc func(int) CultureType, scores []float64) *Culture {
+func (m *Civ) placeCultureWithScore(regCultureFunc func(int) CultureType, scores []float64, lang *genlanguage.Language) *Culture {
 	// Score all regions, pick highest score.
 	var newculture int
 	lastMax := math.Inf(-1)
@@ -245,23 +330,42 @@ func (m *Civ) placeCultureWithScore(regCultureFunc func(int) CultureType, scores
 			lastMax = val
 		}
 	}
-	c := m.newCulture(newculture, regCultureFunc(newculture))
+	c := m.newCulture(newculture, regCultureFunc(newculture), lang)
 	m.Cultures = append(m.Cultures, c)
 	return c
 }
 
 // PlaceCultureAt places a culture at the given region.
 // TODO: Allow specifying the culture type?
-func (m *Civ) PlaceCultureAt(r int) *Culture {
-	c := m.newCulture(r, m.getRegionCultureTypeFunc()(r))
+func (m *Civ) PlaceCultureAt(r int, grow bool, lang *genlanguage.Language) *Culture {
+	c := m.newCulture(r, m.getRegionCultureTypeFunc()(r), lang)
 	c.Regions = []int{r}
 	c.Stats = m.GetStats(c.Regions)
 	m.Cultures = append(m.Cultures, c)
-	// m.RegionToCulture[r] = r
 	// NOTE: This might be quite expensive, so we might want to
 	// avoid this calling here, or at least limit the regions
 	// we process to the ones that are close to the new culture.
-	m.ExpandCultures()
+	if grow {
+		m.ExpandCultures()
+	} else {
+		m.RegionToCulture[r] = c.ID
+	}
+	return c
+}
+
+// AddCultureAt adds a culture at the given region.
+func (m *Civ) AddCultureAt(r int, c *Culture, grow bool) *Culture {
+	c.Regions = append(c.Regions, r)
+	c.Stats = m.GetStats(c.Regions)
+	m.Cultures = append(m.Cultures, c)
+	// NOTE: This might be quite expensive, so we might want to
+	// avoid this calling here, or at least limit the regions
+	// we process to the ones that are close to the new culture.
+	if grow {
+		m.ExpandCultures()
+	} else {
+		m.RegionToCulture[r] = c.ID
+	}
 	return c
 }
 
@@ -269,16 +373,16 @@ func (m *Civ) PlaceCultureAt(r int) *Culture {
 func (m *Civ) getRegionCultureTypeFunc() func(int) CultureType {
 	cellType := m.GetRegCellTypes()
 	getType := m.GetRegionFeatureTypeFunc()
-	biomeFunc := m.GetRegWhittakerModBiomeFunc()
+	//biomeFunc := m.GetRegWhittakerModBiomeFunc()
 	_, maxElev := minMax(m.Elevation)
-	log.Println("TODO: Map whittaker to azgaar biomes")
+	//log.Println("TODO: Map whittaker to azgaar biomes")
 
 	// Return culture type based on culture center region.
 	return func(r int) CultureType {
 		eleVal := m.Elevation[r] / maxElev
 		gotBiome := m.GetAzgaarRegionBiome(r, eleVal, maxElev)
-		log.Println(gotBiome)
-		log.Println(biomeFunc(r))
+		//log.Println(gotBiome)
+		//log.Println(biomeFunc(r))
 
 		// Desert and grassland means a nomadic culture.
 		// BUT: Grassland is extremely well suited for farming... Which is not nomadic.

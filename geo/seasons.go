@@ -201,49 +201,70 @@ func calculateSunPosition(latitude, longitude, altitude float64, dayOfYear int, 
 	return elevation, azimuth
 }
 
+func (m *Geo) SetHourOfDay(hour float64) {
+	// TODO: Mutex lock?
+	if hour != m.HourOfDay {
+		log.Println("Hour of day changing to ", hour)
+		m.HourOfDay = hour
+		m.AvgInsolation = m.GetAverageInsolation(90)
+		log.Println("Hour of day changed to ", hour)
+	}
+}
+
 func (m *Geo) GetAverageInsolation(day int) []float64 {
 	useGoRoutines := true
 	enableNormals := true
-	enableInsolation := true
+	enableInsolation := false
 	enableHourlyInsolation := true
+	calcShadowStrengthFromDistance := false
 	res := make([]float64, m.SphereMesh.NumRegions)
 
 	// Time of the day used for calculating the angle at which the sun hits
 	// the terrain. This is used to calculate the intensity of the sun.
-	fixedNormalsDayHour := 12.0
+	fixedNormalsDayHour := m.HourOfDay
+
+	// Calculate the analog of distance between regions by taking the surface
+	// of a sphere with radius 1 and dividing it by the number of regions.
+	// The square root will work as a somewhat sensible approximation of
+	// distance.
+	distRegion := math.Sqrt(4 * math.Pi / float64(m.SphereMesh.NumRegions))
 
 	chunkProcessor := func(start, end int) {
 		nbs := make([]int, 0, 7)
 		outTri := make([]int, 0, 7)
 		outRegs := make([]int, 0, 7)
 		for i := start; i < end; i++ {
+			// If we are below sea level, we set the insolation to 0.
+			if m.Elevation[i] < 0 {
+				res[i] = 0
+				continue
+			}
+
+			// Get the latitude of the region.
 			lat := m.LatLon[i][0]
 
-			insolation := 1.0
-
 			// Calculate average insolation for the given day and latitude.
+			insolation := 1.0
 			if enableInsolation {
 				// Get the base insolation value for the given latitude.
 				insolation = CalcSolarRadiation(various.DegToRad(lat), day)
 			}
 
-			strength := 1.0
-
 			// Calculate the strength of the sun based on the angle at which
 			// the sun hits the terrain.
 			// TODO: We should move this to the hourly insolation calculation.
+			strength := 1.0
 			if enableNormals {
 				normVec := m.regPolySlopeVec3(nbs, i)
 				sunVec := calculateSunVectorWithoutTrueSolarTime(lat, m.LatLon[i][1], 0, day, fixedNormalsDayHour).Normalize()
 
 				// If the vectors are exactly opposite, the insolation is 1.0.
 				// If the vectors are exactly the same, the insolation is 0.0.
-				strength := 1.0 - math.Abs(normVec.Dot(sunVec))
+				strength = normVec.Dot(sunVec)
 				if strength < 0 {
 					strength = 0
 				}
-				strength = math.Sqrt(strength)
-				strength += 1.0
+				strength = 1 + math.Sqrt(strength)
 			}
 			res[i] = insolation * strength
 
@@ -266,13 +287,20 @@ func (m *Geo) GetAverageInsolation(day int) []float64 {
 					} else {
 						sum++
 					}
-					//if m.HasInsolation(i, day, hour, outTri, outRegs) {
-					//	sum++
-					//}
 					count++
 				}
 				// Calculate the average insolation for the given day.
 				res[i] *= float64(sum) / float64(count)
+			} else {
+				// Only calculate the insolation for the given day and hour.
+				dist := m.GetInsolationShadowDistance(i, day, m.HourOfDay, outTri, outRegs)
+				if dist > 0 {
+					if calcShadowStrengthFromDistance {
+						res[i] *= 1 - (1 / (dist / distRegion))
+					} else {
+						res[i] /= 2
+					}
+				}
 			}
 		}
 	}
@@ -282,8 +310,13 @@ func (m *Geo) GetAverageInsolation(day int) []float64 {
 		chunkProcessor(0, m.SphereMesh.NumRegions)
 	}
 
+	// TODO: Interpolate?
+
 	// Normalize the insolation values.
 	min, max := utils.MinMax(res)
+	if min > 0 {
+		min = 0
+	}
 	for i := range res {
 		res[i] = (res[i] - min) / (max - min)
 	}
@@ -383,7 +416,7 @@ func (m *Geo) GetInsolationShadowDistance(region, day int, hour float64, outTri,
 
 	// If the sun is below the horizon, there is no insolation.
 	if elevation < 0 {
-		return 1.0
+		return 0.0
 	}
 
 	logDebug := false

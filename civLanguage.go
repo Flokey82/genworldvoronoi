@@ -33,3 +33,15 @@ func numPeopleStr(num int) string {
 	}
 	return fmt.Sprintf("%d people", num)
 }
+
+// Compare language.
+func compareLanguage(a, b *genlanguage.Language) float64 {
+	if a == b {
+		return 1.0
+	}
+	if a == nil || b == nil {
+		return -1.0
+	}
+	// TODO: Calculate similarity.
+	return 0.0
+}

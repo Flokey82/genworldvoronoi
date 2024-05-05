@@ -153,6 +153,70 @@ func (m *Geo) GetFitnessClimate() func(int) float64 {
 	}
 }
 
+// GetFitnessSurviability returns a fitness function that returns high
+// scores for regions with high rainfall high temperatures, and alternatively high flux
+// or proximity to oceans.
+func (m *Geo) GetFitnessSurviability() func(int) float64 {
+	_, maxRain := minMax(m.Rainfall)
+	_, maxElev := minMax(m.Elevation)
+	_, maxFlux := minMax(m.Flux)
+
+	// Survivability is increased by a neighboring ocean,
+	// but since it is salt water, it will only guarantee a minimum
+	// survivability.
+	const minOceanFlux = 0.5
+
+	// MinSurvivability is the minimum survivability for regions.
+	const minSurv = 0.1
+	const remSurv = 1 - minSurv
+
+	return func(r int) float64 {
+		temp := m.GetRegTemperature(r, maxElev)
+		if temp < 0 {
+			return 0.1
+		}
+		scoreTemp := math.Sqrt(temp / MaxTemp)
+		scoreRain := m.Rainfall[r] / maxRain
+		scoreFlux := math.Sqrt(m.Flux[r] / maxFlux)
+		scoreWater := max(scoreFlux, scoreRain)
+		if scoreWater < minOceanFlux {
+			// Check if any neighboring region is an ocean.
+			var scoreOcean float64
+			nbs := m.SphereMesh.R_circulate_r(nil, r)
+			nbFraction := 1.0 / float64(len(nbs))
+			for _, n := range nbs {
+				if m.Elevation[n] <= 0 {
+					scoreOcean += nbFraction
+					break
+				}
+			}
+			scoreWater = max(scoreWater, scoreOcean)
+		}
+		return minSurv + remSurv*scoreTemp*scoreWater
+	}
+}
+
+// GetFitnessOceanProximity returns a fitness function that returns high
+// scores for regions close to the ocean.
+func (m *Geo) GetFitnessOceanProximity() func(int) float64 {
+	var seedOceans []int
+	for r, e := range m.Elevation {
+		if e <= 0 {
+			seedOceans = append(seedOceans, r)
+		}
+	}
+
+	distOceans := m.AssignDistanceField(seedOceans, make(map[int]bool))
+	_, maxDist := minMax(distOceans)
+	return func(r int) float64 {
+		if m.Elevation[r] <= 0 {
+			return 0.0
+		}
+		v := 1 - distOceans[r]/maxDist
+		return v * v * v * v
+	}
+}
+
 // CalcFitnessScore calculates the fitness value for all regions based on the
 // given fitness function.
 //

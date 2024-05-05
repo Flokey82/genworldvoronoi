@@ -55,11 +55,9 @@ func (b *Bio) GenerateBiology() {
 	// total survivability).
 
 	// Generate the pre-defined species.
-	/*
-		b.placeAllSpecies(KingdomFauna)
-		b.placeAllSpecies(KingdomFlora)
-		b.placeAllSpecies(KingdomFungi)
-	*/
+	// b.placeAllSpecies(KingdomFauna)
+	// b.placeAllSpecies(KingdomFlora)
+	// b.placeAllSpecies(KingdomFungi)
 	b.placeAllSpecies(GenusCereal)
 
 	// Generate the species.

@@ -394,6 +394,22 @@ type City struct {
 	People                []*Person             // People living in the city
 }
 
+func (c *City) compare(other *City) float64 {
+	if c == other {
+		return 1.0
+	}
+	if c == nil || other == nil {
+		return -1.0
+	}
+	cultureValue := c.Culture.compare(other.Culture)
+	languageValue := compareLanguage(c.Language, other.Language)
+	religionValue := c.Religion.compare(other.Religion)
+
+	log.Printf("City comparison: %.2f, %.2f, %.2f", cultureValue, languageValue, religionValue)
+
+	return (cultureValue + languageValue + religionValue) / 3
+}
+
 // Ref returns the object reference of the city.
 func (c *City) Ref() ObjectReference {
 	return ObjectReference{
@@ -492,6 +508,12 @@ func (m *Civ) placeCityAt(r int, founded int64, cType TownType, pop int, score f
 		founded = m.History.GetYear()
 	}
 
+	// If there is no known culture, generate a new one.
+	culture := m.GetCulture(r)
+	if culture == nil {
+		culture = m.PlaceCultureAt(r, true, nil) // TODO: Grow this culture.
+	}
+
 	// TODO:
 	// - Trigger event for city founding.
 	// - Allow optionally specifying a founding year.
@@ -503,14 +525,8 @@ func (m *Civ) placeCityAt(r int, founded int64, cType TownType, pop int, score f
 		Population:    pop,
 		MaxPopulation: pop,
 		Type:          cType,
-		Culture:       m.GetCulture(r),
+		Culture:       culture,
 		Founded:       founded,
-	}
-
-	// If there is no known culture, generate a new one.
-	// TODO: Grow this culture.
-	if c.Culture == nil {
-		c.Culture = m.PlaceCultureAt(r)
 	}
 
 	// Use the local language to generate a new city name.
