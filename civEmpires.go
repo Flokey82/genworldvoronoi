@@ -210,6 +210,20 @@ type Empire struct {
 	*geo.Stats
 }
 
+func (e *Empire) compare(other *Empire) float64 {
+	if e == other {
+		return 1.0
+	}
+	if e == nil || other == nil {
+		return -1.0
+	}
+
+	capitalValue := e.Capital.compare(other.Capital)
+	cultureValue := e.Culture.compare(other.Culture)
+
+	return (capitalValue + cultureValue) / 2
+}
+
 func (e *Empire) String() string {
 	return fmt.Sprintf("Empire %s", e.Name)
 }
@@ -242,4 +256,43 @@ func (m *Civ) placeEmpireAt(r int, c *City) *Empire {
 func (m *Civ) GetEmpires() []*Empire {
 	// TODO: Deduplicate with GetCityStates.
 	return m.Empires
+}
+
+// getEmpireNeighbors returns all empires that are neighbors of the
+// given empire.
+func (m *Civ) getEmpireNeighbors(c *Empire) []int {
+	return m.getTerritoryNeighbors(c.ID, m.RegionToEmpire)
+}
+
+// getEmpireCityStates returns all city states that are part of the
+// given empire.
+func (m *Civ) getEmpireCityStates(e *Empire) []*CityState {
+	var cityStates []*CityState
+	for _, c := range m.CityStates {
+		if m.RegionToEmpire[c.ID] == e.ID {
+			cityStates = append(cityStates, c)
+		}
+	}
+	return cityStates
+}
+
+// getEmpireCityStateNeighbors returns all city states that are neighbors
+// of the given empire.
+func (m *Civ) getEmpireCityStateNeighbors(e *Empire) []*CityState {
+	seen := make(map[int]bool)
+	ours := m.getEmpireCityStates(e)
+	var theirs []*CityState
+	for _, c := range ours {
+		seen[c.ID] = true
+	}
+	for _, c := range ours {
+		for _, r := range m.getTerritoryNeighbors(c.ID, m.RegionToCityState) {
+			if seen[r] {
+				continue
+			}
+			seen[r] = true
+			theirs = append(theirs, m.GetCityState(r))
+		}
+	}
+	return theirs
 }

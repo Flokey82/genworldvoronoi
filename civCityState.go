@@ -1,6 +1,7 @@
 package genworldvoronoi
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/Flokey82/genworldvoronoi/geo"
@@ -27,7 +28,7 @@ func (m *Civ) PlaceNCityStates(n int) {
 		m.PlaceCityStateAt(c.ID, c)
 		log.Printf("CityState %d: %s", i, c.Name)
 	}
-	m.expandCityStates()
+	m.ExpandCityStates()
 }
 
 // CityState represents a territory governed by a single city.
@@ -41,6 +42,24 @@ type CityState struct {
 	// TODO: DO NOT CACHE THIS!
 	Regions []int
 	*geo.Stats
+}
+
+func (c *CityState) compare(other *CityState) float64 {
+	if c == other {
+		return 1.0
+	}
+	if c == nil || other == nil {
+		return -1.0
+	}
+
+	capitalValue := c.Capital.compare(other.Capital)
+	cultureValue := c.Culture.compare(other.Culture)
+
+	return (capitalValue + cultureValue) / 2
+}
+
+func (c *CityState) String() string {
+	return fmt.Sprintf("CityState %s: %d cities, %d regions", c.Capital.Name, len(c.Cities), len(c.Regions))
 }
 
 func (c *CityState) Log() {
@@ -61,7 +80,7 @@ func (m *Civ) PlaceCityStateAt(r int, c *City) *CityState {
 
 	// If there is no known culture, generate a new one.
 	if c.Culture == nil {
-		c.Culture = m.PlaceCultureAt(r) // TODO: Grow this culture.
+		c.Culture = m.PlaceCultureAt(r, true, nil) // TODO: Grow this culture.
 	}
 
 	m.CityStates = append(m.CityStates, cs)
@@ -69,7 +88,9 @@ func (m *Civ) PlaceCityStateAt(r int, c *City) *CityState {
 	return cs
 }
 
-func (m *Civ) expandCityStates() {
+// ExpandCityStates expands the city states on the map based on their culture,
+// terrain preference, and other factors.
+func (m *Civ) ExpandCityStates() {
 	// Territories are based on cities acting as their capital.
 	// Since the algorithm places the cities with the highes scores
 	// first, we use the top 'n' cities as the capitals for the
@@ -78,12 +99,20 @@ func (m *Civ) expandCityStates() {
 	for _, c := range m.CityStates {
 		seedCities = append(seedCities, c.ID)
 	}
+	m.expandCityStates(false, seedCities)
+}
 
+func (m *Civ) expandCityStates(aggressive bool, seedCities []int) {
 	weight := m.getTerritoryWeightFunc()
 	biomeWeight := m.getTerritoryBiomeWeightFunc()
 	cultureWeight := m.getTerritoryCultureWeightFunc()
 
-	m.RegionToCityState = m.regPlaceNTerritoriesCustom(m.RegionToCityState, seedCities, func(o, u, v int) float64 {
+	placeFunc := m.regPlaceNTerritoriesCustom
+	if aggressive {
+		placeFunc = m.expandTerritoriesAggressive
+	}
+
+	m.RegionToCityState = placeFunc(m.RegionToCityState, seedCities, func(o, u, v int) float64 {
 		// TODO: Make sure we take in account expansionism, wealth, score, and culture.
 		w := weight(o, u, v)
 		if w < 0 {
@@ -138,4 +167,9 @@ func (m *Civ) GetCityStates() []*CityState {
 // given city state.
 func (m *Civ) getCityStateNeighbors(c *CityState) []int {
 	return m.getTerritoryNeighbors(c.ID, m.RegionToCityState)
+}
+
+// getCityStateEmpire returns the empire that the given city state belongs to (if any).
+func (m *Civ) getCityStateEmpire(c *CityState) int {
+	return m.RegionToEmpire[c.ID]
 }

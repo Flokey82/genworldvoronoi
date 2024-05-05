@@ -407,6 +407,36 @@
       return div;
     };
     displayModeSelect.addTo(map);
+
+    // Add a custom control for entering the time of day as a floating point number.
+    var timeOfDayControl = L.control({ position: 'bottomright' });
+    timeOfDayControl.onAdd = function (map) {
+      var div = L.DomUtil.create('div', 'info legend');
+      div.innerHTML = '<input type="number" step="0.01" min="0" max="24" value="12" style="width: 50px;">';
+      div.firstChild.onmousedown = div.firstChild.ondblclick = L.DomEvent.stopPropagation;
+      div.firstChild.onchange = function () {
+        var e = div.firstChild;
+        var value = e.value;
+        console.log(value);
+        // Set the time of day by calling "/set_hour_of_day/{t}" on the tile server.
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', 'set_hour_of_day/' + value);
+        xhr.onload = function () {
+          if (xhr.status === 200) {
+            console.log('Success');
+            // Clear the tile cache.
+            tl._tileCache = {};
+            // Call the tile redraw function.
+            tl.redraw();
+          } else {
+            console.log('Error: ' + xhr.status);
+          }
+        };
+        xhr.send();
+      };
+      return div;
+    };
+    timeOfDayControl.addTo(map);
   </script>
 </body>
 

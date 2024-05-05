@@ -63,6 +63,7 @@ func main() {
 	router.HandleFunc("/terrain3d/{z}/{x}/{y}.terrain", tile3dHandler)
 	router.HandleFunc("/geojson_cities/{z}/{la1}/{lo1}/{la2}/{lo2}", geoJSONCitiesHandler)
 	router.HandleFunc("/geojson_borders/{z}/{la1}/{lo1}/{la2}/{lo2}", geoJSONBorderHandler)
+	router.HandleFunc("/set_hour_of_day/{t}", setHourOfDayHandler)
 	if useGlobe {
 		router.PathPrefix("/").Handler(http.FileServer(http.Dir("static_cesium")))
 	} else {
@@ -276,6 +277,22 @@ func tile3dJSONHandler(res http.ResponseWriter, req *http.Request) {
 	res.Header().Set("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept")
 	res.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 	res.Write(data)
+}
+
+func setHourOfDayHandler(res http.ResponseWriter, req *http.Request) {
+	log.Println("setHourOfDayHandler")
+	// Get the url parameter 't'.
+	vars := mux.Vars(req)
+	t := vars["t"]
+	log.Println("t:", t)
+	if t == "" {
+		t = "12"
+	}
+	hourOfDay, err := strconv.ParseFloat(t, 64)
+	if err != nil {
+		panic(err)
+	}
+	worldmap.Geo.SetHourOfDay(hourOfDay)
 }
 
 func tile3dHandler(res http.ResponseWriter, req *http.Request) {

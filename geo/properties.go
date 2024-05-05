@@ -203,6 +203,9 @@ func (m *Geo) GetRegCellTypes() []int {
 			stop_land[r] = true
 		}
 	}
+
+	// Assign distance fields to ocean and land regions.
+	// TODO: Do this concurrently.
 	regDistanceOcean := m.AssignDistanceField(oceanRegs, stop_land)
 	regDistanceLand := m.AssignDistanceField(landRegs, stop_ocean)
 

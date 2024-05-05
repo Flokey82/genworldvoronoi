@@ -16,6 +16,7 @@ type Geo struct {
 	*Calendar
 	*BaseObject
 	*Resources                          // Natural resources.
+	HourOfDay            float64        // Hour of the day (0.0 - 24.0), used for various visualizations (remove?)
 	PlateToVector        []vectors.Vec3 // Plate tectonics / movement vectors
 	PlateIsOcean         map[int]bool   // Plate was chosen to be an ocean plate
 	PlateRegs            []int          // Plate seed points / regions
@@ -41,6 +42,7 @@ func NewGeo(seed int64, cfg *GeoConfig) (*Geo, error) {
 	return &Geo{
 		GeoConfig:            cfg,
 		Calendar:             NewCalendar(),
+		HourOfDay:            12.0,
 		PlateIsOcean:         make(map[int]bool),
 		BaseObject:           newBaseObject(seed, result),
 		Resources:            newResources(result.NumRegions),

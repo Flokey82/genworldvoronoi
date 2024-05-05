@@ -22,6 +22,38 @@ import (
 	geojson "github.com/paulmach/go.geojson"
 )
 
+// Display modes for tile rendering.
+const (
+	DisplayModeDefault          = 0
+	DisplayModeOceanPressure    = 1
+	DisplayModeMoisture         = 2
+	DisplayModeRainfall         = 3
+	DisplayModeFlux             = 4
+	DisplayModeCompression      = 5
+	DisplayModeEarthquake       = 6
+	DisplayModeVolcano          = 7
+	DisplayModeRockSlide        = 8
+	DisplayModeFlood            = 9
+	DisplayModeErosion          = 10
+	DisplayModeErosion2         = 11
+	DisplayModeSteepness        = 12
+	DisplayModeSlope            = 13
+	DisplayModeCityStates       = 14
+	DisplayModeEmpires          = 15
+	DisplayModeCultures         = 16
+	DisplayModeReligions        = 17
+	DisplayModeSpecies          = 18
+	DisplayModePlates           = 19
+	DisplayModeElevation        = 20
+	DisplayModeAirTemperature   = 21
+	DisplayModeOceanTemperature = 22
+	DisplayModeInsolation       = 23
+	DisplayModePopulation       = 24
+	DisplayModeSuitability      = 25
+	DisplayModeSoilExhaustion   = 26
+	DisplayModeTribes           = 27
+)
+
 // GetTile returns the image of the tile at the given coordinates and zoom level.
 func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawTradeRoutes, drawLakes, drawShadows, aspectShading bool) image.Image {
 	// NOTE:
@@ -38,40 +70,40 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 
 	var colorFunc func(int, float64) color.Color
 	switch displayMode {
-	case 14, 15, 16, 17, 18, 19:
+	case DisplayModeCityStates, DisplayModeEmpires, DisplayModeCultures, DisplayModeReligions, DisplayModeSpecies, DisplayModePlates:
 		colorGrad := colorgrad.Rainbow()
 		terrToColor := make(map[int]int)
 		var territory []int
 		var terrLen int
-		if displayMode == 14 {
+		if displayMode == DisplayModeCityStates {
 			terr := m.CityStates
 			terrLen = len(terr)
 			for i, c := range terr {
 				terrToColor[c.ID] = i
 			}
 			territory = m.RegionToCityState
-		} else if displayMode == 15 {
+		} else if displayMode == DisplayModeEmpires {
 			terr := m.Empires
 			terrLen = len(terr)
 			for i, c := range terr {
 				terrToColor[c.ID] = i
 			}
 			territory = m.RegionToEmpire
-		} else if displayMode == 16 {
+		} else if displayMode == DisplayModeCultures {
 			terr := m.Cultures
 			terrLen = len(terr)
 			for i, c := range terr {
 				terrToColor[c.ID] = i
 			}
 			territory = m.RegionToCulture
-		} else if displayMode == 17 {
+		} else if displayMode == DisplayModeReligions {
 			terr := m.Religions
 			terrLen = len(terr)
 			for i, c := range terr {
 				terrToColor[c.ID] = i
 			}
 			territory = m.RegionToReligion
-		} else if displayMode == 18 {
+		} else if displayMode == DisplayModeSpecies {
 			terr := m.Species
 			terrLen = len(terr)
 			for i, c := range terr {
@@ -89,7 +121,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 
 		min, max := minMax(m.Elevation)
 		_, maxMois := minMax(m.Moisture)
-		cols := colorGrad.Colors(uint(terrLen))
+		cols := colorGrad.Colors(uint(terrLen) + 1)
 		colorFunc = func(i int, n float64) color.Color {
 			// Calculate the color of the region.
 			elev := m.Elevation[i]
@@ -112,7 +144,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 			valMois := m.Moisture[i] / maxMois
 			return geo.GetWhittakerModBiomeColor(rLat, valElev, valMois, math.Pow(val, 1/n))
 		}
-	case 20, 21, 22: // Temperatures and elevation.
+	case DisplayModeElevation, DisplayModeAirTemperature, DisplayModeOceanTemperature: // Temperatures and elevation.
 		// Create a blue to red color gradient.
 		colorGrad := colorgrad.NewGradient()
 		colorGrad.Colors(
@@ -127,7 +159,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 			log.Fatal(err)
 		}
 
-		if displayMode == 20 { // Elevation.
+		if displayMode == DisplayModeElevation { // Elevation.
 			_, max := minMax(m.Elevation)
 
 			// Create the color function.
@@ -136,7 +168,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 				val := m.Elevation[i] / max
 				return genColor(cb.At(val), math.Pow(val, 1/n))
 			}
-		} else if displayMode == 21 { // Air temperature.
+		} else if displayMode == DisplayModeAirTemperature { // Air temperature.
 			temp := m.AirTemperature
 			minTemp, maxTemp := minMax(temp)
 
@@ -146,7 +178,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 				val := (temp[i] - minTemp) / (maxTemp - minTemp)
 				return genColor(cb.At(val), math.Pow(val, 1/n))
 			}
-		} else if displayMode == 22 { // Ocean temperature.
+		} else if displayMode == DisplayModeOceanTemperature { // Ocean temperature.
 			temp := m.OceanTemperature
 			minTemp, maxTemp := minMax(temp)
 
@@ -159,34 +191,63 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 		}
 	default:
 		vals := m.Elevation
-		if displayMode == 1 {
+		if displayMode == DisplayModeOceanPressure {
 			vals = m.CalcCurrentPressure(m.RegionToOceanVec)
-		} else if displayMode == 2 {
+		} else if displayMode == DisplayModeMoisture {
 			vals = m.Moisture
-		} else if displayMode == 3 {
+		} else if displayMode == DisplayModeRainfall {
 			vals = m.Rainfall
-		} else if displayMode == 4 {
+		} else if displayMode == DisplayModeFlux {
 			vals = m.Flux
-		} else if displayMode == 5 {
+		} else if displayMode == DisplayModeCompression {
 			vals = m.PropagateCompression(m.RegionCompression)
-		} else if displayMode == 6 {
+		} else if displayMode == DisplayModeEarthquake {
 			vals = m.GetEarthquakeChance()
-		} else if displayMode == 7 {
+		} else if displayMode == DisplayModeVolcano {
 			vals = m.GetVolcanoEruptionChance()
-		} else if displayMode == 8 {
+		} else if displayMode == DisplayModeRockSlide {
 			vals = m.GetRockSlideAvalancheChance()
-		} else if displayMode == 9 {
+		} else if displayMode == DisplayModeFlood {
 			vals = m.GetFloodChance()
-		} else if displayMode == 10 {
+		} else if displayMode == DisplayModeErosion {
 			vals = m.GetErosionRate()
-		} else if displayMode == 11 {
+		} else if displayMode == DisplayModeErosion2 {
 			vals = m.GetErosionRate2()
-		} else if displayMode == 12 {
+		} else if displayMode == DisplayModeSteepness {
 			vals = m.GetSteepness()
-		} else if displayMode == 13 {
+		} else if displayMode == DisplayModeSlope {
 			vals = m.GetSlope()
-		} else if displayMode == 23 {
+		} else if displayMode == DisplayModeInsolation {
 			vals = m.Geo.AvgInsolation
+		} else if displayMode == DisplayModePopulation { // Population.
+			vals = make([]float64, m.NumRegions)
+			for i, pop := range m.Population {
+				if pop <= 0 {
+					vals[i] = 0
+				} else {
+					vals[i] = float64(pop)
+				}
+			}
+		} else if displayMode == DisplayModeSuitability {
+			vals = make([]float64, m.NumRegions)
+			for i, sus := range m.Suitability {
+				vals[i] = sus
+			}
+		} else if displayMode == DisplayModeSoilExhaustion {
+			vals = make([]float64, m.NumRegions)
+			for i, sus := range m.SoilExhaustion {
+				vals[i] = sus
+			}
+		} else if displayMode == DisplayModeTribes { // Tribes.
+			vals = make([]float64, m.NumRegions)
+			for _, tribe := range m.Tribes {
+				vals[tribe.RegionID] = float64(tribe.Population)
+				if tribe.Path != nil {
+					for _, p := range tribe.Path.Steps {
+						vals[p] = float64(tribe.Population) * 2
+					}
+				}
+			}
 		}
 
 		// Calculate the min and max elevation.
@@ -551,33 +612,6 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 				gc.Close()
 				gc.FillStroke()
 			}
-
-			/*
-				for j := 0; j < 3; j++ {
-					// Set the color of the triangle segment.
-					col := colorFunc(regions[j], brightness)
-					gc.SetStrokeColor(col)
-					gc.SetFillColor(col)
-
-					// Get the 3 points of the triangle segment.
-					x1, y1 := path[j][0], path[j][1]
-					x2, y2 := path[(j+1)%3][0], path[(j+1)%3][1]
-					x3, y3 := path[(j+2)%3][0], path[(j+2)%3][1]
-
-					// Draw the triangle segment.
-					gc.BeginPath()
-					// First, we move to the first point of the triangle segment,
-					gc.MoveTo(x1, y1)
-					// then we draw a line to the midpoint between the first and second point,
-					gc.LineTo((x1+x2)/2, (y1+y2)/2)
-					// then we draw a line to the center of the triangle,
-					gc.LineTo((x1+x2+x3)/3, (y1+y2+y3)/3)
-					// then we draw a line to the midpoint between the third and first point.
-					gc.LineTo((x1+x3)/2, (y1+y3)/2)
-					gc.Close()
-					gc.FillStroke()
-				}
-			*/
 		}
 	}
 
@@ -893,6 +927,32 @@ func limitLongitude(lo float64) float64 {
 	return lo
 }
 
+// GetCitiesInTile returns all cities within the given tile coordinates and zoom level.
+func (m *Map) GetCitiesInTile(x, y, zoom int) []*City {
+	// Wrap the tile coordinates.
+	x, y = wrapTileCoordinates(x, y, zoom)
+
+	// Calculate the bounds of the tile.
+	tbb := newTileBoundingBox(x, y, zoom)
+	la1, lo1, la2, lo2 := tbb.toLatLon()
+
+	// Wrap the lat lon coordinates.
+	la1, lo1 = wrapLatLon(la1, lo1)
+	la2, lo2 = wrapLatLon(la2, lo2)
+
+	// Get the cities within the tile.
+	var cities []*City
+	for _, c := range m.Cities {
+		cLatLon := m.LatLon[c.ID]
+		// Check if we are within the tile with a small margin.
+		if la1 < cLatLon[0] && cLatLon[0] < la2 && lo1 < cLatLon[1] && cLatLon[1] < lo2 {
+			continue
+		}
+		cities = append(cities, c)
+	}
+	return cities
+}
+
 // GetGeoJSONCities returns all cities as GeoJSON within the given bounds and zoom level.
 func (m *Map) GetGeoJSONCities(la1, lo1, la2, lo2 float64, zoom int) ([]byte, error) {
 	geoJSON := geojson.NewFeatureCollection()
@@ -1135,7 +1195,7 @@ func sizeFromZoom(zoom int) int {
 }
 
 func latLonToPixels(lat, lon float64, zoom int) (float64, float64) {
-	return mercator.LatLonToPixels(-1*lat, lon, zoom)
+	return mercator.LatLonToPixels(-lat, lon, zoom)
 }
 
 // tileBoundingBox represents a bounding box in pixels for a tile.
