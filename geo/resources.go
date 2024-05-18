@@ -181,18 +181,42 @@ func (m *Geo) placeMetals() {
 	m.ResetRand()
 	metals := make([]byte, len(steepness))
 
+	// Commonly co-localized metals:
+	// - gold and copper
+	// - lead and silver
+	// - copper and zinc
+	// - tin and copper
+	// - iron and nickel
+	// - aluminum and bauxite
+
+	// TODO: Iron should be more common in general.
+
 	// TODO: Use noise intersection instead of rand.
 	for r := 0; r < m.SphereMesh.NumRegions; r++ {
-		if fm(r) > 0.9 {
+		if m.Elevation[r] <= 0.0 {
+			continue
+		}
+
+		// Place some extra iron.
+		if fmVal := fm(r); fmVal > 0.01 {
 			switch rv := math.Abs(m.Rand.NormFloat64() * fn(r)); {
 			case rv < chancePlatinum:
 				metals[r] |= ResMetPlatinum
 			case rv < chanceGold:
 				metals[r] |= ResMetGold
+				if m.Rand.NormFloat64() < 0.5 {
+					metals[r] |= ResMetCopper
+				}
 			case rv < chanceSilver:
 				metals[r] |= ResMetSilver
+				if m.Rand.NormFloat64() < 0.5 {
+					metals[r] |= ResMetLead
+				}
 			case rv < chanceCopper:
 				metals[r] |= ResMetCopper
+				if m.Rand.NormFloat64() < 0.5 {
+					metals[r] |= ResMetTin
+				}
 			case rv < chanceLead:
 				metals[r] |= ResMetLead
 			case rv < chanceTin:

@@ -9,6 +9,7 @@ import (
 	"math"
 
 	"github.com/Flokey82/genworldvoronoi"
+	"github.com/Flokey82/genworldvoronoi/geo"
 	"github.com/davvo/mercator"
 	"github.com/hajimehoshi/ebiten"
 	"github.com/hajimehoshi/ebiten/ebitenutil"
@@ -16,6 +17,7 @@ import (
 	"github.com/hajimehoshi/ebiten/inpututil"
 	"github.com/hajimehoshi/ebiten/text"
 	"github.com/hajimehoshi/ebiten/vector"
+	"github.com/mazznoer/colorgrad"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
 )
@@ -48,6 +50,7 @@ type Game struct {
 	showRivers      bool
 	showCultures    bool
 	showTribes      bool
+	showResources   bool
 	displayMode     int
 }
 
@@ -56,6 +59,7 @@ var displayModes = []int{
 	genworldvoronoi.DisplayModeSuitability,
 	genworldvoronoi.DisplayModeCultures,
 	genworldvoronoi.DisplayModeCityStates,
+	genworldvoronoi.DisplayModeEmpires,
 }
 
 func NewGame(w *genworldvoronoi.Map) (*Game, error) {
@@ -129,6 +133,13 @@ func (g *Game) Update() error {
 	// Check if we want to show tribes.
 	if inpututil.IsKeyJustPressed(ebiten.KeyN) {
 		g.showTribes = !g.showTribes
+		// Invalidate the tile cache.
+		// g.invalidateTileCache() Not needed for labels.
+	}
+
+	// Check if we want to show resources.
+	if inpututil.IsKeyJustPressed(ebiten.KeyZ) {
+		g.showResources = !g.showResources
 		// Invalidate the tile cache.
 		// g.invalidateTileCache() Not needed for labels.
 	}
@@ -395,6 +406,32 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			drawY := (float64(y)+(g.camY))*scale + (cy)
 			// Draw the city label at the city's position.
 			g.drawLabel(screen, drawX, drawY, fmt.Sprintf("%s", city.Name), color.White)
+		}
+	}
+
+	// Draw resources.
+	if g.showResources {
+		// Generate color palette.
+		colorGrad := colorgrad.Rainbow()
+		// We just draw circles where the metal resources are.
+		colors := colorGrad.Colors(uint(geo.ResMaxMetals))
+		for r := 0; r < g.w.NumRegions; r++ {
+			if g.w.Resources.Metals[r] != 0 {
+				// Get actual world position of resource.
+				cLatLon := g.w.LatLon[r]
+				lat, lon := cLatLon[0], cLatLon[1]
+				x, y := mercator.LatLonToPixels(-lat, lon, zoom)
+				x = currTileSize * x / 256
+				y = currTileSize * y / 256
+				// Calculate the on-screen position of the resource.
+				drawX := (float64(x)-(g.camX))*scale + (cx)
+				drawY := (float64(y)+(g.camY))*scale + (cy)
+				for i := 0; i < geo.ResMaxMetals; i++ {
+					if g.w.Resources.Metals[r]&(1<<i) != 0 {
+						screen.Set(int(drawX), int(drawY), colors[i])
+					}
+				}
+			}
 		}
 	}
 

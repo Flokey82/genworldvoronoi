@@ -8,6 +8,11 @@ import (
 
 // getRegCityType returns the optimal type of city for a given region.
 func (m *Civ) getRegCityType(r int) TownType {
+	// TODO: Cache this somehow.
+	if m.GetFitnessArableLand()(r) > 0.5 {
+		return TownTypeFarming
+	}
+
 	// If we have a lot of metals, gems, etc. we have a mining town.
 	if m.Metals[r] > 0 || m.Gems[r] > 0 {
 		return TownTypeMining
@@ -18,10 +23,6 @@ func (m *Civ) getRegCityType(r int) TownType {
 		return TownTypeQuarry
 	}
 
-	// TODO: Cache this somehow.
-	if m.GetFitnessArableLand()(r) > 0.5 {
-		return TownTypeFarming
-	}
 	// TODO: Add more types of cities.
 	return TownTypeDefault
 }
