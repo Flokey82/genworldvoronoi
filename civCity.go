@@ -378,6 +378,7 @@ type City struct {
 	ID                    int                   // Region where the city is located
 	Name                  string                // Name of the city
 	Type                  TownType              // Type of city
+	SecondaryTypes        []TownType            // Secondary types of the city
 	Score                 float64               // Score of the fitness function
 	Population            int                   // Population of the city
 	MaxPopulation         int                   // Maximum population of the city
@@ -428,7 +429,10 @@ func (c *City) radius() float64 {
 
 // String returns a string representation of the city.
 func (c *City) String() string {
-	return fmt.Sprintf("%s (%d)", c.Name, c.Population)
+	if len(c.SecondaryTypes) > 0 {
+		return fmt.Sprintf("%s, %s (%d) [%s]", c.Name, c.Type, c.Population, c.SecondaryTypes)
+	}
+	return fmt.Sprintf("%s, %s (%d)", c.Name, c.Type, c.Population)
 }
 
 // MaxPopulationLimit returns the maximum population sustainable by the city.
