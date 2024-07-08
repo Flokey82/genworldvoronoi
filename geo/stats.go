@@ -25,6 +25,8 @@ type Stats struct {
 	Snow       int
 	Swamp      int
 	Wetlands   int
+	Rivers     int
+	Coastal    int
 }
 
 // NewStats returns a new Stats object.
@@ -51,6 +53,7 @@ func (m *Geo) GetStats(rr []int) *Stats {
 	st := NewStats()
 	st.NumRegions = len(rr)
 
+	outRegs := make([]int, 0, 6)
 	biomeFunc := m.GetRegWhittakerModBiomeFunc()
 	for _, r := range rr {
 		st.TotalArea += m.GetRegArea(r)
@@ -93,6 +96,18 @@ func (m *Geo) GetStats(rr []int) *Stats {
 		case genbiome.WhittakerModBiomeWetlands:
 			st.Wetlands++
 		}
+		// Check if we border to a waterbody.
+		for _, nb := range m.R_circulate_r(outRegs, r) {
+			if m.IsRegLakeOrWaterBody(nb) {
+				st.Coastal++
+				break
+			}
+		}
+
+		// Check if we have a river.
+		if m.IsRegRiver(r) {
+			st.Rivers++
+		}
 	}
 	return st
 }
@@ -117,4 +132,6 @@ func (s *Stats) Log() {
 	log.Printf("Snow: %.2f%%", 100*float64(s.Snow)/float64(s.NumRegions))
 	log.Printf("Swamp: %.2f%%", 100*float64(s.Swamp)/float64(s.NumRegions))
 	log.Printf("Wetlands: %.2f%%", 100*float64(s.Wetlands)/float64(s.NumRegions))
+	log.Printf("Rivers: %.2f%%", 100*float64(s.Rivers)/float64(s.NumRegions))
+	log.Printf("Coastal: %.2f%%", 100*float64(s.Coastal)/float64(s.NumRegions))
 }

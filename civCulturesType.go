@@ -123,6 +123,29 @@ func (t CultureType) Spirituality() float64 {
 	return various.RoundToDecimals(((rand.Float64()*powerInputValue)/2+1)*base, 1)
 }
 
+// Openness returns the openness of a given culture type.
+// This value reflects how open a culture is to new ideas, technologies, and
+// other cultures.
+func (t CultureType) Openness() float64 {
+	powerInputValue := 1.0
+	base := 1.0 // Generic
+	switch t {
+	case CultureTypeLake:
+		base = 1.0
+	case CultureTypeNaval:
+		base = 1.4
+	case CultureTypeRiver:
+		base = 1.2
+	case CultureTypeNomadic:
+		base = 1.3
+	case CultureTypeHunting:
+		base = 0.9
+	case CultureTypeHighland:
+		base = 0.6
+	}
+	return various.RoundToDecimals(((rand.Float64()*powerInputValue)/2+1)*base, 1)
+}
+
 // CellTypeCost returns the cost of crossing / navigating a given cell type for a given culture.
 func (t CultureType) CellTypeCost(cellType int) float64 {
 	// Land near coast / coastline / coastal land strip / "beach"?.

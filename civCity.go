@@ -106,7 +106,7 @@ func (m *Civ) tickCityDays(c *City, gDisFunc func(int) geo.GeoDisasterChance, cf
 	if c.Religion == nil && m.Rand.Intn(3000*356) < days && c.Population > 0 {
 		c.Religion = m.genOrganizedReligion(c)
 		m.ExpandReligions()
-		m.History.AddEvent("Religion", fmt.Sprintf("A new religion was founded in %s", c.Name), c.Ref())
+		m.History.AddEvent("Founding (Religion)", fmt.Sprintf("A new religion was founded in %s", c.Name), c.Ref())
 	}
 }
 
@@ -393,6 +393,7 @@ type City struct {
 	Attractiveness        float64               // Attractiveness of the city (STATIC)
 	TradePartners         []int                 // IDs of cities within trade range
 	People                []*Person             // People living in the city
+	*ComboStorage                               // Resources the city has.
 }
 
 func (c *City) compare(other *City) float64 {
@@ -531,12 +532,16 @@ func (m *Civ) placeCityAt(r int, founded int64, cType TownType, pop int, score f
 		Type:          cType,
 		Culture:       culture,
 		Founded:       founded,
+		ComboStorage:  newComboStorage(1000), // TODO: Storage should be upgradable.
 	}
 
 	// Use the local language to generate a new city name.
 	c.Language = c.Culture.Language
 	c.Name = c.Language.MakeCityName()
 	m.Cities = append(m.Cities, c)
+
+	// Add a new event to the history.
+	m.History.AddEvent("Founding (City)", fmt.Sprintf("City %s was founded", c.Name), c.Ref())
 	return c
 }
 

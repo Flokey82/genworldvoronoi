@@ -82,6 +82,8 @@ func (m *Civ) calculateSuitability() []float64 {
 	return m.Suitability
 }
 
+const popDensity = 10 // 10 people per km^2
+
 func (m *Civ) maxPopReg(i int) int {
 	return int(m.Suitability[i] * popDensity)
 }

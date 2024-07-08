@@ -7,6 +7,8 @@ import (
 	"math/rand"
 	"sort"
 
+	"github.com/Flokey82/genetics/geneticshuman"
+	"github.com/Flokey82/go_gens/gengovernment"
 	"github.com/Flokey82/go_gens/genlanguage"
 )
 
@@ -137,32 +139,200 @@ type Tribe struct {
 
 	regionMaxPop        int // The max pop of the region the tribe is in.
 	currentRegionMaxPop int // The current max pop of the region the tribe is in.
-	*ResourceStorage        // Resources the tribe has.
-	*dumbStorage            // Resources the tribe has, but dumb.
+	*ComboStorage           // Resources the tribe has.
+
+	// People of the tribe.
+	People []*Person
 }
 
-func (m *Civ) getNextTribeID() int {
-	id := m.TribeCount
-	m.TribeCount++
+var tribeID int
+
+func getNextTribeID() int {
+	id := tribeID
+	tribeID++
 	return id
 }
 
-func (m *Civ) newTribeAtRegion(r int, pop int) *Tribe {
-	t := NewTribe(m.getNextTribeID(), r, pop)
-	m.Tribes = append(m.Tribes, t)
+// getPreferredLeadershipForm returns the preferred leadership form of the tribe.
+func (t *Tribe) getPreferredLeadershipForm() gengovernment.LeadershipForm {
+	if t.Type <= TribeTypeSettling {
+		return gengovernment.LeadershipFormChiefdom
+	}
+	if t.Type == TribeTypeCity {
+		return gengovernment.LeadershipFormMonarchy
+	}
+	if t.Type == TribeTypeCityState {
+		return gengovernment.LeadershipFormRepublic
+	}
+	if t.Type == TribeTypeEmpire {
+		return gengovernment.LeadershipFormDictatorship
+	}
+	return gengovernment.LeadershipFormChiefdom
+}
+
+// getPossibleLeadershipForms returns the possible leadership forms of the tribe.
+func (t *Tribe) getPossibleLeadershipForms() []gengovernment.LeadershipForm {
+	if t.Type <= TribeTypeSettling {
+		return []gengovernment.LeadershipForm{gengovernment.LeadershipFormChiefdom}
+	}
+	if t.Type == TribeTypeCity {
+		return []gengovernment.LeadershipForm{gengovernment.LeadershipFormMonarchy}
+	}
+	if t.Type == TribeTypeCityState {
+		return []gengovernment.LeadershipForm{gengovernment.LeadershipFormMonarchy, gengovernment.LeadershipFormRepublic}
+	}
+	if t.Type == TribeTypeEmpire {
+		return []gengovernment.LeadershipForm{gengovernment.LeadershipFormDictatorship, gengovernment.LeadershipFormMonarchy, gengovernment.LeadershipFormRepublic}
+	}
+	return []gengovernment.LeadershipForm{gengovernment.LeadershipFormChiefdom}
+}
+
+func (t *Tribe) findNaturalProgression() gengovernment.LeadershipForm {
+	// TODO: Pick from the preferred leadership forms.
+	var currentInfluence gengovernment.LeadershipInfluence
+	var fallbackForm gengovernment.LeadershipForm
+	switch t.Type {
+	case TribeTypeNomadic, TribeTypeSettling:
+		currentInfluence = gengovernment.LeadershipInfluenceTribe
+		fallbackForm = gengovernment.LeadershipFormChiefdom
+	case TribeTypeCity:
+		currentInfluence = gengovernment.LeadershipInfluenceSettlement
+		fallbackForm = gengovernment.LeadershipFormChiefdom
+	case TribeTypeCityState:
+		currentInfluence = gengovernment.LeadershipInfluenceCityState
+		fallbackForm = gengovernment.LeadershipFormMonarchy
+	case TribeTypeEmpire:
+		currentInfluence = gengovernment.LeadershipInfluenceEmpire
+		fallbackForm = gengovernment.LeadershipFormDictatorship
+	default:
+		log.Printf("!!!%s has an unknown tribe type: %d", t.String(), t.Type)
+		return t.Leadership.Form
+	}
+
+	// Check if we need to change the leadership form.
+	// There is a chance we just retain the current form.
+	curMin, curMax := t.Leadership.Form.RangeInfluence()
+	if curMin <= currentInfluence && curMax >= currentInfluence && rand.Intn(100) < 20 {
+		return t.Leadership.Form
+	}
+
+	natProg := t.Leadership.Form.NaturalProgression()
+	if len(natProg) == 0 {
+		log.Printf("!!!%s has no natural progression for %s", t.String(), t.Leadership.Form)
+		return fallbackForm
+	}
+
+	for i := range rand.Perm(len(natProg)) {
+		frm := natProg[i]
+		minInf, maxInf := frm.RangeInfluence()
+		if minInf <= currentInfluence && maxInf >= currentInfluence {
+			return frm
+		}
+	}
+	return t.Leadership.Form
+}
+
+// findCouProgression returns the possible progressio of the leadership form through a coup.
+func (t *Tribe) findCoupProgression() gengovernment.LeadershipForm {
+	// TODO: Pick from the preferred leadership forms.
+	var currentInfluence gengovernment.LeadershipInfluence
+	var fallbackForm gengovernment.LeadershipForm
+	switch t.Type {
+	case TribeTypeNomadic, TribeTypeSettling:
+		currentInfluence = gengovernment.LeadershipInfluenceTribe
+		fallbackForm = gengovernment.LeadershipFormChiefdom
+	case TribeTypeCity:
+		currentInfluence = gengovernment.LeadershipInfluenceSettlement
+		fallbackForm = gengovernment.LeadershipFormChiefdom
+	case TribeTypeCityState:
+		currentInfluence = gengovernment.LeadershipInfluenceCityState
+		fallbackForm = gengovernment.LeadershipFormMonarchy
+	case TribeTypeEmpire:
+		currentInfluence = gengovernment.LeadershipInfluenceEmpire
+		fallbackForm = gengovernment.LeadershipFormDictatorship
+	default:
+		log.Printf("!!!%s has an unknown tribe type: %d", t.String(), t.Type)
+		return t.Leadership.Form
+	}
+
+	// Check if we need to change the leadership form.
+	// There is a chance we just retain the current form.
+	curMin, curMax := t.Leadership.Form.RangeInfluence()
+	if curMin <= currentInfluence && curMax >= currentInfluence && rand.Intn(100) < 20 {
+		return t.Leadership.Form
+	}
+
+	natProg := t.Leadership.Form.CoupProgression()
+	if len(natProg) == 0 {
+		log.Printf("!!!%s has no natural progression for %s", t.String(), t.Leadership.Form)
+		return fallbackForm
+	}
+
+	for i := range rand.Perm(len(natProg)) {
+		frm := natProg[i]
+		minInf, maxInf := frm.RangeInfluence()
+		if minInf <= currentInfluence && maxInf >= currentInfluence {
+			return frm
+		}
+	}
+	return t.Leadership.Form
+}
+
+func (s *simState) placeTribeAt(r, pop int, parent *Tribe, randomize bool) *Tribe {
+	if s.tribeAtRegion[r] != nil {
+		panic(fmt.Sprintf("Tribe already at region %d", r))
+	}
+	var t *Tribe
+	if parent != nil {
+		// We split off a new tribe from the parent tribe.
+		t = parent.Split(pop, randomize, s.m)
+		historyMsg := fmt.Sprintf("Tribe %d (%d) split off tribe %d (%d) under the leadership of %s", t.ID, t.Population, parent.ID, parent.Population, t.Leadership.Name)
+		if randomize {
+			historyMsg += " (randomly)"
+		}
+		s.m.History.AddEvent("Founding (Tribe)", historyMsg, t.Ref())
+	} else {
+		// Since there is no parent, we found a new tribe.
+		t = NewTribe(r, pop, s.m, nil)
+		// TODO: Seed the tribe with the population.
+		t.People = s.m.placePopulationAt(r, pop, func(r int) *Culture {
+			if t.Culture == nil {
+				panic("Culture not found.")
+			}
+			return t.Culture
+		})
+		historyMsg := fmt.Sprintf("Tribe %d (%d) was founded by %s", t.ID, t.Population, t.Leadership.Name)
+		s.m.History.AddEvent("Founding (Tribe)", historyMsg, t.Ref())
+	}
+	s.moveTribe(t, r)
+	s.newTribes = append(s.newTribes, t)
 	log.Println("TODO: Generate culture.")
 	return t
 }
 
 // NewTribe returns a new tribe with the given population.
-func NewTribe(id, regionID, population int) *Tribe {
+func NewTribe(regionID, population int, m *Civ, c *Culture) *Tribe {
+	var lang *genlanguage.Language
+	if c != nil {
+		lang = c.Language
+	} else {
+		lang = GenLanguage(int64(regionID))
+		c = m.GetCulture(regionID)
+		if c == nil {
+			c = m.PlaceCultureAt(regionID, false, lang)
+		}
+		if c == nil {
+			panic("Culture not found.")
+		}
+	}
+
 	// Initialize the last 10 biomes with the current as -1.
 	var last100Biomes [100]int
 	for i := range last100Biomes {
 		last100Biomes[i] = -1
 	}
 	t := &Tribe{
-		ID:              id,
+		ID:              getNextTribeID(),
 		RegionID:        regionID,
 		Population:      population,
 		TribePreference: newTribePreference(),
@@ -170,12 +340,12 @@ func NewTribe(id, regionID, population int) *Tribe {
 		Type:            TribeTypeNomadic,
 		Satisfaction:    1.0,
 		SatisfactionAvg: NewRunningAverageLimit(100),
-		Language:        GenLanguage(int64(regionID)),
-		ResourceStorage: newResourceStorage(10),
-		dumbStorage:     newDumbStorage(),
+		Language:        lang,
+		Culture:         c,
+		ComboStorage:    newComboStorage(10),
 	}
 	// Generate leadership.
-	t.Leadership = genFaction(t.Language)
+	t.Leadership = genFaction(t, m, gengovernment.LeadershipFormChiefdom, nil)
 	return t
 }
 
@@ -229,7 +399,7 @@ func (t *Tribe) hasPath() bool {
 }
 
 // makeNomadic will make the tribe nomadic.
-func (t *Tribe) makeNomadic() {
+func (t *Tribe) makeNomadic(h *History) {
 	// TODO: If the tribe is in charge of a city state or empire, we'd need to handle that.
 	// Will we let the empire collapse, or do we allow the tribe to control the empire nomadically?
 	t.Type = TribeTypeNomadic
@@ -238,7 +408,7 @@ func (t *Tribe) makeNomadic() {
 	delete(t.Skills, SSkillSettling)
 	delete(t.Skills, SSkillSettlingHighland)
 	delete(t.Skills, SSkillSettlingWetlands)
-	log.Println("!!!Tribe", t.ID, "has become nomadic.")
+	h.AddEvent("Nomadic", fmt.Sprintf("Tribe %d (%d) has become nomadic.", t.ID, t.Population), t.Ref())
 }
 
 func (t *Tribe) changeSatisfaction(diff float64) {
@@ -255,7 +425,7 @@ func (t *Tribe) changeSatisfaction(diff float64) {
 	// We distribute the satisfaction change to the factions based on their influence.
 	var sumPop float64
 	for _, f := range t.Factions {
-		sumPop += float64(f.Leadership.Popularity)
+		sumPop += float64(f.Popularity)
 	}
 
 	// Now we distribute the satisfaction change to the factions.
@@ -280,14 +450,26 @@ func (t *Tribe) String() string {
 	if t.Leadership != nil {
 		leaderStr = " " + t.Leadership.String()
 	}
-	return fmt.Sprintf("Tribe %d (%s) in region %d with population %d; satisfaction %f (%q)%s%s", t.ID, proxStr, t.RegionID, t.Population, t.Satisfaction, t.GetCultureType(), cultureStr, leaderStr)
+	return fmt.Sprintf("Tribe %d (%s) in region %d with population %d; satisfaction %.2f (%q)%s%s", t.ID, proxStr, t.RegionID, t.Population, t.Satisfaction, t.GetCultureType(), cultureStr, leaderStr)
 }
+
+const (
+	growthRateSettled = 0.001 // 0.1% growth rate per year
+	growthRateNomadic = 0.001 // 0.1% growth rate per year for nomadic tribes
+)
 
 // Grow the population of the tribe for one year.
 func (t *Tribe) Grow() {
+	// Get the growth rate of the tribe.
+	// TODO: The growth rate should depend on the region type, the resources, etc.
+	gr := growthRateNomadic
+	if t.Type > TribeTypeSettling {
+		gr = growthRateSettled
+	}
+
 	// Calculate the population growth rate for the tribe.
 	// Use the exponential growth model.
-	newPop := float64(t.Population) * math.Pow(math.E, growthRate)
+	newPop := float64(t.Population) * math.Pow(math.E, gr)
 	if diff := newPop - float64(t.Population); diff < 1 {
 		// Use rand to potentially grow the population by one.
 		if rand.Float64() < diff {
@@ -349,10 +531,25 @@ func isAnyOf(b int, biomes []int) bool {
 	return false
 }
 
+// NewRandomPerson returns a new random person which is part of the tribe.
+func (t *Tribe) NewRandomPerson(m *Civ, gender geneticshuman.Gender) *Person {
+	p := m.newRandomPersonAt(t.RegionID, t.Culture, gender, nil)
+	t.People = append(t.People, p)
+	return p
+}
+
+// NewRandomChild returns a new random child which is part of the tribe and
+// is a child of the given person.
+func (t *Tribe) NewRandomChild(m *Civ, gender geneticshuman.Gender, parent *Person) *Person {
+	p := m.newRandomPersonAt(t.RegionID, t.Culture, gender, parent)
+	t.People = append(t.People, p)
+	return p
+}
+
 // Split the tribe into two tribes with a new one with the given population.
-func (t *Tribe) Split(id int, newPopulation int) *Tribe {
+func (t *Tribe) Split(newPopulation int, randomize bool, m *Civ) *Tribe {
 	t.Population -= newPopulation
-	nt := NewTribe(id, t.RegionID, newPopulation) // TODO: Generate a unique ID.
+	nt := NewTribe(t.RegionID, newPopulation, m, t.Culture) // TODO: Generate a unique ID.
 	nt.Type = t.Type
 	nt.Parent = t
 	nt.Satisfaction = t.Satisfaction // Maybe that should be different?
@@ -364,7 +561,6 @@ func (t *Tribe) Split(id int, newPopulation int) *Tribe {
 	// TODO: If we have a culture, we should copy it to the new tribe.
 	// We should also track religion and we either mutate the religion or
 	// or the culture of the new tribe.
-	log.Println("TODO: Mutate religion or culture and find a better way to fork language")
 	nt.Language = t.Language
 	nt.Religion = t.Religion // For now, we use the same religion.
 	nt.Culture = t.Culture   // For now, we use the same culture.
@@ -376,54 +572,61 @@ func (t *Tribe) Split(id int, newPopulation int) *Tribe {
 
 	// Generate leadership if no other faction exists.
 	if len(t.Factions) == 0 {
-		nt.Leadership = genFaction(nt.Language)
+		nt.Leadership = genFaction(nt, m, nt.getPreferredLeadershipForm(), nil)
 	} else {
 		// Promote the most popular faction to the new tribe.
 		// TODO: The population of the new tribe should depend on the popularity of the faction.
 		sort.Slice(t.Factions, func(i, j int) bool {
-			return t.Factions[i].Leadership.Popularity > t.Factions[j].Leadership.Popularity
+			return t.Factions[i].Popularity > t.Factions[j].Popularity
 		})
 		nt.Leadership = t.Factions[0]
 		t.Factions = t.Factions[1:]
-	}
-	return nt
-}
 
-func (t *Tribe) RandomSplit(nextID int) *Tribe {
-	// The tribe is unhappy and might split.
-	nt := t.Split(nextID, rand.Intn(t.Population)/2)
-
-	// If the original tribe satisfaction was low, we increase the satisfaction of the new tribe.
-	if t.Satisfaction < 0.3 {
-		nt.changeSatisfaction(tribeSplitVoluntarySatisfaction)
-	}
-
-	// There is a random chance that the tribe will leave due to a vision or a spiritual calling.
-	nt.gotVision = rand.Intn(100) < 50
-
-	if rand.Intn(100) < 10 {
-		// There is a chance that the new tribe will revert to being nomadic.
-		// TODO: Find a way to have a religion that doesn't require a spiritual center.
-		// One way to solve this is to have a place of pilgrimage that the tribe can visit
-		// but then we'd have to make sure that the religion doesn't really spread from there
-		// but rather from the practitioners (tribes, etc.).
-		nt.makeNomadic()
-	} else {
-		// Make sure the tribe will look for a new region to settle in.
-		nt.Type = TribeTypeSettling
-		nt.SetPath(nil)
-		nt.doneSettling = false
+		// Move the faction leadership to the new tribe.
+		// TODO: Make sure to move all people from the faction to the new tribe.
+		var tPeople, ntPeople []*Person
+		newTribePeople := make(map[*Person]bool)
+		for _, p := range nt.Leadership.Leaders() {
+			newTribePeople[p] = true
+		}
+		for pIdx := range rand.Perm(len(t.People)) {
+			p := t.People[pIdx]
+			if !newTribePeople[p] {
+				tPeople = append(tPeople, p)
+			} else if len(ntPeople) < newPopulation {
+				ntPeople = append(ntPeople, p)
+			}
+		}
+		t.People = tPeople
+		nt.People = ntPeople
 	}
 
-	// There is a chance that the new tribe will have some preferences reset.
-	nt.TribePreference.RandomReset()
+	if randomize {
+		// There is a random chance that the tribe will leave due to a vision or a spiritual calling.
+		nt.gotVision = rand.Intn(100) < 50
 
-	log.Printf("!!!%s has split into %s and %s.", t.String(), t.String(), nt.String())
+		if rand.Intn(100) < 10 {
+			// There is a chance that the new tribe will revert to being nomadic.
+			// TODO: Find a way to have a religion that doesn't require a spiritual center.
+			// One way to solve this is to have a place of pilgrimage that the tribe can visit
+			// but then we'd have to make sure that the religion doesn't really spread from there
+			// but rather from the practitioners (tribes, etc.).
+			nt.makeNomadic(m.History)
+		} else {
+			// Make sure the tribe will look for a new region to settle in.
+			nt.Type = TribeTypeSettling
+			nt.SetPath(nil)
+			nt.doneSettling = false
+		}
+
+		// There is a chance that the new tribe will have some preferences reset.
+		nt.TribePreference.RandomReset()
+	}
 	return nt
 }
 
 // DevelopSkills develops the skills of the tribe based on the biome and region type.
-func (t *Tribe) DevelopSkills(curRegProp *RegionProp, resPres *ResourcePresence) {
+func (t *Tribe) DevelopSkills(curRegProp *RegionProp, resPres *ResourcePresence, h *History) {
 	// Check all possible skills and check if we can develop them.
 SkillLoop:
 	for _, s := range Skills {
@@ -439,7 +642,9 @@ SkillLoop:
 		if s.CanDevelopIn(curRegProp, resPres) && s.DevelopAt(t.LastBiomes.GetScoreOf(curRegProp.Biome)) {
 			t.Skills[s] = true
 			s.EffectOnTribe(t)
-			log.Printf("Tribe %d developed the skill %s", t.ID, s.Name)
+			// Add a history entry.
+			historyMsg := fmt.Sprintf("Tribe %d developed the skill %s", t.ID, s.Name)
+			h.AddEvent("Development", historyMsg, t.Ref())
 		}
 	}
 }

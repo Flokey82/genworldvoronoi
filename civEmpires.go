@@ -208,6 +208,7 @@ type Empire struct {
 	// TODO: DO NOT CACHE THIS!
 	Regions []int // Regions that are part of the empire
 	*geo.Stats
+	*ComboStorage // Resources the empire has.
 }
 
 func (e *Empire) compare(other *Empire) float64 {
@@ -242,14 +243,18 @@ func (m *Civ) placeEmpireAt(r int, c *City) *Empire {
 		lang = GenLanguage(m.Seed + int64(r))
 	}
 	e := &Empire{
-		ID:       r,
-		Name:     lang.MakeName(),
-		Emperor:  lang.MakeFirstName() + " " + lang.MakeLastName(),
-		Capital:  c,
-		Culture:  c.Culture,
-		Language: lang,
+		ID:           r,
+		Name:         lang.MakeName(),
+		Emperor:      lang.MakeFirstName() + " " + lang.MakeLastName(),
+		Capital:      c,
+		Culture:      c.Culture,
+		Language:     lang,
+		ComboStorage: newComboStorage(100000), // TODO: Storage should be upgradable.
 	}
 	m.Empires = append(m.Empires, e)
+
+	// Add a new event to the history.
+	m.History.AddEvent("Founding (Empire)", fmt.Sprintf("The Empire of %s was founded", e.Name), c.Ref())
 	return e
 }
 

@@ -58,7 +58,11 @@ func (m *Civ) InitSimTribes() {
 	m.Tribes = make([]*Tribe, 0, 1)
 
 	// Start with one tribe.
-	t := NewTribe(m.getNextTribeID(), bestRegion, initialPopulation)
+	t := NewTribe(bestRegion, initialPopulation, m, nil)
+	// TODO: Seed the tribe with the population.
+	t.People = m.placePopulationAt(bestRegion, initialPopulation, func(r int) *Culture {
+		return t.Culture
+	})
 	m.Tribes = append(m.Tribes, t)
 }
 
@@ -72,17 +76,48 @@ func (m *Civ) LogTribes() {
 		// Log current leadership.
 		if t.Leadership != nil {
 			log.Printf("  Leader: %s", t.Leadership.String())
+			// Log leadership and their parents (if any).
+			for _, p := range t.Leadership.Leaders() {
+				log.Printf("    %s", p.String())
+				log.Printf("    %s", p.StringGenes())
+				if p.Father != nil {
+					log.Printf("      Father: %s", p.Father.String())
+					log.Printf("      %s", p.Father.StringGenes())
+				}
+				if p.Mother != nil {
+					log.Printf("      Mother: %s", p.Mother.String())
+					log.Printf("      %s", p.Mother.StringGenes())
+				}
+			}
 		}
 		// Log all factions.
 		for _, f := range t.Factions {
 			log.Printf("  Faction: %s", f.String())
+			// Log leadership and their parents (if any).
+			for _, p := range f.Leaders() {
+				log.Printf("    %s", p.String())
+				log.Printf("    %s", p.StringGenes())
+				if p.Father != nil {
+					log.Printf("      Father: %s", p.Father.String())
+					log.Printf("      %s", p.Father.StringGenes())
+				}
+				if p.Mother != nil {
+					log.Printf("      Mother: %s", p.Mother.String())
+					log.Printf("      %s", p.Mother.StringGenes())
+				}
+			}
 		}
 		// Log all skills.
 		for sk := range t.Skills {
 			log.Printf("  %s", sk.Name)
 		}
+		// Log dumbStorage.
+		log.Printf("  %s", t.dumbStorage.String())
 		if t.Settlement != nil {
 			log.Printf("  Settlement: %s", t.Settlement.String())
+			log.Printf("  %s", t.Settlement.dumbStorage.String())
+			log.Printf(" Resouces (settlement storage):")
+			t.Settlement.ResourceStorage.Log()
 		}
 		if t.CityState != nil {
 			log.Printf("  City state: %s", t.CityState.String())
@@ -105,16 +140,33 @@ func (m *Civ) LogTribes() {
 		regRes.Remove(localRes).Log()
 		log.Printf(" Resouces (storage):")
 		t.ResourceStorage.Log()
+		log.Printf("  History:")
+		ref := t.Ref()
+		for _, h := range m.History.GetEvents(ref.ID, ref.Type) {
+			log.Printf("    %d: %s", h.Year, h.String())
+		}
 	}
 
 	// Log the city states.
 	for _, cs := range m.CityStates {
 		cs.Log()
+		log.Printf("  %s", cs.dumbStorage.String())
+		log.Printf(" Resouces (city state storage):")
+		cs.ResourceStorage.Log()
 	}
 
 	// Log the empires.
 	for _, e := range m.Empires {
 		e.Log()
+		log.Printf("  %s", e.dumbStorage.String())
+		log.Printf(" Resouces (empire storage):")
+		e.ResourceStorage.Log()
+	}
+
+	// Log history.
+	log.Println("History:")
+	for _, h := range m.History.Events {
+		log.Printf("%d: %s", h.Year, h.String())
 	}
 }
 
@@ -153,9 +205,13 @@ func (s *simState) moveTribe(t *Tribe, r int) {
 
 // switchTribes switches the current regions of the two tribes.
 func (s *simState) switchTribes(t1, t2 *Tribe) {
+	log.Printf("Switching tribes %s and %s", t1.String(), t2.String())
 	// Switch the regions of the two tribes.
 	region1 := t1.RegionID
 	region2 := t2.RegionID
+	if t1.RegionID == t2.RegionID {
+		panic("tribes are already in the same region")
+	}
 	// HACK: Nil the tribe at the old region.
 	// This will prevent a panic in moveTribe.
 	// We need to debug duplicate tribes at the same region.
@@ -405,18 +461,22 @@ func (s *simState) checkRandomSplit(t *Tribe) {
 	// TODO: Evaluate the happiness of the tribe and if it's unhappy, it might
 	// split and a new tribe might try to settle in a different region.
 	if rand.Intn(1000) < 2 && t.Population > 100 {
-		// Make sure the new tribe will be picked up in the next iteration.
-		newTribe := t.RandomSplit(s.m.getNextTribeID())
-
 		// Move the new tribe to a new region.
 		var foundNewRegion bool
+		// TODO: Sort regions by current max population and bound the new tribe's population to the max population of
+		// the most suitable region.
 		for _, nb := range s.m.R_circulate_r(rNbs, t.RegionID) {
 			// Do not place them in oceans or lakes.
 			if s.m.IsRegLakeOrWaterBody(nb) || s.m.Elevation[nb] <= 0 {
 				continue
 			}
 			if s.tribeAtRegion[nb] == nil {
-				s.moveTribe(newTribe, nb)
+				newTribe := s.placeTribeAt(nb, rand.Intn(t.Population)/2, t, true)
+
+				// If the original tribe satisfaction was low, we increase the satisfaction of the new tribe.
+				if t.Satisfaction < 0.3 {
+					newTribe.changeSatisfaction(tribeSplitVoluntarySatisfaction)
+				}
 				foundNewRegion = true
 				break
 			}
@@ -424,7 +484,6 @@ func (s *simState) checkRandomSplit(t *Tribe) {
 		if !foundNewRegion {
 			panic("no region found for new tribe")
 		}
-		s.newTribes = append(s.newTribes, newTribe)
 	}
 }
 
@@ -447,9 +506,14 @@ func (m *Civ) tickSimTribes() {
 
 	// Assign the tribes to their regions.
 	for _, t := range m.Tribes {
+		if t.Population == 0 {
+			// The tribe has died out.
+			continue
+		}
 		// Make sure that two tribes are not in the same region.
 		if s.tribeAtRegion[t.RegionID] != nil {
 			occupiers := s.tribeAtRegion[t.RegionID]
+			log.Println("Tribe", t.ID, "cannot be in region", t.RegionID)
 			log.Printf("Tribe %d (pop %d) is already in region %d.", occupiers.ID, occupiers.Population, t.RegionID)
 			log.Printf("Tribe %d (pop %d) is trying to settle in region %d.", t.ID, t.Population, t.RegionID)
 			panic("tribe already in region")
@@ -490,6 +554,7 @@ func (m *Civ) tickSimTribes() {
 			s.tribeAtRegion[t.RegionID] = nil
 			continue
 		}
+		s.newTribes = append(s.newTribes, t)
 
 		// Grow the population of the tribe.
 		// TODO: Change growth rate based on suitability of the region,
@@ -526,7 +591,7 @@ func (m *Civ) tickSimTribes() {
 		resPres := m.getResourcePresence(t.RegionID)
 
 		// Develop the skills of the tribe given the current region.
-		t.DevelopSkills(&curRegProp, resPres)
+		t.DevelopSkills(&curRegProp, resPres, m.History)
 
 		// Exhaust the resources of the region.
 		m.SoilExhaustion[t.RegionID] += float64(t.Population) / t.SustainabilityFactor(&curRegProp, resPres)
@@ -536,59 +601,6 @@ func (m *Civ) tickSimTribes() {
 		t.regionMaxPop = s.calcTheoreticalMaxPopPerRegion(t, t.RegionID)
 		t.currentRegionMaxPop = maxRegionPop
 
-		// Random events.
-		{
-			// Random bad things can happen.
-			// TODO: Maybe introduce some modifiers that are gained by these events.
-			// Good events:
-			// - Good harvest could increase the population growth rate or improve soil fertility / reduce soil exhaustion.
-			// - Good weather could give a bonus to positve satisfaction changes and reduce negative satisfaction changes.
-			// - Good fortune could improve defense or offense of the tribe, or some magical or religious event.
-			//   Maybe they gain a relic or a new skill.
-			// Bad events:
-			// - Bad events could reduce economic output or destroy resources.
-			// - Floods could reduce population growth or destroy resources but also increase soil fertility.
-			// TODO: The magnitude of change should depend on the severity of the bad or good thing.
-			const (
-				goodThingSatChange = 0.1
-				badThingSatChange  = -0.1
-			)
-			if rand.Intn(1000) < 2 {
-				// Random good things can happen, increase the satisfaction of the tribe.
-				goodThings := []string{
-					"good harvest",
-					"good weather",
-					"good fortune",
-				}
-				goodThing := goodThings[rand.Intn(len(goodThings))]
-				t.changeSatisfaction(goodThingSatChange)
-				log.Printf("Good thing happened to tribe %d: %s", t.ID, goodThing)
-			} else if rand.Intn(1000) < 2 {
-				// Random bad things can happen, reduce the satisfaction of the tribe.
-				possibleBadThings := []string{
-					"bad harvest",
-					"bad weather",
-					"bad fortune",
-					"illness",
-				}
-				if curRegProp.Mountain {
-					possibleBadThings = append(possibleBadThings, "earthquake", "rockslide")
-				}
-				if curRegProp.River {
-					possibleBadThings = append(possibleBadThings, "flood")
-				}
-				if curRegProp.Ocean {
-					possibleBadThings = append(possibleBadThings, "malaria")
-				}
-				if curRegProp.Lake {
-					possibleBadThings = append(possibleBadThings, "tsunami")
-				}
-				badThing := possibleBadThings[rand.Intn(len(possibleBadThings))]
-				t.changeSatisfaction(badThingSatChange)
-				log.Printf("Bad thing happened to tribe %d: %s", t.ID, badThing)
-			}
-		}
-
 		// Get the multiplier for the region, which will double as the satisfaction of the tribe.
 		// This will be used to determine if the tribe is happy or not with the current region.
 		t.changeSatisfaction(0.5 * (s.getRegMultiplier(t, t.RegionID) - float64(t.Satisfaction)))
@@ -597,122 +609,145 @@ func (m *Civ) tickSimTribes() {
 			t.printTribePreferences()
 		}
 
-		// Update tribe actions based on satisfaction.
-		{
-			// Update existing factions.
-			// - If a faction has a popularity of 0, it should be removed.
-			// - Either exile, kill, or merge with another faction.
-			// Factions should have independent actions, etc.
-			// - Factions with high popularity unlock new actions, etc.
-			// - Available action depends on sponsorship, popularity, etc.
-			// - We will need to keep track of notable sponsors and members.
-			// Example actions:
-			// - Charitable actions (help the poor, etc.)
-			// - Userper actions (try to take over the tribe)
-			// - Religious actions (try to convert the tribe to a new religion)
-			// - Intrigue actions (try to kill the leadership, etc.)
+		// TODO: Tick culture and religion.
+		if t.Culture != nil {
+			// t.Culture.Tick()
+			// The culture can develop new specializations, etc. based on the region(s) they are in.
+			// If they have access to specific resources or have a above average number of poeple with a
+			// specific occupation, they might develop a new specialization or become renowned for a specific
+			// skill.
+			// - This could also lead to the tribe becoming known for a specific product, etc.
+			// - The tribe might also develop a bonus for a specific action, etc.
+			// - The tribe might also develop a new skill, etc.
+			//
+			// A culture would have certain customs that are acceptable or inacceptable like:
+			// - Eating habits (cannibalism, vegetarianism, etc.)
+			// - Clothing (nudity, specific colors, etc.)
+			// - Marriage (polygamy, monogamy, etc.)
+			// - Social structure (caste system, etc.)
+			// - Slavery (acceptable, inacceptable, etc.)
+			//
+			// The culture might also have specific rituals, etc.
+			// - Birth rituals
+			// - Death rituals
+			// - Marriage rituals
+			// - Coming of age rituals
+			// - War rituals
+			//
+			// Certain events might be more or less important to the culture, etc.
+			//
+			// Certain behaviors or characteristics might be more or less important.
+			// Base stats (physical):
+			// - Strength
+			// - Intelligence
+			// - Dexterity
+			// - Resilience
 
-			// The lower the satisfaction, the higher the chance that a faction will form.
-			if t.Satisfaction < 0.75 && rand.Float64() > float64(t.Satisfaction) {
-				log.Printf("Tribe %d is unhappy. A new faction might form.", t.ID)
-				if len(t.Factions) == 0 || rand.Float64() < 0.1/float64(len(t.Factions)) {
-					f := genFaction(t.Language)
-					t.Factions = append(t.Factions, f)
-					log.Printf("Tribe %d has formed a new faction %s.", t.ID, f.String())
-				} else if len(t.Factions) > 0 && rand.Float64() > float64(t.Leadership.Popularity) {
-					// There is a chance that a faction, more popular than the leadership, will try to take over.
-					// Sort the factions by popularity.
-					sort.Slice(t.Factions, func(i, j int) bool {
-						return t.Factions[i].Popularity > t.Factions[j].Popularity
-					})
+			// The culture might also have certain virtues, etc.
+			// - Brave / Craven
+			// - Calm / Wrathful
+			// - Chaste / Lustful
+			// - Content / Ambitious
+			// - Diligent / Lazy
+			// - Forgiving / Vengeful
+			// - Generous / Greedy
+			// - Gregarious / Solitary
+			// - Honest / Deceitful
+			// - Humble / Arrogant
+			// - Just / Arbitrary
+			// - Patient / Impatient
+			// - Temperate / Indulgent
+			// - Trusting / Paranoid
+			// - Zealous / Cyincal
+			// - Compassionate / Callous / Cruel
+			// - Fickle / Steadfast / Eccentric
 
-					if topFaction := t.Factions[0]; topFaction.Popularity > t.Leadership.Popularity {
-						// The top faction will take over.
-						// Depending on chance and popularity, it might kill the leadership, or simply replace it.
-						//
-						// TODO:
-						// - Take note of this event.
-						// - Change opinion of factions, etc.
-						if oldLeadership := t.Leadership; rand.Float64() > float64(oldLeadership.Popularity) {
-							// The more unpopular the leadership, the higher the chance that leadership will be killed.
-							if t.Population > len(oldLeadership.Leaders)+len(topFaction.Leaders) {
-								t.Population -= len(oldLeadership.Leaders)
-							} else {
-								log.Printf("%s the population is less than the number of leaders!", t.String())
-							}
-							log.Printf("%s: Leadership %s eliminated by %s", t.String(), oldLeadership.String(), topFaction.String())
-							t.Leadership = topFaction
-							t.Factions = t.Factions[1:]
-						} else {
-							// The faction will simply replace the current leadership.
-							log.Printf("%s: Leadership %s replaced by %s", t.String(), oldLeadership.String(), topFaction.String())
-							t.Leadership, t.Factions[0] = topFaction, oldLeadership
-						}
-					}
-				}
-			}
+			// There are actions a culture can take which have associated attributes or virtues.
+			// Depending on the outcome, the culture might start to value certain virtues more or less.
+
+			// Depending on the environment, and the economy, the culture might value certain stats more or less.
+			// - In a harsh environment, resilience might be more important.
+			// - A culture depending on hunting might value strength or dexterity more.
+			// - A culture depending on trade might value intelligence more.
+			// etc.
+
+			// We need to compare the current requirements for the culture with what the tribe values.
+			// If the tribe values the same things that are required of them, they will be more satisfied.
+			// If there is a large discrepancy, they will be less satisfied and there might be unrest, etc.
 		}
 
-		// TODO: Move this to the individual tribe handling functions.
+		if t.Religion != nil {
+			// TODO:
+			// - Determine a value representing how "in tune" the tribe is with their religion.
+			// - This could be a running value that is calculated based on the actions of the tribe.
+			// - If an action is in line with the religion, the value goes up, otherwise it goes down.
+			// - If the value is high, good things might happen, if it is low, bad things might happen.
+
+			// There should be values that track the religion:
+			// - Piety
+			// - Happiness
+			// - ...
+			//
+			// Any action directly related to the religion should increase the piety of the tribe
+			// but can either increase or decrease the happiness of the tribe.
+			// A malevolent god might cause misfortune and plagues, etc.
+		}
+
+		// Random events.
+		s.handleEvents(t, curRegProp)
+
+		// Update the leadership and factions.
+		s.handleLeadership(t)
+
+		// Handle resource extraction.
 		s.handleResources(t)
 
-		// TODO: If we have a city, city state, or empire set, we need to handle all of these.
+		// There is a chance that part of the tribe will split off and form a new tribe to
+		// follow some other vision or to settle in a different region.
+		if t.Type > TribeTypeNomadic {
+			s.checkRandomSplit(t)
+		}
 
-		switch t.Type {
-		case TribeTypeNomadic:
+		if t.Type == TribeTypeNomadic {
 			// The tribe is still nomadic, so we migrate the tribe to the most suitable region.
 			// If the tribe is too large for the region, we split the tribe into two or more tribes.
-			// The tribe might die out if it cannot find a suitable region to settle in.
+			// The tribe might die out if it cannot find a suitable region to move to.
 			s.handleNomadicTribe(t)
-		case TribeTypeSettling:
-			// Check if the tribe has settled in a region.
-			if t.doneSettling {
-				panic("Tribe is already settled, this should not happen")
-			}
-
-			// If the tribe is settled, we need to find the best region to settle in,
-			// create a settlement, and convert the tribe into a culture.
-
-			// There is a chance that part of the tribe will split off and form a new tribe to
-			// follow some other vision or to settle in a different region.
-			s.checkRandomSplit(t)
-			// The tribe is still looking for a region to settle in or moving to the region
-			// where it wants to settle.
+		} else if t.Type == TribeTypeSettling {
+			// The tribe has decided to settle, so we move to the most suitable region within a certain radius.
 			s.handleSettlingTribe(t)
+		} else {
+			// We have settled, so we need to update all the things we are in charge of.
+			if t.Type >= TribeTypeCity {
+				s.handleTradeCity(t)
+				s.handleCity(t)
+			}
+			if t.Type >= TribeTypeCityState {
+				s.handleTradeCityState(t)
+				s.handleCityState(t)
+			}
+			if t.Type >= TribeTypeEmpire {
+				s.handleTradeEmpire(t)
+				s.handleEmpire(t)
+			}
+		}
 
-			// Update the tribe on the next turn.
-			s.newTribes = append(s.newTribes, t)
-		case TribeTypeCity:
-			// There is a chance that part of the tribe will split off and form a new tribe to
-			// follow some other vision or to settle in a different region.
-			s.checkRandomSplit(t)
-
-			// The tribe has successfully settled in a region.
-			s.handleCity(t)
-
-			// Update the tribe on the next turn.
-			s.newTribes = append(s.newTribes, t)
-		case TribeTypeCityState:
-			// There is a chance that part of the tribe will split off and form a new tribe to
-			// follow some other vision or to settle in a different region.
-			s.checkRandomSplit(t)
-
-			// Check if we can add some cities to our city state.
-			s.handleCityState(t)
-
-			// Update the tribe on the next turn.
-			s.newTribes = append(s.newTribes, t)
-		case TribeTypeEmpire:
-			s.handleEmpire(t)
-
-			// Update the tribe on the next turn.
-			s.newTribes = append(s.newTribes, t)
+		// Update the tribe's population.
+		t.People = s.m.tickPeople(t.People, 365, func(r int) *Culture {
+			return t.Culture
+		}, t.Population)
+		for _, p := range t.People {
+			if p.Dead() {
+				continue
+			}
+			// Update the location of the person.
+			m.updatePersonLocation(p, t.RegionID)
 		}
 	}
-	// TODO: Update satisfaction / happiness of the tribes.
 
-	// Check if we need to update the cultures.
+	// Check if we need to expand the cultures.
 	// TODO: Make expansion dependent on prosperity of the cultures.
+	// TODO: Check if culture is extinct.
 	var cultureSeeds []int
 	for _, c := range s.newTribes {
 		if c.Culture != nil && c.Population > 0 {
@@ -720,14 +755,13 @@ func (m *Civ) tickSimTribes() {
 		}
 	}
 	for _, c := range s.m.Cultures {
-		// TODO: Check if culture is extinct.
 		cultureSeeds = append(cultureSeeds, c.ID)
 	}
 	if len(cultureSeeds) > 0 {
 		m.expandCultures(true, dedupInts(cultureSeeds))
 	}
 
-	// Check if we need to update the city states.
+	// Check if we need to expand the city states.
 	// TODO: Make expansion dependent on prosperity of the city states.
 	var cityStateSeeds []int
 	for _, c := range s.newTribes {
@@ -745,7 +779,7 @@ func (m *Civ) tickSimTribes() {
 		m.expandCityStates(true, dedupInts(cityStateSeeds))
 	}
 
-	// Check if we need to update the empires.
+	// Check if we need to expand the empires.
 	var empireSeeds []int
 	for _, c := range s.newTribes {
 		if c.Empire != nil && c.Population > 0 {
@@ -760,15 +794,12 @@ func (m *Civ) tickSimTribes() {
 	}
 	if len(empireSeeds) > 0 {
 		m.expandEmpires()
-
 		// TODO: Align with other implementations.
 	}
 	m.Tribes = s.newTribes
 }
 
-const numYears = 40000   // Number of years to simulate.
-const growthRate = 0.001 // 0.1% growth rate per year
-const popDensity = 10    // 10 people per km^2
+const numYears = 40000 // Number of years to simulate.
 
 type HackyBiome int
 

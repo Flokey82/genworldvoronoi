@@ -244,13 +244,13 @@ func (m *Civ) placeReligionAt(r int, founded int64, group string, culture *Cultu
 	// has split off from the parent.
 	// TODO: Pick random person from the local population to be the founder.
 	if parent != nil {
-		m.History.AddEvent("Religion", fmt.Sprintf("%s split from %s", relg.Name, parent.Name),
+		m.History.AddEvent("Founding (Religion)", fmt.Sprintf("%s split from %s", relg.Name, parent.Name),
 			ObjectReference{
 				Type: ObjectTypeReligion,
 				ID:   relg.ID,
 			})
 	} else {
-		m.History.AddEvent("Religion", fmt.Sprintf("%s was founded", relg.Name),
+		m.History.AddEvent("Founding (Religion)", fmt.Sprintf("%s was founded", relg.Name),
 			ObjectReference{
 				Type: ObjectTypeReligion,
 				ID:   relg.ID,

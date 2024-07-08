@@ -1,6 +1,7 @@
 package genworldvoronoi
 
 import (
+	"fmt"
 	"log"
 	"math"
 	"math/rand"
@@ -189,6 +190,8 @@ func (s *simState) handleEstablishingSettlement(t *Tribe) {
 	}
 	t.doneSettling = true
 	t.Type = TribeTypeCity
+	// Evolve the government.
+	t.Leadership.ChangeType(FactionTypeCivil, t.findNaturalProgression(), s.m.History)
 
 	// If we found this region through the gods, we establish a new religion, either
 	// as a variant of the original religion or as a new, independent religion.
@@ -203,9 +206,14 @@ func (s *simState) handleEstablishingSettlement(t *Tribe) {
 		}
 		t.Religion = s.m.placeReligionAt(t.RegionID, -1, group, t.Culture, t.Culture.Language, t.Religion)
 		t.Culture.Religion = t.Religion
-		log.Println("Tribe", t.ID, "has received a vision from the gods and settled in region", t.RegionID, "and follows the religion of", t.Religion.String())
+
+		// Add a history entry.
+		historyMsg := fmt.Sprintf("Tribe %s has received a vision from the gods and settled in region %d and follows the religion of %s.", t.String(), t.RegionID, t.Religion.String())
+		s.m.History.AddEvent("Religion", historyMsg, t.Ref())
 	} else {
-		log.Println("Tribe", t.ID, "has settled in region", t.RegionID, "with a population of", t.Population, "and a culture of", t.Culture.Type)
+		// Add a history entry.
+		historyMsg := fmt.Sprintf("Tribe %s has settled in region %d with a population of %d and a culture of %s.", t.String(), t.RegionID, t.Population, t.Culture.Type)
+		s.m.History.AddEvent("Settlement", historyMsg, t.Ref())
 	}
 }
 

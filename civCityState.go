@@ -42,6 +42,7 @@ type CityState struct {
 	// TODO: DO NOT CACHE THIS!
 	Regions []int
 	*geo.Stats
+	*ComboStorage // Resources the city state has.
 }
 
 func (c *CityState) compare(other *CityState) float64 {
@@ -69,13 +70,14 @@ func (c *CityState) Log() {
 
 func (m *Civ) PlaceCityStateAt(r int, c *City) *CityState {
 	cs := &CityState{
-		ID:      r,
-		Capital: c,
-		Culture: m.GetCulture(r),
-		Founded: c.Founded,            // TODO: Use current year.
-		Cities:  []*City{c},           // TODO: ??? Remove this?
-		Regions: []int{r},             // TODO: ??? Remove this?
-		Stats:   m.GetStats([]int{r}), // TODO: ??? Remove this?
+		ID:           r,
+		Capital:      c,
+		Culture:      m.GetCulture(r),
+		Founded:      c.Founded,              // TODO: Use current year.
+		Cities:       []*City{c},             // TODO: ??? Remove this?
+		Regions:      []int{r},               // TODO: ??? Remove this?
+		Stats:        m.GetStats([]int{r}),   // TODO: ??? Remove this?
+		ComboStorage: newComboStorage(10000), // TODO: Storage should be upgradable.
 	}
 
 	// If there is no known culture, generate a new one.
@@ -85,6 +87,9 @@ func (m *Civ) PlaceCityStateAt(r int, c *City) *CityState {
 
 	m.CityStates = append(m.CityStates, cs)
 	// TODO: Name? Language?
+
+	// Add a new event to the history.
+	m.History.AddEvent("Founding (City State)", fmt.Sprintf("City state of %s was founded", cs.Capital.Name), c.Ref())
 	return cs
 }
 

@@ -104,8 +104,6 @@ func (s *simState) handleResources(t *Tribe) {
 	foodHuntingPerPerson := possibleFoodHuntingPerPersonMin + (possibleFoodHuntingPerPersonMax-possibleFoodHuntingPerPersonMin)*regHunting
 	foodGatheringPerPerson := possibleFoodGatheringPerPersonMin + (possibleFoodGatheringPerPersonMax-possibleFoodGatheringPerPersonMin)*regGathering
 
-	log.Printf("!!!%s is hunting: %.2f, gathering: %.2f.", t.String(), regHunting, regGathering)
-
 	// Calculate how much food the tribe can produce.
 	// Half of the population is available for hunting.
 	// The rest might be too young, too old.
@@ -127,7 +125,7 @@ func (s *simState) handleResources(t *Tribe) {
 
 	// Calculate the food production for gathering.
 
-	log.Printf("!!!%s is producing food: %d total; %d from hunting (%d people), %d from gathering (%d people).", t.String(), int(foodHunting+foodGathering), int(foodHunting), int(popHunting), int(foodGathering), int(popGathering))
+	log.Printf("!!!%s is producing food: %d total; %d from hunting (%.2f, %d people), %d from gathering  %.2f, %d people).", t.String(), int(foodHunting+foodGathering), int(foodHunting), regHunting, int(popHunting), int(foodGathering), regGathering, int(popGathering))
 
 	// Produce food, mainly to feed our population, but also keep some in storage.
 	// m.Suitability[t.RegionID]
@@ -151,19 +149,6 @@ func (s *simState) handleResources(t *Tribe) {
 	// - Tools
 	// - Weapons
 	// - Buildings
-
-	const requiredFodPerPerson = 1.0
-	const requiredFirewoodPerPerson = 0.5 // This should depend on the climate
-
-	foodRequired := float64(t.Population) * requiredFodPerPerson
-	firewoodRequired := float64(t.Population) * requiredFirewoodPerPerson
-
-	if foodHunting+foodGathering < foodRequired {
-		log.Printf("!!!%s is starving. Food production: %d, required: %.2f.", t.String(), int(foodHunting+foodGathering), foodRequired)
-	}
-	if foodHunting+foodGathering < firewoodRequired {
-		log.Printf("!!!%s is freezing. Firewood production: %d, required: %.2f.", t.String(), int(foodHunting+foodGathering), firewoodRequired)
-	}
 
 	// Nomadic tribes will just hunt and gather.
 	// They can produce some simple tools and simple weapons that will increase their efficiency
@@ -189,21 +174,61 @@ func (s *simState) handleResources(t *Tribe) {
 
 	// Generate resources based on the local resources.
 	// If we aren't settled, we only can gather resources from the region we are in.
-	if t.Type == TribeTypeNomadic {
-		res := s.m.getResources(t.RegionID, false)
-		t.ResourceStorage.Add(res)
-		t.dumbStorage.resources[StorageWood] = sumResource(t.ResourceStorage.Wood[:])
+	// TODO: Introduce separate resource storage for settlements, city states, and empires.
+	var res LocalResouces
+	var storage *ComboStorage
+	if t.Type <= TribeTypeSettling {
+		res = s.m.getResources(t.RegionID, false)
+		storage = t.ComboStorage
 	} else {
-		// TODO: Introduce storage for settlements, city states, and empires.
-		res := s.m.getResources(t.RegionID, true)
-		t.ResourceStorage.Add(res)
-		t.dumbStorage.resources[StorageWood] = sumResource(t.ResourceStorage.Wood[:])
+		res = s.m.getResources(t.RegionID, true)
+		storage = t.Settlement.ComboStorage
 	}
-	// build stuff
-	t.dumbStorage.resources[StorageFood] += int(foodHunting + foodGathering)
-	t.dumbStorage.resources[StorageLeather] += int(foodHunting)
-	t.dumbStorage.resources[StorageWood] += int(foodGathering)
+
+	// Add the resources to the storage.
+	storage.ResourceStorage.Add(res)
+	storage.resources[StorageWood] = sumResource(storage.Wood[:])
+	storage.resources[StorageFood] += int(foodHunting + foodGathering)
+	storage.resources[StorageLeather] += int(foodHunting)
+	storage.resources[StorageWood] += int(foodGathering)
+
+	// TODO: Move food and firewood consumption to a separate function.
+	const requiredFoodPerPerson = 1.0
+	const requiredFirewoodPerPerson = 0.5 // This should depend on the climate
+
+	foodNeeded := t.Population * requiredFoodPerPerson
+	storage.resources[StorageFood] -= foodNeeded
+	if storage.resources[StorageFood] < 0 {
+		log.Printf("Tribe %s needs more food. %d/%d", t.String(), storage.resources[StorageFood], foodNeeded)
+		storage.resources[StorageFood] = 0 // TODO: Kill off some people
+	}
+
+	firewoodNeeded := int(float64(t.Population) * requiredFirewoodPerPerson)
+	storage.resources[StorageWood] -= firewoodNeeded
+	if storage.resources[StorageWood] < 0 {
+		log.Printf("Tribe %s needs more firewood. %d/%d", t.String(), storage.resources[StorageWood], firewoodNeeded)
+		storage.resources[StorageWood] = 0 // TODO: Kill off some people
+	}
+
+	// If we lack food or firewood, we need to find a strategy to get more.
+	// - We can trade for it.
+	// - We can produce more (more efficiently, or just more of it)
+
+	// Further we should check here how much housing we need and how much we have.
+
+	// Build stuff.
 	s.buildThings(t)
+
+	// TODO: Maintain stuff.
+	// s.maintainThings(t)
+
+	// TODO: We have a resource budget.
+	// - We produce resources
+	// - We consume resources
+	// - We need resources to build stuff as one-time costs.
+
+	// So first we need to establish our current resource situation.
+	// ... then we figure out what we need to build and maintain.
 }
 
 const (
@@ -216,60 +241,21 @@ const (
 
 const ResourceTypeAny = -1
 
-func (s *simState) handleTrade(t *Tribe) {
-	// TODO: Figure out what we actually need and what we have in excess.
-	const tradeRadius = 900.0 // km
+// NOTE: This is only about resources.
+func (s *simState) compareResources(src, dst int) (exp, imp LocalResouces) {
+	// Determine what resources we have and what resources we need.
+	srcRes := s.m.getResources(src, true)
+	dstRes := s.m.getResources(dst, true)
+	imp = dstRes.Remove(srcRes)
+	exp = srcRes.Remove(dstRes)
+	return
+}
 
-	tradeCities := s.getNearbyCities(t.RegionID, tradeRadius)
-
-	// NOTE: This is only about resources.
-	type cityTradeProposal struct {
-		city *City
-		dist float64       // distance to the city
-		exp  LocalResouces // resources that we can export
-		imp  LocalResouces // resources that we can import
-	}
-
-	// compareResources compares the resources of two regions and returns
-	// potential exports and imports.
-	compareResources := func(src, dst int) (exp, imp LocalResouces) {
-		// Determine what resources we have and what resources we need.
-		aRes := s.m.getResources(src, true)
-		bRes := s.m.getResources(dst, true)
-		imp = bRes.Remove(aRes)
-		exp = aRes.Remove(bRes)
-		return
-	}
-
-	var tradeProposals []*cityTradeProposal
-
-	// Loop through all the trade cities and propose trades.
-	// If we have resources that the other city needs, we propose a trade for export.
-	// If the other city has resources that we need, we propose a trade for import.
-	for _, tc := range tradeCities {
-		// Determine what resources we have and what resources we need.
-		exp, imp := compareResources(t.RegionID, tc.city.ID)
-		tradeProposals = append(tradeProposals, &cityTradeProposal{
-			city: tc.city,
-			exp:  exp,
-			imp:  imp,
-			dist: tc.dist,
-		})
-	}
-
-	// Log the trade proposals.
-	for _, tp := range tradeProposals {
-		log.Printf("!!!%s has proposed a trade with %s, dist %.2f", t.String(), tp.city.String(), tp.dist)
-		if tp.exp.HasAny() {
-			log.Printf("  Export: %s", tp.exp.String())
-		}
-		if tp.imp.HasAny() {
-			log.Printf("  Import: %s", tp.imp.String())
-		}
-
-		score := t.Settlement.compare(tp.city)
-		log.Printf("  Score: %.2f", score)
-	}
+type tradeProposal struct {
+	id   int           // id of the trading partner
+	dist float64       // distance to the trading partner
+	exp  LocalResouces // resources that we can export
+	imp  LocalResouces // resources that we can import
 }
 
 func sumResource(res []int) int {
@@ -278,6 +264,18 @@ func sumResource(res []int) int {
 		sum += r
 	}
 	return sum
+}
+
+type ComboStorage struct {
+	*ResourceStorage
+	*dumbStorage
+}
+
+func newComboStorage(maxStorage int) *ComboStorage {
+	return &ComboStorage{
+		ResourceStorage: newResourceStorage(maxStorage),
+		dumbStorage:     newDumbStorage(),
+	}
 }
 
 type ResourceStorage struct {

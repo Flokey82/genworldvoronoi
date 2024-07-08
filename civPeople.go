@@ -14,9 +14,11 @@ import (
 // NOTE: 'cf' is a function that returns a culture for a given location.
 // We use this function to determine the culture of a newborn based on the region
 // it is born in.
-func (m *Civ) tickPeople(people []*Person, nDays int, cf func(int) *Culture) []*Person {
+func (m *Civ) tickPeople(people []*Person, nDays int, cf func(int) *Culture, limitPop int) []*Person {
 	alive := make([]*Person, 0, len(people))
 	dead := make([]*Person, 0, len(people))
+	var peopleCount int
+	// TODO: Increase mortality and fertility rates based on prosperity, culture, etc.
 	for _, p := range people {
 		// Tick, and check if we had a child.
 		if child := m.tickPerson(p, nDays, cf); child != nil {
@@ -26,8 +28,56 @@ func (m *Civ) tickPeople(people []*Person, nDays int, cf func(int) *Culture) []*
 		// Check if we are still alive.
 		if !p.Death.IsSet() {
 			alive = append(alive, p)
+			peopleCount++
+			if p.Prengancy != nil {
+				peopleCount++
+			}
 		} else {
 			dead = append(dead, p)
+		}
+	}
+
+	if peopleCount >= limitPop {
+		// Kill the oldest people first.
+		sort.Slice(alive, func(a, b int) bool {
+			return alive[a].Age < alive[b].Age
+		})
+		toKill := alive[limitPop:]
+		alive = alive[:limitPop]
+		for _, p := range toKill {
+			m.killPerson(p, "overpopulation")
+		}
+		dead = append(dead, toKill...)
+	} else {
+		// TODO: Initiate pregnancies if we are below the population limit.
+		// If we are above the population limit, we should kill some people.
+		for pIdx := range rand.Perm(len(alive)) {
+			p := alive[pIdx]
+			if peopleCount >= limitPop {
+				break
+			}
+			// Check if the person can get pregnant.
+			if p.isOfChildbearingAge() && p.canBePregnant() {
+				// Approximately once every year if no children.
+				// TODO: Figure out proper chance of birth.
+				chance := 365
+				if p.Age > 40 {
+					// Over 40, it becomes more and more unlikely.
+					// TODO: Genetic variance?
+					chance *= (p.Age - 40)
+				}
+
+				// The more children, the less likely it becomes
+				// that more children are on the way.
+				//
+				// NOTE: Not because of biological reasons, but
+				// who wants more children after having some.
+				chance *= len(p.Children) + 1
+				if rand.Intn(chance) < nDays {
+					p.newPersonPregnancy(m.getNextPersonID(), p.Spouse)
+					peopleCount++
+				}
+			}
 		}
 	}
 
@@ -59,7 +109,7 @@ func (m *Civ) placePopulationAt(r, n int, cf func(int) *Culture) []*Person {
 	// Generate a number of people and match them up with each other.
 	localPop := make([]*Person, 0, n)
 	for i := 0; i < n; i++ {
-		localPop = append(localPop, m.newRandomPersonAt(r, culture))
+		localPop = append(localPop, m.newRandomPersonAt(r, culture, randGender(), nil))
 	}
 
 	// Match up people.
@@ -68,6 +118,13 @@ func (m *Civ) placePopulationAt(r, n int, cf func(int) *Culture) []*Person {
 	// Add people to world.
 	m.People = append(m.People, localPop...)
 	return localPop
+}
+
+// movePopulationTo moves the given list of people to the given region.
+func (m *Civ) movePopulationTo(p []*Person, r int) {
+	for _, p := range p {
+		m.updatePersonLocation(p, r)
+	}
 }
 
 // killNPeople kills n people from the given list of people and returns the list of

@@ -36,7 +36,6 @@ type Civ struct {
 	SoilExhaustion []float64
 	Suitability    []float64
 	Tribes         []*Tribe
-	TribeCount     int // Running count of tribes (for ID generation)
 }
 
 func NewCiv(g *geo.Geo, cfg *CivConfig) *Civ {
@@ -47,7 +46,7 @@ func NewCiv(g *geo.Geo, cfg *CivConfig) *Civ {
 		CivConfig:         cfg,
 		Geo:               g,
 		History:           NewHistory(g.Calendar),
-		altGen:            false,
+		altGen:            true,
 		RegionToEmpire:    initRegionSlice(g.SphereMesh.NumRegions),
 		RegionToCityState: initRegionSlice(g.SphereMesh.NumRegions),
 		RegionToCulture:   initRegionSlice(g.SphereMesh.NumRegions),

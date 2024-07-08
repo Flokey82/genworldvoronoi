@@ -57,7 +57,6 @@ func (s *simState) handleNomadicTribe(t *Tribe) {
 			// TODO: The satisfaction should depend on the prosperity of the region
 			// copared to the current region, etc.
 			tCurrent.changeSatisfaction(migrationSuccessSatisfaction)
-			s.newTribes = append(s.newTribes, tCurrent)
 			tCurrent = nil
 			break
 		}
@@ -67,20 +66,30 @@ func (s *simState) handleNomadicTribe(t *Tribe) {
 		diff := min(max(50, tCurrent.Population-nbMaxPop), tCurrent.Population/2)
 		log.Println("Tribe ", tCurrent.String(), "is splitting into two tribes. Population:", tCurrent.Population, "Max population:", nbMaxPop, "Diff:", diff)
 
-		// Split the tribe into two tribes. The new tribe will be placed in the original region.
-		newTribe := tCurrent.Split(s.m.getNextTribeID(), diff)
-
 		// Move the remaining (the original) tribe to the new region
 		// and the new tribe to the original region.
 		currentReg := tCurrent.RegionID
 		s.moveTribe(tCurrent, nb)
-		s.moveTribe(newTribe, currentReg)
+
+		// Split the tribe into two tribes. The new tribe will be placed in the original region.
+		newTribe := s.placeTribeAt(currentReg, diff, tCurrent, false)
+
+		/*
+			// Split the tribe into two tribes. The new tribe will be placed in the original region.
+			newTribe := tCurrent.Split(s.m.getNextTribeID(), diff)
+
+			// Move the remaining (the original) tribe to the new region
+			// and the new tribe to the original region.
+			currentReg := tCurrent.RegionID
+			s.moveTribe(tCurrent, nb)
+			s.moveTribe(newTribe, currentReg)
+
+			s.newTribes = append(s.newTribes, tCurrent)
+		*/
 
 		// TODO: Make these constants.
 		newTribe.changeSatisfaction(tribeSplitForcedSatisfaction)
 		tCurrent.changeSatisfaction(tribeSplitForcedSatisfaction)
-
-		s.newTribes = append(s.newTribes, tCurrent)
 
 		// Set the new tribe as the current tribe.
 		tCurrent = newTribe
@@ -93,6 +102,7 @@ func (s *simState) handleNomadicTribe(t *Tribe) {
 		// Check if the tribe can survive in the current region (or at least part of it can survive).
 		if maxPop := s.calcMaxPopPerRegion(t, tCurrent.RegionID); maxPop <= 0 {
 			log.Println("Tribe ", tCurrent.String(), "has died out.")
+			tCurrent.Population = 0
 
 			// TODO: Optionally attack other tribes to move into their regions.
 			if s.tribeAtRegion[tCurrent.RegionID] == tCurrent {
@@ -118,9 +128,6 @@ func (s *simState) handleNomadicTribe(t *Tribe) {
 
 			// Re-assign the tribe to the region.
 			s.moveTribe(tCurrent, tCurrent.RegionID)
-
-			// We can survive in the current region, retain the tribe.
-			s.newTribes = append(s.newTribes, tCurrent)
 		}
 	}
 }

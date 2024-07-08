@@ -211,9 +211,9 @@ type Culture struct {
 	Expansionism float64     // Expansionism of the culture
 	Martialism   float64     // Martial skills of the culture
 	Spirituality float64     // Spirituality of the culture (religion, superstition, etc.)
+	Openness     float64     // Openness to other cultures or new ideas
 	// Sophistication float64
 	// Extremism      float64 ?
-	// Openness       float64 ?
 	// Parent    *Culture
 	// Children  []*Culture
 	// Extinct   bool
@@ -223,6 +223,10 @@ type Culture struct {
 	// TODO: DO NOT CACHE THIS!
 	Regions []int
 	*geo.Stats
+}
+
+func (c *Culture) Ref() ObjectReference {
+	return ObjectReference{ID: c.ID, Type: ObjectTypeCulture}
 }
 
 func (c *Culture) Log() {
@@ -248,6 +252,10 @@ func (c *Culture) compare(b *Culture) float64 {
 	// Sum up spirituality.
 	spiritSum := 1.0 + c.Spirituality + b.Spirituality
 
+	// Evaluate the openness of the cultures.
+	// The higher the openness, the higher the value.
+	openVal := (c.Openness + b.Openness) / 2.0
+
 	// Check if the languages are identical.
 	langVal := compareLanguage(c.Language, b.Language)
 
@@ -257,7 +265,7 @@ func (c *Culture) compare(b *Culture) float64 {
 
 	var value float64
 
-	value += langVal + relVal
+	value += langVal + relVal + openVal
 
 	log.Printf("Comparing %s and %s: langVal: %f, relVal: %f", c.Name, b.Name, langVal, relVal)
 
@@ -299,6 +307,7 @@ func (c *Culture) SetNewType(t CultureType) {
 	c.Expansionism = t.Expansionism()
 	c.Martialism = t.Martialism()
 	c.Spirituality = t.Spirituality()
+	c.Openness = t.Openness()
 }
 
 func (m *Civ) newCulture(r int, cultureType CultureType, lang *genlanguage.Language) *Culture {
@@ -350,6 +359,9 @@ func (m *Civ) PlaceCultureAt(r int, grow bool, lang *genlanguage.Language) *Cult
 	} else {
 		m.RegionToCulture[r] = c.ID
 	}
+
+	// Add a new event to the history.
+	m.History.AddEvent("Founding (Culture)", fmt.Sprintf("Culture of %s has emerged", c.Name), c.Ref())
 	return c
 }
 
@@ -366,6 +378,7 @@ func (m *Civ) AddCultureAt(r int, c *Culture, grow bool) *Culture {
 	} else {
 		m.RegionToCulture[r] = c.ID
 	}
+	m.History.AddEvent("Founding (Culture)", fmt.Sprintf("Culture of %s has been placed (?)", c.Name), c.Ref())
 	return c
 }
 

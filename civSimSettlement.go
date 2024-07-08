@@ -52,7 +52,7 @@ func (m *Civ) tickSimSettlement(rNbs []int) {
 		}
 		// Calculate the population growth rate for the tribe.
 		// Use the exponential growth model.
-		newPop := float64(pop) * math.Pow(math.E, growthRate)
+		newPop := float64(pop) * math.Pow(math.E, growthRateSettled)
 		if diff := newPop - float64(pop); diff < 1 {
 			// Use rand to potentially grow the population by one.
 			if rand.Float64() < diff {
