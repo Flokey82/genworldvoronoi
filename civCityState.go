@@ -168,13 +168,21 @@ func (m *Civ) GetCityStates() []*CityState {
 	return m.CityStates
 }
 
-// getCityStateNeighbors returns all city states that are neighbors of the
+// getCityStateNeighborIDs returns all IDs of city states that are neighbors of the
 // given city state.
-func (m *Civ) getCityStateNeighbors(c *CityState) []int {
+func (m *Civ) getCityStateNeighborIDs(c *CityState) []int {
 	return m.getTerritoryNeighbors(c.ID, m.RegionToCityState)
 }
 
-// getCityStateEmpire returns the empire that the given city state belongs to (if any).
-func (m *Civ) getCityStateEmpire(c *CityState) int {
-	return m.RegionToEmpire[c.ID]
+// getCityStateNeighbors returns all neighboring city states of the given city state.
+func (m *Civ) getCityStateNeighbors(c *CityState) []*CityState {
+	var neighbors []*CityState
+	for _, nbID := range m.getCityStateNeighborIDs(c) {
+		if nb := m.GetCityState(nbID); nb != nil {
+			neighbors = append(neighbors, nb)
+		} else {
+			log.Printf("!!!%s has a neighboring city state with ID %d and it could not be found", c.String(), nbID)
+		}
+	}
+	return neighbors
 }

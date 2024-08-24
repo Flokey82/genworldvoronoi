@@ -200,7 +200,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 		} else if displayMode == DisplayModeFlux {
 			vals = m.Flux
 		} else if displayMode == DisplayModeCompression {
-			vals = m.PropagateCompression(m.RegionCompression)
+			vals = m.Compression
 		} else if displayMode == DisplayModeEarthquake {
 			vals = m.GetEarthquakeChance()
 		} else if displayMode == DisplayModeVolcano {

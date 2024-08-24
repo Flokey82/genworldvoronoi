@@ -117,13 +117,10 @@ func (m *Geo) GetGeoDisasterFunc() func(int) GeoDisasterChance {
 }
 
 func (m *Geo) GetEarthquakeChance() []float64 {
-	// Get distance field from fault lines using the plate compression.
-	compression := m.PropagateCompression(m.RegionCompression)
-
 	// Now get the chance of earthquake for each region.
 	earthquakeChance := make([]float64, m.SphereMesh.NumRegions)
 	for r := 0; r < m.SphereMesh.NumRegions; r++ {
-		earthquakeChance[r] = math.Abs(compression[r])
+		earthquakeChance[r] = math.Abs(m.Compression[r])
 	}
 	return earthquakeChance
 }

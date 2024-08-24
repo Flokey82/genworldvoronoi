@@ -284,6 +284,11 @@ func (g *Game) Update() error {
 		fmt.Printf("Clicked on tile %d,%d,%d\n", x, y, g.currentZoom)
 	}
 
+	// Exit if we press escape.
+	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) {
+		return fmt.Errorf("exit")
+	}
+
 	return nil
 }
 

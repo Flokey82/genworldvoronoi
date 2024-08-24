@@ -450,7 +450,7 @@ func (m *Geo) assignRegionElevation() {
 	rDistanceC := m.AssignDistanceField(m.Coastline_r, stopReg)
 
 	// Propagate the compression values.
-	compPerReg := m.PropagateCompression(m.RegionCompression)
+	m.Compression = m.PropagateCompression(m.RegionCompression)
 
 	// This code below calculates the height of a given region based on a linear
 	// interpolation of the three distance values above.
@@ -491,7 +491,7 @@ func (m *Geo) assignRegionElevation() {
 
 			// Average with plate compression to get some
 			// variation in the landscape.
-			f = (f + compPerReg[r]) * 0.5
+			f = (f + m.Compression[r]) * 0.5
 
 			// Apply a square falloff to the elevaltion values.
 			// f *= math.Abs(f)
@@ -555,4 +555,74 @@ func (m *Geo) assignRegionElevation() {
 			}
 		}
 	}
+}
+
+// GetTectonicActivity returns the tectonic activity for all regions at the given
+// year, day, and hour.
+func (m *Geo) GetTectonicActivity(year, day, hour int) []float64 {
+	pressure := make([]float64, m.SphereMesh.NumRegions)
+
+	// Get the propagated pressure values.
+	propagatedPressure := m.Compression
+
+	for r := 0; r < m.SphereMesh.NumRegions; r++ {
+		// Get the vec3 for the region.
+		vec := m.XYZ[3*r : 3*r+3]
+
+		// Get the noise value for the region using 4 dimensions.
+		timeVal := (float64(year) + (float64(day)+float64(hour)/24.0)/365.0) / 100.0
+
+		getNoiseValue := func(x, y, z float64) float64 {
+			noiseValue := m.noise.OS.Eval3(x, y, z)
+
+			// Add a few more octaves of noise.
+			noiseValue += m.noise.OS.Eval3(x*2, y*2, z*2) * 0.5
+			noiseValue += m.noise.OS.Eval3(x*4, y*4, z*4) * 0.25
+			noiseValue += m.noise.OS.Eval3(x*8, y*8, z*8) * 0.125
+			noiseValue += m.noise.OS.Eval3(x*16, y*16, z*16) * 0.0625
+
+			sum := 1 + 0.5 + 0.25 + 0.125 + 0.0625
+
+			// Normalize the noise value.
+			noiseValue = noiseValue / sum
+
+			// Now shift to -0.5 - 0.5 and then take the absolute value divided by 0.5.
+			noiseValue = 1 - math.Abs((noiseValue-0.5)/0.5)
+
+			// Quad the noise value to make the peaks even peakier.
+			noiseValue = math.Pow(noiseValue, 4)
+
+			return noiseValue
+		}
+
+		sinVal := math.Sin(timeVal)
+		cosVal := math.Cos(timeVal)
+
+		x := vec[0]
+		y := vec[1]
+		z := vec[2]
+
+		noiseValueA := getNoiseValue(x+sinVal+sinVal/2, y+cosVal, z+sinVal+cosVal)
+
+		noiseValueB := getNoiseValue(y+sinVal+cosVal, z+sinVal, x+cosVal+cosVal/3)
+
+		noiseValueC := getNoiseValue(z+cosVal, x+sinVal+cosVal, y+sinVal)
+
+		// Get the tectonic pressure for the region.
+		pressure[r] = math.Abs(propagatedPressure[r]) * noiseValueA * noiseValueB * noiseValueC
+	}
+
+	// Normalize the pressure values.
+	minPressure, maxPressure := minMax(pressure)
+	for r := 0; r < m.SphereMesh.NumRegions; r++ {
+		if pressure[r] < 0 {
+			pressure[r] /= minPressure // This will turn the value positive.
+		} else {
+			pressure[r] /= maxPressure
+		}
+
+		// Apply a square falloff to the pressure values.
+		pressure[r] *= math.Abs(pressure[r])
+	}
+	return pressure
 }

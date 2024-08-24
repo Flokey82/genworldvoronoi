@@ -21,9 +21,18 @@ type BaseObject struct {
 	noise                  *noise.Noise // Opensimplex noise initialized with above seed
 	*spheremesh.SphereMesh              // Triangle mesh containing the sphere information
 
+	// NOTE: This is set by GetRegCellTypes. Instead we should consider
+	// caching the types instead.
+	DistLandToOcean        []float64 // Distance to the ocean
+	DistOceanToLand        []float64 // Distance to the land
+	DistNeedUpdate         bool      // Distance to ocean/land needs update
+	RegCellTypes           []int     // Cell type of the region
+	RegCellTypesNeedUpdate bool      // Cell type of the region needs update
+
 	// Elevation related stuff
 	Elevation         []float64       // Point / region elevation
 	RegionCompression map[int]float64 // Point / region compression factor
+	Compression       []float64       // Propagated plate compression
 
 	// Derived elevation related stuff
 	Downhill         []int        // Point / region mapping to its lowest neighbor
@@ -65,37 +74,43 @@ type BaseObject struct {
 
 func newBaseObject(seed int64, mesh *spheremesh.SphereMesh) *BaseObject {
 	return &BaseObject{
-		Seed:              seed,
-		Rand:              rand.New(rand.NewSource(seed)),
-		noise:             noise.NewNoise(6, 2.0/3.0, seed),
-		SphereMesh:        mesh,
-		Elevation:         make([]float64, mesh.NumRegions),
-		RegionCompression: make(map[int]float64),
-		Moisture:          make([]float64, mesh.NumRegions),
-		Flux:              make([]float64, mesh.NumRegions),
-		Waterpool:         make([]float64, mesh.NumRegions),
-		Rainfall:          make([]float64, mesh.NumRegions),
-		OceanTemperature:  make([]float64, mesh.NumRegions),
-		AirTemperature:    make([]float64, mesh.NumRegions),
-		Downhill:          make([]int, mesh.NumRegions),
-		Drainage:          make([]int, mesh.NumRegions),
-		Waterbodies:       make([]int, mesh.NumRegions),
-		WaterbodySize:     make(map[int]int),
-		BiomeRegions:      make([]int, mesh.NumRegions),
-		BiomeRegionSize:   make(map[int]int),
-		Landmasses:        make([]int, mesh.NumRegions),
-		LandmassSize:      make(map[int]int),
-		LakeSize:          make(map[int]int),
-		RegionIsMountain:  make(map[int]bool),
-		RegionIsVolcano:   make(map[int]bool),
-		RegionIsWaterfall: make(map[int]bool),
-		TriPool:           make([]float64, mesh.NumTriangles),
-		TriElevation:      make([]float64, mesh.NumTriangles),
-		TriMoisture:       make([]float64, mesh.NumTriangles),
-		TriDownflowSide:   make([]int, mesh.NumTriangles),
-		OrderTri:          make([]int, mesh.NumTriangles),
-		TriFlow:           make([]float64, mesh.NumTriangles),
-		SideFlow:          make([]float64, mesh.NumSides),
+		Seed:                   seed,
+		Rand:                   rand.New(rand.NewSource(seed)),
+		noise:                  noise.NewNoise(6, 2.0/3.0, seed),
+		SphereMesh:             mesh,
+		DistLandToOcean:        make([]float64, mesh.NumRegions),
+		DistOceanToLand:        make([]float64, mesh.NumRegions),
+		DistNeedUpdate:         true, // TODO: Set this to true whenever the mesh changes.
+		RegCellTypes:           make([]int, mesh.NumRegions),
+		RegCellTypesNeedUpdate: true,
+		Elevation:              make([]float64, mesh.NumRegions),
+		RegionCompression:      make(map[int]float64),
+		Compression:            make([]float64, mesh.NumRegions),
+		Moisture:               make([]float64, mesh.NumRegions),
+		Flux:                   make([]float64, mesh.NumRegions),
+		Waterpool:              make([]float64, mesh.NumRegions),
+		Rainfall:               make([]float64, mesh.NumRegions),
+		OceanTemperature:       make([]float64, mesh.NumRegions),
+		AirTemperature:         make([]float64, mesh.NumRegions),
+		Downhill:               make([]int, mesh.NumRegions),
+		Drainage:               make([]int, mesh.NumRegions),
+		Waterbodies:            make([]int, mesh.NumRegions),
+		WaterbodySize:          make(map[int]int),
+		BiomeRegions:           make([]int, mesh.NumRegions),
+		BiomeRegionSize:        make(map[int]int),
+		Landmasses:             make([]int, mesh.NumRegions),
+		LandmassSize:           make(map[int]int),
+		LakeSize:               make(map[int]int),
+		RegionIsMountain:       make(map[int]bool),
+		RegionIsVolcano:        make(map[int]bool),
+		RegionIsWaterfall:      make(map[int]bool),
+		TriPool:                make([]float64, mesh.NumTriangles),
+		TriElevation:           make([]float64, mesh.NumTriangles),
+		TriMoisture:            make([]float64, mesh.NumTriangles),
+		TriDownflowSide:        make([]int, mesh.NumTriangles),
+		OrderTri:               make([]int, mesh.NumTriangles),
+		TriFlow:                make([]float64, mesh.NumTriangles),
+		SideFlow:               make([]float64, mesh.NumSides),
 	}
 }
 
@@ -787,7 +802,155 @@ func (m *BaseObject) FillSinks(randEpsilon bool) []float64 {
 	return newHeight
 }
 
-// AssignDistanceField calculates the distance from any point in seedRegs to all other points, but
+// AssignActualDistanceField calculates the distance from any point in seedRegs to all other points, but
+// don't go past any point in stopReg.
+// It returns the distance to the closest seed region and the seed region itself for each region.
+// This uses haversine to calculate the distance between two points and the distance is the distance on a unit sphere.
+func (m *BaseObject) AssignActualDistanceField(seedRegs []int, stopReg map[int]bool) ([]int, []float64) {
+	// We need to keep track of the "closest" seed region for each region.
+	// Unlike the AssignDistanceField function, we need to keep track of the
+	// seed region that is closest to each region so we can compare the distances
+	// between the regions.
+	closestSeed := make([]int, m.SphereMesh.NumRegions)
+
+	// Reset the random number generator.
+	m.ResetRand()
+
+	inf := math.Inf(0)
+	mesh := m.SphereMesh
+	numRegions := mesh.NumRegions
+
+	// Initialize the distance values for all regions to +Inf.
+	regDistance := make([]float64, numRegions)
+	for i := range regDistance {
+		regDistance[i] = inf
+	}
+
+	for i := range closestSeed {
+		closestSeed[i] = -1
+	}
+
+	// Initialize the queue for the breadth first search with
+	// the seed regions.
+	queue := make([]int, len(seedRegs), numRegions)
+	for i, r := range seedRegs {
+		queue[i] = r
+		regDistance[r] = 0
+		closestSeed[r] = r
+	}
+
+	// Allocate a slice for the output of mesh.R_circulate_r.
+	outRegs := make([]int, 0, 8)
+
+	log.Println("Starting random search")
+
+	var count int // Count how often we update the distance.
+
+	// Random search adapted from breadth first search.
+	for queueOut := 0; queueOut < len(queue); queueOut++ {
+		pos := queueOut + m.Rand.Intn(len(queue)-queueOut)
+		currentReg := queue[pos]
+		queue[pos] = queue[queueOut]
+		for _, nbReg := range mesh.R_circulate_r(outRegs, currentReg) {
+			if stopReg[nbReg] {
+				continue
+			}
+
+			// Check the distance between the current neighbor and the region's seed region.
+			// If the distance is shorter than the current distance, we update the distance
+			// and the closest seed region.
+			dist := m.GetDistance(closestSeed[currentReg], nbReg)
+			if dist < regDistance[nbReg] {
+				regDistance[nbReg] = dist
+				closestSeed[nbReg] = closestSeed[currentReg]
+				queue = append(queue, nbReg)
+				count++
+			}
+		}
+
+		// If we have consumed over 1000000 elements in the queue,
+		// we reset the queue to the remaining elements.
+		if queueOut >= numRegions {
+			n := copy(queue, queue[queueOut:])
+			queue = queue[:n]
+			queueOut = 0
+		}
+	}
+	// Log how many times we updated the distance vs the number of regions.
+	log.Printf("Updated distance %d times for %d regions, %d seed points and %d stop regions", count, numRegions, len(seedRegs), len(stopReg))
+
+	log.Println("Finished random search")
+
+	return closestSeed, regDistance
+}
+
+// UpdateActualDistanceField updates the distance field for the given regions, given the new seed points.
+// It returns the distance to the closest seed region and the seed region itself for each region.
+// This uses haversine to calculate the distance between two points and the distance is the distance on a unit sphere.
+func (m *BaseObject) UpdateActualDistanceField(closestSeed []int, regDistance []float64, seedRegs []int, stopReg map[int]bool) ([]int, []float64) {
+	// Reset the random number generator.
+	m.ResetRand()
+	mesh := m.SphereMesh
+	numRegions := mesh.NumRegions
+	queue := make([]int, len(seedRegs), numRegions)
+
+	// TODO: Also check if a seed point has "disappeared" .If so, we
+	// might need to recompute the distance field for all regions.
+	for i, r := range seedRegs {
+		// Check if the region distance in the current field is not 0,
+		// which means that the region has not been previously used as
+		// a seed region. If the region distance is not 0, we set it
+		// to 0 and add it to the queue.
+		if regDistance[r] != 0 {
+			regDistance[r] = 0
+			closestSeed[r] = r
+			queue[i] = r
+		}
+	}
+
+	// Allocate a slice for the output of mesh.R_circulate_r.
+	outRegs := make([]int, 0, 8)
+
+	var count int // Count how often we update the distance.
+
+	// Random search adapted from breadth first search.
+	for queueOut := 0; queueOut < len(queue); queueOut++ {
+		pos := queueOut + m.Rand.Intn(len(queue)-queueOut)
+		currentReg := queue[pos]
+		queue[pos] = queue[queueOut]
+		for _, nbReg := range mesh.R_circulate_r(outRegs, currentReg) {
+			if stopReg[nbReg] {
+				continue
+			}
+
+			// Check the distance between the current neighbor and the region's seed region.
+			// If the distance is shorter than the current distance, we update the distance
+			// and the closest seed region.
+			dist := m.GetDistance(closestSeed[currentReg], nbReg)
+			if dist < regDistance[nbReg] {
+				regDistance[nbReg] = dist
+				closestSeed[nbReg] = closestSeed[currentReg]
+				queue = append(queue, nbReg)
+				count++
+			}
+		}
+
+		// If we have consumed over 1000000 elements in the queue,
+		// we reset the queue to the remaining elements.
+		if queueOut >= numRegions {
+			n := copy(queue, queue[queueOut:])
+			queue = queue[:n]
+			queueOut = 0
+		}
+	}
+
+	// Log how many times we updated the distance vs the number of regions.
+	log.Printf("Updated distance %d times for %d regions, %d seed points and %d stop regions", count, numRegions, len(seedRegs), len(stopReg))
+
+	return closestSeed, regDistance
+}
+
+// AssignDistanceField calculates the graph distance from any point in seedRegs to all other points, but
 // don't go past any point in stopReg.
 func (m *BaseObject) AssignDistanceField(seedRegs []int, stopReg map[int]bool) []float64 {
 	// Reset the random number generator.
@@ -847,7 +1010,7 @@ func (m *BaseObject) AssignDistanceField(seedRegs []int, stopReg map[int]bool) [
 	return regDistance
 }
 
-// UpdateDistanceField updates the distance field for the given regions, given the new seed points.
+// UpdateDistanceField updates the graph distance field for the given regions, given the new seed points.
 func (m *BaseObject) UpdateDistanceField(regDistance []float64, seedRegs []int, stopReg map[int]bool) []float64 {
 	// Reset the random number generator.
 	m.ResetRand()
@@ -956,6 +1119,10 @@ func (m *BaseObject) Interpolate(regions []int) (*Interpolated, error) {
 		ipl.Elevation = append(ipl.Elevation, m.Elevation[r])
 		ipl.OceanTemperature = append(ipl.OceanTemperature, m.OceanTemperature[r])
 		ipl.AirTemperature = append(ipl.AirTemperature, m.AirTemperature[r])
+		ipl.Compression = append(ipl.Compression, m.Compression[r])
+
+		ipl.DistLandToOcean = append(ipl.DistLandToOcean, m.DistLandToOcean[r])
+		ipl.DistOceanToLand = append(ipl.DistOceanToLand, m.DistOceanToLand[r])
 
 		// Circulate_r all points and add midpoints.
 		for _, nbReg := range mesh.R_circulate_r(outRegs, r) {
@@ -992,6 +1159,9 @@ func (m *BaseObject) Interpolate(regions []int) (*Interpolated, error) {
 			diffPool := m.Waterpool[nbReg] - m.Waterpool[r]
 			diffOceanTemp := m.OceanTemperature[nbReg] - m.OceanTemperature[r]
 			diffAirTemp := m.AirTemperature[nbReg] - m.AirTemperature[r]
+			diffCompression := m.Compression[nbReg] - m.Compression[r]
+			diffDistLandToOcean := m.DistLandToOcean[nbReg] - m.DistLandToOcean[r]
+			diffDistOceanToLand := m.DistOceanToLand[nbReg] - m.DistOceanToLand[r]
 
 			// TODO: Add some better variation with the water pool and stuff.
 			// TODO: Add flood fill, downhill and flux?
@@ -1004,6 +1174,9 @@ func (m *BaseObject) Interpolate(regions []int) (*Interpolated, error) {
 			ipl.Waterpool = append(ipl.Waterpool, m.Waterpool[r]+(diffPool*nvl))
 			ipl.OceanTemperature = append(ipl.OceanTemperature, m.OceanTemperature[r]+(diffOceanTemp*nvl))
 			ipl.AirTemperature = append(ipl.AirTemperature, m.AirTemperature[r]+(diffAirTemp*nvl))
+			ipl.Compression = append(ipl.Compression, m.Compression[r]+(diffCompression*nvl))
+			ipl.DistLandToOcean = append(ipl.DistLandToOcean, m.DistLandToOcean[r]+(diffDistLandToOcean*nvl))
+			ipl.DistOceanToLand = append(ipl.DistOceanToLand, m.DistOceanToLand[r]+(diffDistOceanToLand*nvl))
 		}
 	}
 
@@ -1038,10 +1211,15 @@ func (m *BaseObject) Interpolate(regions []int) (*Interpolated, error) {
 	ipl.OrderTri = make([]int, sphere.NumTriangles)
 	ipl.TriFlow = make([]float64, sphere.NumTriangles)
 	ipl.SideFlow = make([]float64, sphere.NumSides)
+
+	ipl.RegCellTypes = make([]int, sphere.NumRegions)
+	ipl.RegCellTypesNeedUpdate = true
+
 	ipl.AssignDownhill(true)
 	ipl.assignTriValues()
 	ipl.AssignDownflow()
 	ipl.AssignFlow()
+	ipl.GetRegCellTypes()
 
 	return &ipl, nil
 }

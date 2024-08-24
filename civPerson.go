@@ -2,9 +2,8 @@ package genworldvoronoi
 
 import (
 	"fmt"
-	"log"
 	"math/rand"
-	"sort"
+	"strings"
 
 	"github.com/Flokey82/genetics"
 	"github.com/Flokey82/genetics/geneticshuman"
@@ -17,37 +16,14 @@ func (m *Civ) getNextPersonID() int {
 	return m.nextPersonID
 }
 
-// PersonalAction represents an action that a person can take.
-type PersonalAction struct {
-	probability  func(*Person) float64
-	requires     func(*Person) bool
-	consequences func(m *Civ, p *Person)
-}
-
-func (a *PersonalAction) Execute(m *Civ, p *Person) {
-	if a.consequences != nil {
-		a.consequences(m, p)
-	}
-}
-
-// pickAction picks an action based on the probabilities of the actions.
-func pickAction(p *Person, actions []*PersonalAction) *PersonalAction {
-	totalProbability := 0.0
-	for _, action := range actions {
-		probability := action.probability(p)
-		totalProbability += probability
-	}
-
-	randomValue := rand.Float64() * totalProbability
-	for _, action := range actions {
-		probability := action.probability(p)
-		randomValue -= probability
-		if randomValue < 0 {
-			return action
+func (m *Civ) getPeopleAt(r int) []*Person {
+	var people []*Person
+	for _, p := range m.People {
+		if p.Region == r {
+			people = append(people, p)
 		}
 	}
-	// Should never reach here (all probabilities should be covered)
-	return nil
+	return people
 }
 
 // tickPerson advances the person by nDays and returns any new born child.å
@@ -73,842 +49,48 @@ func (m *Civ) tickPerson(p *Person, nDays int, cf func(int) *Culture) *Person {
 		return nil
 	}
 
-	type relation struct {
-		p                *Person
-		relationToPerson string
-		relationOfPerson string
-	}
-
-	getSiblingRelationString := func(p *Person) string {
-		switch p.Gender() {
-		case geneticshuman.GenderFemale:
-			return "sister"
-		case geneticshuman.GenderMale:
-			return "brother"
-		default:
-			return "sibling"
-		}
-	}
-	getParentRelationString := func(p *Person) string {
-		switch p.Gender() {
-		case geneticshuman.GenderFemale:
-			return "mother"
-		case geneticshuman.GenderMale:
-			return "father"
-		default:
-			return "parent"
-		}
-	}
-	getChildRelationString := func(p *Person) string {
-		switch p.Gender() {
-		case geneticshuman.GenderFemale:
-			return "daughter"
-		case geneticshuman.GenderMale:
-			return "son"
-		default:
-			return "child"
-		}
-	}
-	getSpouseRelationString := func(p *Person) string {
-		switch p.Gender() {
-		case geneticshuman.GenderFemale:
-			return "wife"
-		case geneticshuman.GenderMale:
-			return "husband"
-		default:
-			return "spouse"
-		}
-	}
-	pickRelatives := func() []relation {
-		var options []relation
-		relChild := getChildRelationString(p)
-		if len(p.Children) > 0 {
-			relParent := getParentRelationString(p)
-			for _, c := range p.Children {
-				if c.Dead() {
-					continue
-				}
-				options = append(options, relation{
-					p:                c,
-					relationToPerson: relParent,
-					relationOfPerson: getChildRelationString(c),
-				})
+	// Check existing relationships.
+	{
+		// Check who we love or hate in our family.
+		var hated, loved []relation
+		for _, c := range pickRelatives(p) {
+			// Check if we hate the person.
+			if p.Opinions.GetOpinion(c.p) < -0.5 {
+				hated = append(hated, c)
+			} else if p.Opinions.GetOpinion(c.p) > 0.5 {
+				loved = append(loved, c)
 			}
 		}
-		if p.Spouse != nil && !p.Spouse.Dead() {
-			options = append(options, relation{
-				p:                p.Spouse,
-				relationToPerson: getSpouseRelationString(p),
-				relationOfPerson: getSpouseRelationString(p.Spouse),
-			})
-		}
 
-		// Our relationship to our siblings. (brother, sister, sibling)
-		seen := make(map[*Person]bool)
-		relSibling := getSiblingRelationString(p)
-		getSiblingsAndParent := func(parent *Person) []relation {
-			var options []relation
-			if !parent.Dead() {
-				options = append(options, relation{
-					p:                parent,
-					relationToPerson: relChild,
-					relationOfPerson: getParentRelationString(parent),
-				})
+		// Add an entry to the history.
+		if len(hated) > 0 {
+			var str string
+			for _, h := range hated {
+				str += fmt.Sprintf("%s (%s %.2f), ", h.p.String(), h.relationOfPerson, p.Opinions.GetOpinion(h.p))
 			}
-			// Add parent's children.
-			for _, c := range parent.Children {
-				if c == p || seen[c] || c.Dead() {
-					continue
-				}
-				seen[c] = true
-				relSiblingHere := relSibling
-				siblingRel := getSiblingRelationString(c)
-				if c.Father != p.Father && c.Mother != p.Mother {
-					relSiblingHere = "step-" + relSibling
-					siblingRel = "step-" + siblingRel
-				} else if c.Father != p.Father || c.Mother != p.Mother {
-					relSiblingHere = "half-" + relSibling
-					siblingRel = "half-" + siblingRel
-				}
-				options = append(options, relation{
-					p:                c,
-					relationToPerson: relSiblingHere,
-					relationOfPerson: siblingRel,
-				})
+			str = str[:len(str)-2]
+			m.AddEvent("Hate", fmt.Sprintf("%s hates %s", p.String(), str), p.Ref())
+		}
+		if len(loved) > 0 {
+			var str string
+			for _, h := range loved {
+				str += fmt.Sprintf("%s (%s %.2f), ", h.p.String(), h.relationOfPerson, p.Opinions.GetOpinion(h.p))
 			}
-			return options
+			str = str[:len(str)-2]
+			m.AddEvent("Love", fmt.Sprintf("%s loves %s", p.String(), str), p.Ref())
 		}
 
-		// Add mother and children.
-		if p.Mother != nil {
-			options = append(options, getSiblingsAndParent(p.Mother)...)
-		}
-
-		// Add father and children.
-		if p.Father != nil {
-			options = append(options, getSiblingsAndParent(p.Father)...)
-		}
-		return options
-	}
-	pickVictim := func() relation {
-		options := pickRelatives()
-		// TODO: Add siblings, cousins, etc.
-		if len(options) == 0 {
-			// Pick a random person.
-			// TODO: Make sure we don't pick ourselves.
-			options = append(options, relation{m.People[rand.Intn(len(m.People))], "random person", ""})
-		}
-		// Sort options by opinion.
-		// This is sort of a "who do we hate the most" function.
-		sort.Slice(options, func(i, j int) bool {
-			return p.Opinions.GetOpinion(options[i].p) < p.Opinions.GetOpinion(options[j].p)
-		})
-		// TODO: Maybe pick a random from the top 3.
-		return options[0]
-	}
-
-	// Check who we hate in our family.
-	var hated, loved []relation
-	for _, c := range pickRelatives() {
-		// Check if we hate the person.
-		if p.Opinions.GetOpinion(c.p) < -0.5 {
-			hated = append(hated, c)
-		} else if p.Opinions.GetOpinion(c.p) > 0.5 {
-			loved = append(loved, c)
+		// Check if we have a nemesis.
+		nemesis := p.Opinions.GetNemesis()
+		if nemesis != nil {
+			m.AddEvent("Nemesis", fmt.Sprintf("%s has a nemesis: %s (%.2f)", p.String(), nemesis.String(), p.Opinions.GetOpinion(nemesis)), p.Ref())
 		}
 	}
 
-	nemesis := p.Opinions.GetNemesis()
-	if nemesis != nil {
-		// We have a nemesis.
-		m.AddEvent("Nemesis", fmt.Sprintf("%s has a nemesis: %s (%.2f)", p.String(), nemesis.String(), p.Opinions.GetOpinion(nemesis)), p.Ref())
-	}
+	// Pick an action for this tick.
+	m.tickAction(p, nDays)
 
-	// Add an entry to the history.
-	if len(hated) > 0 {
-		var str string
-		for _, h := range hated {
-			str += fmt.Sprintf("%s (%s %.2f), ", h.p.String(), h.relationOfPerson, p.Opinions.GetOpinion(h.p))
-		}
-		str = str[:len(str)-2]
-		m.AddEvent("Hate", fmt.Sprintf("%s hates %s", p.String(), str), p.Ref())
-	}
-	if len(loved) > 0 {
-		var str string
-		for _, h := range loved {
-			str += fmt.Sprintf("%s (%s %.2f), ", h.p.String(), h.relationOfPerson, p.Opinions.GetOpinion(h.p))
-		}
-		str = str[:len(str)-2]
-		m.AddEvent("Love", fmt.Sprintf("%s loves %s", p.String(), str), p.Ref())
-	}
-
-	// There should be different actions for each person.
-	// - A work action
-	// - A personal action
-	// - A family action
-	// - A faction action
-
-	// TODO: The events that we have defined down there should be separated into mundane
-	// events and life altering events.
-	// - Mundane events should be things that happen every day and have a small impact.
-	// - Life altering events should be things that happen once in a while and have a big impact.
-	// - The events should be based on the person's traits, responsibilities, etc.
-
-	// Adults:
-	// - Bad people might do bad things.
-	//  - Mistreat family members
-	//  - Bully others
-	//  - Attack others
-	//  - Cheat
-	// - Good people might do good things.
-	//  - Help family members, spend time with them
-	//  - Help others
-	//  - Volunteer
-	// - All people might do various things
-	//  - Go on an adventure
-	//  - Explore
-	//  - Socialize
-	//  - Hobby, art, music, etc.
-
-	// During these activities, there is a chance that something life altering might happen.
-
-	// An action has an observable outcome, and might have consequences.
-
-	// Personal decisions.
-	// Depending on the number of days ticked, we select from a list of possible actions.
-	// There are some actions that happen once a year and have more impact, and some that
-	// can happen every day with less impact.
-	// If we tick a person for a year, we pick a random event that happens once a year and
-	// disregard the daily events.
-	// The actions should also depend on the responsibilites, personality, traits, etc.
-	// For example, a person that is the leader of a faction might have different actions
-	// than a person that is a farmer.
-	getLivingRelatives := func(p *Person) []*Person {
-		var rels []*Person
-		for _, c := range p.Children {
-			if c.Dead() {
-				continue
-			}
-			rels = append(rels, c)
-		}
-		if p.Spouse != nil && !p.Spouse.Dead() {
-			rels = append(rels, p.Spouse)
-		}
-		seen := make(map[*Person]bool)
-		if p.Mother != nil {
-			if !p.Mother.Dead() {
-				rels = append(rels, p.Mother)
-			}
-			// Add mother's children.
-			for _, c := range p.Mother.Children {
-				if c == p || seen[c] || c.Dead() {
-					continue
-				}
-				seen[c] = true
-				rels = append(rels, c)
-			}
-		}
-		if p.Father != nil && !p.Father.Dead() {
-			rels = append(rels, p.Father)
-			// Add father's children.
-			for _, c := range p.Father.Children {
-				if c == p || seen[c] || c.Dead() {
-					continue
-				}
-				seen[c] = true
-				rels = append(rels, c)
-			}
-		}
-		return rels
-	}
-
-	dislikesGoodDeeds := func(p *Person) bool {
-		// Check if the person dislikes good deeds.
-		return p.Traits.HasTrait(geneticshuman.TraitCruel) || p.Traits.HasTrait(geneticshuman.TraitAggressive)
-	}
-
-	dislikesBadDeeds := func(p *Person) bool {
-		// Check if the person dislikes bad deeds.
-		return !p.Traits.HasTrait(geneticshuman.TraitCruel) && !p.Traits.HasTrait(geneticshuman.TraitAggressive)
-	}
-
-	changeOptsBadDeeds := func(p *Person, changeDislike, changeLike float64, ev *Event) {
-		// TODO: This should be more specific and depend on the people's values, traits, etc.
-		// Get all living relatives.
-		rels := getLivingRelatives(p)
-		// Change opinion for all relatives.
-		for _, c := range rels {
-			if dislikesBadDeeds(c) {
-				c.Opinions.AddOpinion(p, changeDislike, ev)
-			} else {
-				c.Opinions.AddOpinion(p, changeLike, ev)
-			}
-		}
-	}
-
-	changeOptsGoodDeeds := func(p *Person, changeLike, changeDislike float64, ev *Event) {
-		// TODO: This should be more specific and depend on the people's values, traits, etc.
-		// Get all living relatives.
-		rels := getLivingRelatives(p)
-		// Change opinion for all relatives.
-		for _, c := range rels {
-			if dislikesGoodDeeds(c) {
-				c.Opinions.AddOpinion(p, changeDislike, ev)
-			} else {
-				c.Opinions.AddOpinion(p, changeLike, ev)
-			}
-		}
-	}
-
-	actionMurder := &PersonalAction{
-		probability: func(p *Person) float64 {
-			prob := 0.0
-			// Primary trait.
-			if p.Traits.HasTrait(geneticshuman.TraitCruel) {
-				prob += 0.5
-			}
-			// Secondary traits.
-			if p.Traits.HasTrait(geneticshuman.TraitAggressive) {
-				prob += 0.2
-			}
-			// Negative traits.
-			if p.Traits.HasTrait(geneticshuman.TraitKind) {
-				prob -= 0.3
-			}
-			if p.Traits.HasTrait(geneticshuman.TraitCareful) {
-				prob -= 0.2
-			}
-			if prob < 0 {
-				prob = 0
-			}
-			return prob
-		},
-		requires: func(p *Person) bool {
-			return p.Age > 12
-		},
-		consequences: func(m *Civ, p *Person) {
-			// Pick a possible victim.
-			victim := pickVictim()
-			// We might attack someone and potentially kill them.
-			if rand.Intn(100) < 50 {
-				methods := []string{"stabbed", "shot", "poisoned", "strangled", "drowned", "burned", "beaten"}
-				method := methods[rand.Intn(len(methods))]
-				// Kill the person.
-				ev := m.killPerson(victim.p, fmt.Sprintf("(%s) being %s by %s (%s)", victim.relationOfPerson, method, p.Name(), victim.relationToPerson))
-				// Add opinion for all relatives.
-				if !p.Traits.HasTrait(geneticshuman.TraitCareful) {
-					changeOptsBadDeeds(p, -0.9, -0.1, ev)
-				}
-			} else {
-				// Add history event.
-				ev := m.AddEvent("Cruelty", fmt.Sprintf("%s (%s) was attacked by %s (%s)", victim.p.Name(), victim.relationOfPerson, p.Name(), victim.relationToPerson), p.Ref())
-				// Add opinion.
-				victim.p.Opinions.AddOpinion(p, -1.0, ev)
-				if !p.Traits.HasTrait(geneticshuman.TraitCareful) {
-					// Add opinion for all relatives.
-					changeOptsBadDeeds(p, -0.7, 0.1, ev)
-					// Change reputation.
-					p.Popularity.Add(-0.4)
-				}
-			}
-		},
-	}
-	actionCruelty := &PersonalAction{
-		probability: func(p *Person) float64 {
-			prob := 0.01
-			// Primary trait.
-			if p.Traits.HasTrait(geneticshuman.TraitCruel) {
-				prob += 0.5
-			}
-
-			// Secondary traits.
-			if p.Traits.HasTrait(geneticshuman.TraitAggressive) {
-				prob += 0.2
-			}
-
-			// Negative traits.
-			if p.Traits.HasTrait(geneticshuman.TraitKind) {
-				prob -= 0.3
-			}
-
-			if prob < 0 {
-				prob = 0
-			}
-
-			return prob
-		},
-		requires: func(p *Person) bool {
-			return p.Age > 12
-		},
-		consequences: func(m *Civ, p *Person) {
-			// Pick a possible victim.
-			victim := pickVictim()
-			// We might be cruel in other ways.
-			ev := m.AddEvent("Cruelty", fmt.Sprintf("%s (%s) was cruel to %s (%s)", p.Name(), victim.relationToPerson, victim.p.Name(), victim.relationOfPerson), p.Ref())
-			// Add opinion.
-			victim.p.Opinions.AddOpinion(p, -0.7, ev)
-
-			if !p.Traits.HasTrait(geneticshuman.TraitCareful) {
-				// Add opinion for all relatives.
-				changeOptsBadDeeds(p, -0.5, 0.15, ev)
-
-				// Change reputation.
-				p.Popularity.Add(-0.1)
-			}
-		},
-	}
-	actionKindness := &PersonalAction{
-		probability: func(p *Person) float64 {
-			prob := 0.1
-			// Primary trait.
-			if p.Traits.HasTrait(geneticshuman.TraitKind) {
-				prob += 0.5
-			}
-			// Secondary traits.
-			if p.Traits.HasTrait(geneticshuman.TraitTrusting) {
-				prob += 0.2
-			}
-			// Negative traits.
-			if p.Traits.HasTrait(geneticshuman.TraitCareless) {
-				prob -= 0.1
-			}
-			if p.Traits.HasTrait(geneticshuman.TraitCruel) {
-				prob -= 0.2
-			}
-			if prob < 0 {
-				prob = 0
-			}
-			return prob
-		},
-		requires: func(p *Person) bool {
-			return p.Age > 12
-		},
-		consequences: func(m *Civ, p *Person) {
-			// Kind people might help others.
-			// Pick a random person.
-			// TODO: Make sure we don't pick ourselves.
-			personInNeed := m.People[rand.Intn(len(m.People))]
-			options := []string{
-				"helped",
-				"gave food to",
-				"offered shelter to",
-				"offered money to",
-				"gave advice to",
-				"gave a gift to",
-			}
-
-			// TODO: Check the person's traits and check if they are up to no good.
-			action := options[rand.Intn(len(options))]
-			ev := m.AddEvent("Kindness", fmt.Sprintf("%s %s %s", p.Name(), action, personInNeed.Name()), p.Ref())
-			// Add opinion.
-			personInNeed.Opinions.AddOpinion(p, 1.0, ev)
-			// Add opinion for all relatives.
-			changeOptsGoodDeeds(p, 0.7, -0.15, ev)
-			// Change reputation.
-			p.Popularity.Add(0.1)
-		},
-	}
-	actionIdle := &PersonalAction{
-		probability: func(p *Person) float64 {
-			return 1.0
-		},
-		requires: func(p *Person) bool {
-			return true
-		},
-		consequences: func(m *Civ, p *Person) {
-			// Nothing happens.
-			// Recover the opinion of all relatives.
-			rels := getLivingRelatives(p)
-			for _, c := range rels {
-				p.Opinions.AddOpinion(c, 0.0, nil)
-			}
-		},
-	}
-
-	actionChildPlay := &PersonalAction{
-		probability: func(p *Person) float64 {
-			prob := 0.3
-			// Primary trait.
-			if p.Traits.HasTrait(geneticshuman.TraitKind) {
-				prob += 0.5
-			}
-			// Secondary traits.
-			if p.Traits.HasTrait(geneticshuman.TraitTrusting) {
-				prob += 0.2
-			}
-			return prob
-		},
-		requires: func(p *Person) bool {
-			return p.Age < 12 && p.Age > 2
-		},
-		consequences: func(m *Civ, p *Person) {
-			// Pick a random child.
-			var children []*Person
-			for _, c := range m.People {
-				if c == p {
-					continue
-				}
-				if c.Age < 12 && c.Age > 2 {
-					children = append(children, c)
-				}
-			}
-
-			if len(children) == 0 {
-				log.Println("no children to play with")
-				return
-			}
-
-			// Pick a random child.
-			child := children[rand.Intn(len(children))]
-
-			// TODO: Prioritize children we like and that have a good reputation.
-			// But one of the two children is a troublemaker, someting bad might happen
-			// or the bad child might hurt the good child.
-			// Pick a random game.
-			options := []string{
-				"hide and seek",
-				"tag",
-				"catch",
-				"climbing trees",
-				"swimming",
-				"building a fort",
-				"playing with dolls",
-			}
-			game := options[rand.Intn(len(options))]
-			ev := m.AddEvent("Child Play", fmt.Sprintf("%s played %s with %s", p.Name(), game, child.Name()), p.Ref())
-			// Add opinion.
-			child.Opinions.AddOpinion(p, 0.7, ev)
-			// Add opinion for all relatives.
-			changeOptsGoodDeeds(p, 0.4, -0.1, ev)
-		},
-	}
-	actionChildExploration := &PersonalAction{
-		probability: func(p *Person) float64 {
-			prob := 0.1
-			// TODO: High openness, bravery, etc.
-			// Primary trait.
-			if p.Traits.HasTrait(geneticshuman.TraitBrave) {
-				prob += 0.2
-			}
-			if p.Traits.HasTrait(geneticshuman.TraitCareless) {
-				prob += 0.1
-			}
-			return prob
-		},
-		requires: func(p *Person) bool {
-			return p.Age < 16 && p.Age > 8
-		},
-		consequences: func(m *Civ, p *Person) {
-			// Find a nearby location to explore.
-			// There might be treasure to find, or danger.
-			places := []string{
-				"forest",
-				"cave",
-				"river",
-				"mountain",
-				"abandoned house",
-				"graveyard",
-				"ruin",
-				"swamp",
-				"lake",
-				"beach",
-				"hut",
-			}
-			place := places[rand.Intn(len(places))]
-			// We explore a location and there is a chance of finding something interesting,
-			// nothing happening, getting hurt, getting lost, or finding something dangerous.
-			// TODO: Add actual benefits and consequences.
-			// - If we encounter a wild animal and escape, defeat or make friends with it,
-			// we might get a trait.
-			// - If we find a treasure, we might get change our fortune.
-			// - If we get hurt, we might get a scar or a trait.
-			switch rand.Intn(50) {
-			case 0:
-				// We find a treasure.
-				// TODO:
-				// - This should trigger some kind of personal quest.
-				// - Use genlanguage.TextConfig
-				treasure := []string{
-					"stash of gold coins",
-					"sword inscribed with runes",
-					"magical amulet",
-					"mirror made of silver",
-					"crown",
-					"ring",
-					"necklace",
-					"gemstone",
-					"book of spells",
-					"scroll",
-					"potion",
-					"strange coin",
-					"small statue",
-					"clockwork device",
-					"rusty helmet",
-					"strange key",
-					"dusty diary",
-					"tattered letter",
-					"drawing of a beautiful woman",
-					"crystal shard",
-					"doll",
-					"glass eye",
-					"locket",
-					"small box",
-				}
-				t := treasure[rand.Intn(len(treasure))]
-
-				// TODO: Add item to inventory.
-
-				// Check if it is cursed.
-				if rand.Intn(100) < 10 {
-					// TODO: Add various curses.
-					t += " (cursed)"
-					p.Traits |= geneticshuman.TraitDeceptive
-					p.Traits |= geneticshuman.TraitAmbitious
-					p.Traits |= geneticshuman.TraitCruel
-
-					if rand.Intn(100) < 50 {
-						p.Traits |= geneticshuman.TraitCareful
-						p.Traits &^= geneticshuman.TraitCareless
-					}
-
-					// Remove positive traits.
-					p.Traits &^= geneticshuman.TraitKind
-					p.Traits &^= geneticshuman.TraitHonest
-					p.Traits &^= geneticshuman.TraitContent
-					// p.Traits &^= geneticshuman.TraitBrave // Let's keep this one for now.
-					p.NickName = "the Cursed"
-					p.Popularity.Add(5.0)
-				} else if rand.Intn(100) < 10 {
-					t += " (blessed)"
-					p.Traits |= geneticshuman.TraitKind
-					p.Traits |= geneticshuman.TraitBrave
-					p.Traits |= geneticshuman.TraitHonest
-					p.Traits |= geneticshuman.TraitCareful
-
-					if rand.Intn(100) < 50 {
-						p.Traits |= geneticshuman.TraitAmbitious
-						p.Traits &^= geneticshuman.TraitContent
-					}
-
-					// Remove negative traits.
-					p.Traits &^= geneticshuman.TraitCruel
-					p.Traits &^= geneticshuman.TraitDeceptive
-					p.Traits &^= geneticshuman.TraitCareless
-					// p.Traits &^= geneticshuman.TraitAggressive // Let's keep this one for now.
-					p.NickName = "the Blessed"
-					p.Popularity.Add(1.0)
-				} else {
-					p.Popularity.Add(1.0)
-				}
-				ev := m.AddEvent("Exploration", fmt.Sprintf("%s found a %s in a %s", p.Name(), t, place), p.Ref())
-				// Add opinion for all relatives.
-				changeOptsGoodDeeds(p, 0.7, -0.4, ev)
-			case 1:
-				// We find a dangerous animal.
-				// TODO: The animals should be different depending on the region.
-				animal := []string{
-					"wild dog",
-					"bear",
-					"snake",
-					"wolf",
-					"wildcat",
-					"boar",
-					"dangerous squirrel",
-					"wild rabbit",
-				}
-
-				// TODO: The outcome should depend on the person's traits.
-				t := animal[rand.Intn(len(animal))]
-				if rand.Intn(100) < 50 {
-					// We gain bravery, lose cowardice.
-					p.Traits |= geneticshuman.TraitBrave
-					p.Traits &^= geneticshuman.TraitCowardly
-
-					p.Popularity.Add(0.7)
-
-					// We escape.
-					ev := m.AddEvent("Exploration", fmt.Sprintf("%s encountered a %s while exploring a %s and was able to chase it away", p.Name(), t, place), p.Ref())
-					// Add opinion for all relatives.
-					changeOptsGoodDeeds(p, 0.3, -0.1, ev)
-				} else {
-					// We gain cowardice or carefullness.
-					if rand.Intn(100) < 50 {
-						p.Traits |= geneticshuman.TraitCowardly
-						p.Traits &^= geneticshuman.TraitBrave
-					} else {
-						p.Traits |= geneticshuman.TraitCareful
-						p.Traits &^= geneticshuman.TraitCareless
-					}
-					p.Popularity.Add(-0.2)
-
-					// We get hurt.
-					ev := m.AddEvent("Exploration", fmt.Sprintf("%s encountered a %s while exploring a %s and got hurt", p.Name(), t, place), p.Ref())
-					// Add opinion for all relatives.
-					changeOptsBadDeeds(p, -0.2, 0.0, ev)
-				}
-			case 2:
-				// We get hurt.
-				ev := m.AddEvent("Exploration", fmt.Sprintf("%s got hurt while exploring a %s", p.Name(), place), p.Ref())
-				// Add opinion for all relatives.
-				changeOptsBadDeeds(p, -0.2, 0.0, ev)
-			case 3:
-				// We get lost.
-				ev := m.AddEvent("Exploration", fmt.Sprintf("%s got lost while exploring a %s", p.Name(), place), p.Ref())
-				// Add opinion for all relatives.
-				changeOptsBadDeeds(p, -0.2, 0.0, ev)
-			default:
-				// Nothing happens.
-				ev := m.AddEvent("Exploration", fmt.Sprintf("%s explored a %s", p.Name(), place), p.Ref())
-				// Add opinion for all relatives.
-				changeOptsGoodDeeds(p, 0.2, -0.1, ev)
-			}
-		},
-	}
-
-	// A cruel child might hurt another child or torture an animal.
-	actionChildBully := &PersonalAction{
-		probability: func(p *Person) float64 {
-			prob := 0.01
-			// Primary trait.
-			if p.Traits.HasTrait(geneticshuman.TraitCruel) {
-				prob = 0.2
-			} else if p.Traits.HasTrait(geneticshuman.TraitKind) {
-				prob = 0.0
-			}
-			// Secondary traits.
-			if p.Traits.HasTrait(geneticshuman.TraitAggressive) {
-				prob += 0.2
-			}
-			if prob < 0 {
-				prob = 0
-			}
-			return prob
-		},
-		requires: func(p *Person) bool {
-			return p.Age < 12 && p.Age > 2
-		},
-		consequences: func(m *Civ, p *Person) {
-			// Pick a random child.
-			var children []*Person
-			for _, c := range p.Children {
-				if c == p {
-					continue
-				}
-				if c.Age < 12 && c.Age > 2 {
-					children = append(children, c)
-				}
-			}
-
-			if len(children) == 0 {
-				return
-			}
-
-			// Pick a random child.
-			child := children[rand.Intn(len(children))]
-			// We bully another child.
-			ev := m.AddEvent("Child Cruelty", fmt.Sprintf("%s bullied %s", p.Name(), child.Name()), p.Ref())
-			// Add opinion.
-			child.Opinions.AddOpinion(p, -1.0, ev)
-			// Add opinion for all relatives.
-			changeOptsBadDeeds(p, -0.7, 0.15, ev)
-		},
-	}
-	actionChildTortureAnimal := &PersonalAction{
-		probability: func(p *Person) float64 {
-			prob := 0.01
-			// Primary trait.
-			if p.Traits.HasTrait(geneticshuman.TraitCruel) {
-				prob = 0.2
-			} else if p.Traits.HasTrait(geneticshuman.TraitKind) {
-				prob = 0.0
-			}
-			// Secondary traits.
-			if p.Traits.HasTrait(geneticshuman.TraitAggressive) {
-				prob += 0.2
-			}
-			if prob < 0 {
-				prob = 0
-			}
-			return prob
-		},
-		requires: func(p *Person) bool {
-			return p.Age < 12 && p.Age > 2
-		},
-		consequences: func(m *Civ, p *Person) {
-			// Pick a random animal.
-			animals := []string{"cat", "dog", "bird", "rabbit", "squirrel", "mouse", "fish"}
-			animal := animals[rand.Intn(len(animals))]
-			// We torture an animal.
-			ev := m.AddEvent("Child Cruelty", fmt.Sprintf("%s tortured a %s", p.Name(), animal), p.Ref())
-			// Add opinion for all relatives.
-			changeOptsBadDeeds(p, -0.5, 0.25, ev)
-		},
-	}
-
-	var actions []*PersonalAction
-	if actionMurder.requires(p) {
-		actions = append(actions, actionMurder)
-	}
-	if actionCruelty.requires(p) {
-		actions = append(actions, actionCruelty)
-	}
-	if actionKindness.requires(p) {
-		actions = append(actions, actionKindness)
-	}
-	if actionIdle.requires(p) {
-		actions = append(actions, actionIdle)
-	}
-	if actionChildPlay.requires(p) {
-		actions = append(actions, actionChildPlay)
-	}
-	if actionChildExploration.requires(p) {
-		actions = append(actions, actionChildExploration)
-	}
-	if actionChildBully.requires(p) {
-		actions = append(actions, actionChildBully)
-	}
-	if actionChildTortureAnimal.requires(p) {
-		actions = append(actions, actionChildTortureAnimal)
-	}
-
-	// Pick an action.
-	if action := pickAction(p, actions); action != nil {
-		action.Execute(m, p)
-	}
-	// TODO: Add actions that depends on multiple characteristics...
-	// - An aggressive, paranoid person might attack someone they think is plotting against them
-	//  or assassinate a leader of a rival faction.
-	// - A kind, trusting person might help someone in need and either be deceived or make a new friend
-	//  or ally. Maybe even help a leader or wealthy person and gain influence.
-	// - A lazy, careless person might cause an accident or get into trouble.
-
-	// Other options:
-	// - Kind people doing kind things.
-	// - Deceptive people conning others.
-	// - Trusting people being deceived or robbed.
-	// - Careless people getting into accidents.
-	// - Aggressive people getting into fights.
-	// - People with criminal intent committing crimes.
-
-	// TODO: Add consequences for actions.
-	// - A person that is cruel to their children might have their children run away or turn against them.
-	// - If someone witnesses a murder, they might report it to the authorities.
-	// - Criminal acts might lead to prison.
-
-	// Maybe we should define these "roles" formally, which bundle a set of actions and the
-	// related entities that the person can interact with.
-
-	// Traditions
-	// Add the concept of traditions, which are actions that are performed on a regular basis.
-	// For example, a person might have the tradition of taking a child hunting on their
-	// n-th birthday, or the tradition of visiting a particular place on a particular day.
-	// These traditions could be passed down from generation to generation, and could be
-	// a source of conflict or bonding between people.
-	// A cruel person might have the tradition of killing a pet on someone's birthday, while
-	// a kind person might have the tradition of giving a gift to someone on their birthday.
-	//
-	// Traditions should have conditions and/or a cadence or trigger.
-
+	m.tickCareer(p, nDays)
 	return child
 }
 
@@ -1071,7 +253,11 @@ type Person struct {
 	City        *City                    // City of the person
 	Culture     *Culture                 // Culture of the person
 	Opinions    *Opinions                // Opinions of the person
+	Conditions  *Conditions              // Conditions of the person
 	Popularity  ClampedVal               // Popularity of the person (reputation)
+	Karma       ClampedVal               // Karma of the person (good/bad deeds)
+	Artifacts   []*Artifact              // Artifacts owned by the person
+	Career      *Career                  // Career of the person
 
 	// Todo: Allow different naming conventions.
 	FirstName string
@@ -1155,6 +341,7 @@ func (m *Civ) newRandomPersonAt(r int, culture *Culture, gender geneticshuman.Ge
 		ID:          m.getNextPersonID(),
 		Culture:     culture,
 		Opinions:    NewOpinions(),
+		Conditions:  NewConditions(),
 		Genes:       genes,
 		FirstName:   firstName,
 		LastName:    lastName,
@@ -1185,6 +372,32 @@ func (m *Civ) newRandomPersonAt(r int, culture *Culture, gender geneticshuman.Ge
 	// TODO: Random spouse, children, etc.?
 	m.People = append(m.People, p)
 	return p
+}
+
+func (p *Person) addArtifact(m *Civ, a *Artifact) {
+	p.Artifacts = append(p.Artifacts, a)
+	// Apply any condition (blessing, curse, etc.) from the artifact.
+	if a.Condition != nil {
+		p.Conditions.Add(a.Condition, m, p)
+	}
+}
+
+func (p *Person) removeArtifact(m *Civ, a *Artifact) {
+	for i, art := range p.Artifacts {
+		if art == a {
+			p.Artifacts = append(p.Artifacts[:i], p.Artifacts[i+1:]...)
+			// Remove any condition (blessing, curse, etc.) that might have been applied.
+			if a.Condition != nil {
+				p.Conditions.Remove(a.Condition, true, m, p)
+			}
+			return
+		}
+	}
+}
+
+func (p *Person) transferArtifact(m *Civ, a *Artifact, other *Person) {
+	p.removeArtifact(m, a)
+	other.addArtifact(m, a)
 }
 
 // compare returns the similarity between two people.
@@ -1246,9 +459,19 @@ func (p *Person) String() string {
 	if p.Dead() {
 		isDead = "†"
 	}
-	str := fmt.Sprintf("%s (%s%s%d)", name, gender, isDead, p.Age)
+	str := fmt.Sprintf("%s (%s%s%d) (P:%.1f, K:%.1f)", name, gender, isDead, p.Age, p.Popularity, p.Karma)
 	if p.Traits != 0 {
 		str += " [" + p.Traits.String() + "]"
+	}
+	if p.Career != nil {
+		str += " (" + p.Career.String() + ")"
+	}
+	if len(p.Artifacts) > 0 {
+		var astrs []string
+		for _, a := range p.Artifacts {
+			astrs = append(astrs, a.Name)
+		}
+		str += " {" + strings.Join(astrs, ", ") + "}"
 	}
 	return str
 }
@@ -1306,6 +529,7 @@ func (p *Person) newPersonPregnancy(id int, father *Person) *Person {
 		Personality: fiveFactor,
 		Traits:      traits,
 		Opinions:    NewOpinions(),
+		Conditions:  NewConditions(),
 	}
 
 	p.PregnancyCounter = pregnancyDays
@@ -1440,4 +664,101 @@ func isRelated(a, b *Person) bool {
 
 	// Check if there is a (half-) sibling relationship.
 	return a.Mother == b.Mother || a.Father == b.Father
+}
+
+// calcRelationshipDistance calculates the distance between two people in the family tree.
+func calcRelationshipDistance(a, b *Person) int {
+	if a == b {
+		return 0
+	}
+
+	// We just expand the relationships until we find the other person.
+	queue := NewPersonQueue()
+	seen := make(map[*Person]bool)
+	distance := make(map[*Person]int)
+	seen[a] = true
+	distance[a] = 0
+	queue.PushBack(a)
+
+	// Expand the queue.
+	for queue.Len() > 0 {
+		p := queue.PopFront()
+		if p == b {
+			return distance[p]
+		}
+
+		// Add children.
+		if p.Mother != nil && !seen[p.Mother] {
+			seen[p.Mother] = true
+			distance[p.Mother] = distance[p] + 1
+			queue.PushBack(p.Mother)
+		}
+		if p.Father != nil && !seen[p.Father] {
+			seen[p.Father] = true
+			distance[p.Father] = distance[p] + 1
+			queue.PushBack(p.Father)
+		}
+
+		// Add children.
+		for _, c := range p.Children {
+			if !seen[c] {
+				seen[c] = true
+				distance[c] = distance[p] + 1
+				queue.PushBack(c)
+			}
+		}
+	}
+
+	return -1
+}
+
+type personNode struct {
+	p    *Person
+	next *personNode
+	prev *personNode
+}
+
+func NewPersonQueue() *PersonQueue {
+	return &PersonQueue{}
+}
+
+// PersonQueue is a simple FIFO queue based on a doubly linked list.
+type PersonQueue struct {
+	head, tail *personNode
+	len        int
+}
+
+// Len returns the number of elements in the queue.
+func (q *PersonQueue) Len() int {
+	return q.len
+}
+
+// PushBack adds a new element to the back of the queue.
+func (q *PersonQueue) PushBack(p *Person) {
+	node := &personNode{p: p}
+	if q.tail == nil {
+		q.head = node
+		q.tail = node
+	} else {
+		q.tail.next = node
+		node.prev = q.tail
+		q.tail = node
+	}
+	q.len++
+}
+
+// PopFront removes and returns the element at the front of the queue.
+func (q *PersonQueue) PopFront() *Person {
+	if q.head == nil {
+		return nil
+	}
+	node := q.head
+	q.head = node.next
+	if q.head == nil {
+		q.tail = nil
+	} else {
+		q.head.prev = nil
+	}
+	q.len--
+	return node.p
 }

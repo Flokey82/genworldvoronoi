@@ -2,7 +2,6 @@ package genworldvoronoi
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/Flokey82/genworldvoronoi/geo"
 )
@@ -34,6 +33,7 @@ const (
 	ObjectTypeTribe
 	ObjectTypeFaction
 	ObjectTypeLeadership
+	ObjectTypeArtifact
 )
 
 type ObjectReference struct {
@@ -76,7 +76,7 @@ func (h *History) AddEvent(t string, msg string, id ObjectReference) *Event {
 		Msg:  msg,
 		ID:   id,
 	}
-	log.Println(event.String())
+	//log.Println(event.String())
 	h.Events = append(h.Events, event)
 	return event
 }

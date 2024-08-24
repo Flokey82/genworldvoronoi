@@ -242,20 +242,13 @@ const (
 const ResourceTypeAny = -1
 
 // NOTE: This is only about resources.
-func (s *simState) compareResources(src, dst int) (exp, imp LocalResouces) {
+func (m *Civ) compareResources(src, dst int) (exp, imp LocalResouces) {
 	// Determine what resources we have and what resources we need.
-	srcRes := s.m.getResources(src, true)
-	dstRes := s.m.getResources(dst, true)
+	srcRes := m.getResources(src, true)
+	dstRes := m.getResources(dst, true)
 	imp = dstRes.Remove(srcRes)
 	exp = srcRes.Remove(dstRes)
 	return
-}
-
-type tradeProposal struct {
-	id   int           // id of the trading partner
-	dist float64       // distance to the trading partner
-	exp  LocalResouces // resources that we can export
-	imp  LocalResouces // resources that we can import
 }
 
 func sumResource(res []int) int {

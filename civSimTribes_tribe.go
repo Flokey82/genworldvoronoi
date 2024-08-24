@@ -591,10 +591,10 @@ func (t *Tribe) Split(newPopulation int, randomize bool, m *Civ) *Tribe {
 		}
 		for pIdx := range rand.Perm(len(t.People)) {
 			p := t.People[pIdx]
-			if !newTribePeople[p] {
-				tPeople = append(tPeople, p)
-			} else if len(ntPeople) < newPopulation {
+			if newTribePeople[p] || len(ntPeople) < newPopulation {
 				ntPeople = append(ntPeople, p)
+			} else {
+				tPeople = append(tPeople, p)
 			}
 		}
 		t.People = tPeople

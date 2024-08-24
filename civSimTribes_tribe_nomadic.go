@@ -5,6 +5,9 @@ import (
 	"sort"
 )
 
+// TODO: Fix this.
+var rNbs2 = make([]int, 0, 6)
+
 // HANDLE NOMADIC TRIBES HERE.
 //
 // Nomadic tribes will move around and settle in different regions, depending on their preferences
@@ -19,7 +22,7 @@ func (s *simState) handleNomadicTribe(t *Tribe) {
 	// - We do not move into a region that is not suitable for the tribe.
 
 	// Calculate the max population for each neighboring region.
-	neigbors := s.m.R_circulate_r(rNbs, t.RegionID)
+	neigbors := s.m.R_circulate_r(rNbs2, t.RegionID)
 	maxPopPerRegion := make([]int, len(neigbors))
 	neighborIndices := make([]int, len(neigbors))
 	for i, nb := range neigbors {

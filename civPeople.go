@@ -14,7 +14,7 @@ import (
 // NOTE: 'cf' is a function that returns a culture for a given location.
 // We use this function to determine the culture of a newborn based on the region
 // it is born in.
-func (m *Civ) tickPeople(people []*Person, nDays int, cf func(int) *Culture, limitPop int) []*Person {
+func (m *Civ) tickPeople(people []*Person, nDays int, cf func(int) *Culture, limitPop, reg int) []*Person {
 	alive := make([]*Person, 0, len(people))
 	dead := make([]*Person, 0, len(people))
 	var peopleCount int
@@ -78,6 +78,13 @@ func (m *Civ) tickPeople(people []*Person, nDays int, cf func(int) *Culture, lim
 					peopleCount++
 				}
 			}
+		}
+
+		// Add some random people to the population.
+		missing := limitPop - peopleCount
+		if missing > 0 {
+			// Add some random people to the population.
+			alive = append(alive, m.placePopulationAt(reg, missing, cf)...)
 		}
 	}
 
@@ -208,6 +215,10 @@ func (m *Civ) matchMaker(people []*Person) {
 
 	// Sort by age, so similar age people are more likely to be paired up quicker.
 	sort.Slice(single, func(a, b int) bool {
+		if single[a].Age == single[b].Age {
+			// Higher popularity first.
+			return single[a].Popularity < single[b].Popularity
+		}
 		return single[a].Age > single[b].Age
 	})
 

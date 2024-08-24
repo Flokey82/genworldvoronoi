@@ -263,12 +263,6 @@ func (m *Civ) GetEmpires() []*Empire {
 	return m.Empires
 }
 
-// getEmpireNeighbors returns all empires that are neighbors of the
-// given empire.
-func (m *Civ) getEmpireNeighbors(c *Empire) []int {
-	return m.getTerritoryNeighbors(c.ID, m.RegionToEmpire)
-}
-
 // getEmpireCityStates returns all city states that are part of the
 // given empire.
 func (m *Civ) getEmpireCityStates(e *Empire) []*CityState {
@@ -281,9 +275,29 @@ func (m *Civ) getEmpireCityStates(e *Empire) []*CityState {
 	return cityStates
 }
 
+// getEmpireNeighborIDs returns all empires that are neighbors of the
+// given empire.
+func (m *Civ) getEmpireNeighborIDs(c *Empire) []int {
+	return m.getTerritoryNeighbors(c.ID, m.RegionToEmpire)
+}
+
+// getEmpireNeighbors returns all neighboring empires of the given empire.
+func (m *Civ) getEmpireNeighbors(e *Empire) []*Empire {
+	var neighbors []*Empire
+	for _, nbID := range m.getEmpireNeighborIDs(e) {
+		if nb := m.GetEmpire(nbID); nb != nil {
+			neighbors = append(neighbors, nb)
+		} else {
+			log.Printf("!!!%s has a neighboring empire with ID %d and it could not be found", e.String(), nbID)
+		}
+	}
+	return neighbors
+}
+
 // getEmpireCityStateNeighbors returns all city states that are neighbors
 // of the given empire.
-func (m *Civ) getEmpireCityStateNeighbors(e *Empire) []*CityState {
+// If onlyIndependent is true, city states that are part of another empire will not be returned.
+func (m *Civ) getEmpireCityStateNeighbors(e *Empire, onlyIndependent bool) []*CityState {
 	seen := make(map[int]bool)
 	ours := m.getEmpireCityStates(e)
 	var theirs []*CityState
@@ -296,7 +310,9 @@ func (m *Civ) getEmpireCityStateNeighbors(e *Empire) []*CityState {
 				continue
 			}
 			seen[r] = true
-			theirs = append(theirs, m.GetCityState(r))
+			if !onlyIndependent || m.RegionToEmpire[r] == -1 {
+				theirs = append(theirs, m.GetCityState(r))
+			}
 		}
 	}
 	return theirs

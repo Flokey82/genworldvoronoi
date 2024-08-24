@@ -283,7 +283,7 @@ func (s *simState) getSettleScoreFunc(t *Tribe, spiritualCalling bool) func(r in
 		// NOTE: In theory we could use a distance field to determine the distance to the closest tribe / city
 		// and encourage settling in new regions.
 		minDist := math.Inf(1)
-		for _, c := range s.cities {
+		for _, c := range s.m.Cities {
 			if dist := s.m.Geo.GetDistance(c.ID, r); dist < minDist {
 				minDist = dist
 			}

@@ -132,6 +132,22 @@ func (m *Civ) LogTribes() {
 		log.Printf("  Current Max population: %d", t.currentRegionMaxPop)
 		log.Printf("  Max population: %d", t.regionMaxPop)
 
+		// Log the population that is alive.
+		log.Printf("  Population: %d", t.Population)
+		log.Printf("  Num people: %d", len(t.People))
+		for _, p := range t.People {
+			log.Printf("    %s", p.String())
+			log.Printf("    %s", p.StringGenes())
+			if p.Father != nil {
+				log.Printf("      Father: %s", p.Father.String())
+				log.Printf("      %s", p.Father.StringGenes())
+			}
+			if p.Mother != nil {
+				log.Printf("      Mother: %s", p.Mother.String())
+				log.Printf("      %s", p.Mother.StringGenes())
+			}
+		}
+
 		log.Printf(" Resources (local):")
 		localRes := m.getResources(t.RegionID, false)
 		localRes.Log()
@@ -194,6 +210,10 @@ func (s *simState) moveTribe(t *Tribe, r int) {
 	if s.tribeAtRegion[t.RegionID] == t {
 		s.tribeAtRegion[t.RegionID] = nil
 	}
+	// Calculate the distance that we have to travel.
+	dist := s.m.GetDistance(t.RegionID, r) * unitDistToKm
+	log.Printf("Tribe %s is moving from region %d to region %d (%.2f km)", t.String(), t.RegionID, r, dist)
+
 	// Move the tribe to the new region.
 	t.RegionID = r
 	if s.tribeAtRegion[r] != nil && s.tribeAtRegion[r] != t {
@@ -260,10 +280,30 @@ func (s *simState) getRegionProp(r int) RegionProp {
 func (s *simState) getRegionProx(r int) RegionProximity {
 	return RegionProximity{
 		River:    s.m.IsRegRiver(r),
-		Lake:     s.m.lakeProxFunc(r),
-		Ocean:    s.m.oceanProxFunc(r),
+		Lake:     s.m.LakeProxFunc(r),
+		Ocean:    s.m.OceanProxFunc(r),
 		Mountain: s.m.Elevation[r] > 0.3,
 	}
+}
+
+// Fake the lake proximity function.
+func (m *Civ) LakeProxFunc(r int) bool {
+	for _, nb := range m.R_circulate_r(rNbs, r) {
+		if m.IsRegLakeOrWaterBody(nb) && m.WaterbodySize[nb] > 5 {
+			return true
+		}
+	}
+	return false
+}
+
+// Fake the ocean proximity function.
+func (m *Civ) OceanProxFunc(r int) bool {
+	for _, nb := range m.R_circulate_r(rNbs, r) {
+		if m.Elevation[nb] <= 0 && m.WaterbodySize[nb] > 5 {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *simState) printRegionInfo(r int) {
@@ -368,51 +408,6 @@ func (s *simState) calcTheoreticalMaxPopPerRegion(t *Tribe, r int) int {
 	return int(baseVal * multiplier)
 }
 
-type cityDist struct {
-	city *City
-	dist float64
-}
-
-// getNearbyCities returns the cities that are within the given radius of the region.
-func (s *simState) getNearbyCities(r int, radius float64) []*cityDist {
-	var res []*cityDist
-	for _, c := range s.cities {
-		if c.ID == r {
-			continue
-		}
-		dist := s.m.Geo.GetDistance(r, c.ID) * unitDistToKm
-		if dist < radius {
-			res = append(res, &cityDist{city: c, dist: dist})
-		}
-	}
-
-	// Sort the cities by distance.
-	sort.Slice(res, func(i, j int) bool {
-		return res[i].dist < res[j].dist
-	})
-	return res
-}
-
-// Fake the lake proximity function.
-func (m *Civ) lakeProxFunc(r int) bool {
-	for _, nb := range m.R_circulate_r(rNbs, r) {
-		if m.IsRegLakeOrWaterBody(nb) && m.WaterbodySize[nb] > 5 {
-			return true
-		}
-	}
-	return false
-}
-
-// Fake the ocean proximity function.
-func (m *Civ) oceanProxFunc(r int) bool {
-	for _, nb := range m.R_circulate_r(rNbs, r) {
-		if m.Elevation[nb] <= 0 && m.WaterbodySize[nb] > 5 {
-			return true
-		}
-	}
-	return false
-}
-
 // findBestRegion will find the best region according to the score function.
 func (s *simState) findBestRegion(t *Tribe, r int, scoreFunc func(r int) (float64, bool), avoidRegs []int) (int, float64) {
 	log.Println("!!!Tribe", t.ID, "is scouting for a new region to settle in.")
@@ -494,7 +489,6 @@ func (m *Civ) tickSimTribes() {
 		newTribes:      make([]*Tribe, 0, len(m.Tribes)),
 		tribeAtRegion:  make([]*Tribe, m.NumRegions),
 		isCity:         make(map[int]bool),
-		cities:         make([]*City, 0, len(m.Cities)),
 		nodeCache:      make(map[int]*MigrationTile),
 		visitedPathSeg: make(map[[2]int]int),
 		steepness:      m.GetSteepness(),
@@ -523,7 +517,6 @@ func (m *Civ) tickSimTribes() {
 
 	// Take note of the regions that are already cities.
 	for _, c := range m.Cities {
-		s.cities = append(s.cities, c)
 		s.isCity[c.ID] = true
 	}
 
@@ -549,8 +542,8 @@ func (m *Civ) tickSimTribes() {
 
 	// Grow the population of each tribe.
 	for _, t := range m.Tribes {
+		// If the tribe has died out, skip it.
 		if t.Population == 0 {
-			// The tribe has died out.
 			s.tribeAtRegion[t.RegionID] = nil
 			continue
 		}
@@ -592,6 +585,9 @@ func (m *Civ) tickSimTribes() {
 
 		// Develop the skills of the tribe given the current region.
 		t.DevelopSkills(&curRegProp, resPres, m.History)
+
+		// Update the professions of the tribe.
+		t.AssignProfessions(m)
 
 		// Exhaust the resources of the region.
 		m.SoilExhaustion[t.RegionID] += float64(t.Population) / t.SustainabilityFactor(&curRegProp, resPres)
@@ -718,30 +714,39 @@ func (m *Civ) tickSimTribes() {
 			s.handleSettlingTribe(t)
 		} else {
 			// We have settled, so we need to update all the things we are in charge of.
-			if t.Type >= TribeTypeCity {
-				s.handleTradeCity(t)
-				s.handleCity(t)
-			}
-			if t.Type >= TribeTypeCityState {
-				s.handleTradeCityState(t)
-				s.handleCityState(t)
-			}
-			if t.Type >= TribeTypeEmpire {
-				s.handleTradeEmpire(t)
-				s.handleEmpire(t)
-			}
+			s.handleSettledTribe(t)
 		}
 
 		// Update the tribe's population.
 		t.People = s.m.tickPeople(t.People, 365, func(r int) *Culture {
 			return t.Culture
-		}, t.Population)
+		}, t.Population, t.RegionID)
 		for _, p := range t.People {
 			if p.Dead() {
 				continue
 			}
 			// Update the location of the person.
 			m.updatePersonLocation(p, t.RegionID)
+		}
+
+		// Check if the settlement has people that are not in the tribe.
+		if t.Settlement != nil {
+			// Compare the people in the tribe vs the people in the settlement.
+			seenTribePeople := make(map[int]bool)
+			for _, p := range t.People {
+				seenTribePeople[p.ID] = true
+			}
+			for _, p := range t.Settlement.People {
+				if !seenTribePeople[p.ID] {
+					log.Println("Person", p.ID, "is in settlement", t.Settlement.ID, "but not in tribe", t.ID)
+				}
+			}
+		}
+
+		log.Printf("Tribe %s has population %d and assigned %d people", t.String(), t.Population, len(t.People))
+		if t.Settlement != nil {
+			log.Printf("Tribe %s has settlement %s", t.String(), t.Settlement.String())
+			log.Printf("Tribe %s has settlement with %d people", t.String(), len(t.Settlement.People))
 		}
 	}
 

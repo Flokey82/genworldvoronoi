@@ -190,8 +190,13 @@ const (
 // +1: region is a land cell next to a water cell (lake shore/coastal land)
 // +2: region is a land cell next to a coastal land cell
 // >2: region is inland
-func (m *Geo) GetRegCellTypes() []int {
-	var oceanRegs, landRegs []int
+func (m *BaseObject) GetRegCellTypes() []int {
+	if !m.RegCellTypesNeedUpdate {
+		return m.RegCellTypes
+	}
+
+	oceanRegs := make([]int, 0, m.SphereMesh.NumRegions)
+	landRegs := make([]int, 0, m.SphereMesh.NumRegions)
 	stop_land := make(map[int]bool)
 	stop_ocean := make(map[int]bool)
 	for r, elev := range m.Elevation {
@@ -206,8 +211,11 @@ func (m *Geo) GetRegCellTypes() []int {
 
 	// Assign distance fields to ocean and land regions.
 	// TODO: Do this concurrently.
-	regDistanceOcean := m.AssignDistanceField(oceanRegs, stop_land)
-	regDistanceLand := m.AssignDistanceField(landRegs, stop_ocean)
+	if m.DistNeedUpdate {
+		m.DistLandToOcean = m.AssignDistanceField(oceanRegs, stop_land)
+		m.DistOceanToLand = m.AssignDistanceField(landRegs, stop_ocean)
+		m.DistNeedUpdate = false
+	}
 
 	cellType := make([]int, m.SphereMesh.NumRegions)
 	for i := range cellType {
@@ -215,20 +223,24 @@ func (m *Geo) GetRegCellTypes() []int {
 		if m.Elevation[i] <= 0.0 {
 			// Figure out if it has a land neighbor.
 			// If so, it is -1 (water near coast)
-			if regDistanceLand[i] <= 1 {
+			if m.DistOceanToLand[i] < 2 {
 				cellType[i] = CellTypeCoastalWater
 			} else {
 				// If not, it is -2 (water far from coast)
 				cellType[i] = CellTypeDeepWaters
 			}
-		} else if regDistanceOcean[i] <= 1 { // Figure out if it has a water neighbor.
+		} else if m.DistLandToOcean[i] < 2 { // Figure out if it has a water neighbor.
 			// If so, it is 1 (land near coast)
 			cellType[i] = CellTypeCoastalLand
 		} else {
 			// If not, it is >=2 (land far from coast)
-			cellType[i] = int(regDistanceOcean[i])
+			cellType[i] = int(m.DistLandToOcean[i])
 		}
 	}
+
+	m.RegCellTypes = cellType
+	m.RegCellTypesNeedUpdate = false
+
 	return cellType
 }
 

@@ -145,6 +145,7 @@ func (m *Geo) GetErosionRate() []float64 {
 
 		// If we have avg. temp. below 0, we need to imitate glacial erosion, which
 		// is carving "wider" valleys than hydraulic erosion.
+		// TODO: This would erode a wider area, but slower than hydraulic erosion.
 		if m.GetRegTemperature(r, maxH) < 0 {
 			erodeNbs = erodeNeighborsGlacier
 		}
@@ -159,6 +160,8 @@ func (m *Geo) GetErosionRate() []float64 {
 // GetErosionRate2 is an alternative erosion calculation which takes in account
 // the steepness and flux of each region to determine the shape of eroded
 // riverbeds and valleys.
+//
+// TODO: Add glacier erosion.
 func (m *Geo) GetErosionRate2() []float64 {
 	const (
 		distRegions = 3.0 // Number of regions to traverse at max flux.

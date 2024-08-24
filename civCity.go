@@ -545,6 +545,31 @@ func (m *Civ) placeCityAt(r int, founded int64, cType TownType, pop int, score f
 	return c
 }
 
+type cityDist struct {
+	city *City
+	dist float64
+}
+
+// getNearbyCities returns the cities that are within the given radius of the region.
+func (m *Civ) getNearbyCities(r int, radius float64) []*cityDist {
+	var res []*cityDist
+	for _, c := range m.Cities {
+		if c.ID == r {
+			continue
+		}
+		dist := m.Geo.GetDistance(r, c.ID) * unitDistToKm
+		if dist < radius {
+			res = append(res, &cityDist{city: c, dist: dist})
+		}
+	}
+
+	// Sort the cities by distance.
+	sort.Slice(res, func(i, j int) bool {
+		return res[i].dist < res[j].dist
+	})
+	return res
+}
+
 /*
 // Not used yet
 

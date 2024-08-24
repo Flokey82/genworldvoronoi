@@ -608,7 +608,7 @@ func (m *Map) ExportWebp(name string) {
 func (m *Map) getImage(drawTerritories, drawSeasonalBiome bool) image.Image {
 	colorGrad := colorgrad.Rainbow()
 	terrToColor := make(map[int]int)
-	terr := m.Cities[:m.NumCityStates]
+	terr := m.Cities[:min(m.NumCityStates, len(m.Cities))]
 	territory := m.RegionToCityState
 	//terr := m.Cultures
 	//territory := m.RegionToCulture
@@ -638,7 +638,7 @@ func (m *Map) getImage(drawTerritories, drawSeasonalBiome bool) image.Image {
 			// Hacky: Modify elevation based on latitude to compensate for colder weather at the poles and warmer weather at the equator.
 			// valElev := math.Max(math.Min((elev/max)+(math.Sqrt(math.Abs(lat)/90.0)-0.5), max), 0)
 			valMois := m.Rainfall[r] / maxMois
-			if territory[r] != 0 && drawTerritories {
+			if territory[r] > 0 && drawTerritories {
 				cr, cg, cb, _ := cols[terrToColor[territory[r]]].RGBA()
 				col.R = uint8(float64(255) * float64(cr) / float64(0xffff))
 				col.G = uint8(float64(255) * float64(cg) / float64(0xffff))

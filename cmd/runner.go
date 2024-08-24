@@ -31,10 +31,10 @@ func main() {
 	}
 
 	sp.GetEmpires()
-	exportPNG := false
-	exportOBJ := false
+	exportPNG := true
+	exportOBJ := true
 	exportSVG := true
-	exportWebp := false
+	exportWebp := true
 	if exportPNG {
 		sp.ExportPng("test.png")
 	}

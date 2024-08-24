@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"os"
+	"runtime/pprof"
 
 	"github.com/Flokey82/genworldvoronoi"
 	"github.com/Flokey82/genworldvoronoi/cmd2/maptiles"
@@ -28,9 +29,31 @@ func init() {
 	flag.Float64Var(&jitter, "jitter", jitter, "jitter")
 }
 
+var cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
+var memprofile = flag.String("memprofile", "", "write memory profile to this file")
+
 func main() {
 	// Generate a new world.
 	flag.Parse()
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
+	}
+
+	defer func() {
+		if *memprofile != "" {
+			f, err := os.Create(*memprofile)
+			if err != nil {
+				log.Fatal(err)
+			}
+			pprof.WriteHeapProfile(f)
+			f.Close()
+		}
+	}()
 
 	// Initialize the config.
 	cfg := genworldvoronoi.NewConfig()
@@ -51,6 +74,6 @@ func main() {
 		os.Exit(1)
 	}
 	if err := ebiten.RunGame(g); err != nil {
-		log.Fatal(err)
+		log.Println("error running game: %v", err)
 	}
 }
