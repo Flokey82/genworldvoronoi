@@ -11,7 +11,6 @@ import (
 	"github.com/Flokey82/genworldvoronoi/spheremesh"
 	"github.com/Flokey82/genworldvoronoi/various"
 	"github.com/Flokey82/geoquad"
-	"github.com/Flokey82/go_gens/utils"
 	"github.com/Flokey82/go_gens/vectors"
 )
 
@@ -21,34 +20,33 @@ type BaseObject struct {
 	noise                  *noise.Noise // Opensimplex noise initialized with above seed
 	*spheremesh.SphereMesh              // Triangle mesh containing the sphere information
 
-	// NOTE: This is set by GetRegCellTypes. Instead we should consider
-	// caching the types instead.
-	DistLandToOcean        []float64 // Distance to the ocean
-	DistOceanToLand        []float64 // Distance to the land
-	DistNeedUpdate         bool      // Distance to ocean/land needs update
-	RegCellTypes           []int     // Cell type of the region
-	RegCellTypesNeedUpdate bool      // Cell type of the region needs update
+	DistLandToOcean     *PSliceMinMax[float64] // Distance to the ocean
+	DistOceanToLand     *PSliceMinMax[float64] // Distance to the land
+	DistMountainToWater *PSliceMinMax[float64] // Distance from water sources, stopping at mountains
+	RegCellTypes        *PSlice[int]           // Cell type of the region
+	Steepness           *PSliceMinMax[float64] // Point / region steepness
 
 	// Elevation related stuff
-	Elevation         []float64       // Point / region elevation
-	RegionCompression map[int]float64 // Point / region compression factor
-	Compression       []float64       // Propagated plate compression
+	Elevation         *PropertySliceNoUpdate // Point / region elevation
+	RegionCompression map[int]float64        // Point / region compression factor
+	Compression       []float64              // Propagated plate compression
 
 	// Derived elevation related stuff
-	Downhill         []int        // Point / region mapping to its lowest neighbor
+	Downhill         *PSlice[int] // Point / region mapping to its lowest neighbor
+	DownhillNoPool   *PSlice[int] // Point / region mapping to its lowest neighbor (ignoring water pools)
 	Landmasses       []int        // Point / region mapping of regions that are part of the same landmass
 	LandmassSize     map[int]int  // Landmass ID to size mapping
 	RegionIsMountain map[int]bool // Point / region is a mountain
 	RegionIsVolcano  map[int]bool // Point / region is a volcano
 
 	// Moisture related stuff
-	Moisture          []float64    // Point / region moisture
-	Rainfall          []float64    // Point / region rainfall
-	Flux              []float64    // Point / region hydrology: throughflow of rainfall
-	Waterbodies       []int        // Point / region mapping of pool to waterbody ID
-	WaterbodySize     map[int]int  // Waterbody ID to size mapping
-	LakeSize          map[int]int  // Lake ID to size mapping
-	RegionIsWaterfall map[int]bool // Point / region is a waterfall
+	Moisture          *PropertySliceNoUpdate // Point / region moisture
+	Rainfall          *PropertySliceNoUpdate // Point / region rainfall
+	Flux              *PSliceMinMax[float64] // Point / region hydrology: throughflow of rainfall
+	Waterbodies       []int                  // Point / region mapping of pool to waterbody ID
+	WaterbodySize     map[int]int            // Waterbody ID to size mapping
+	LakeSize          map[int]int            // Lake ID to size mapping
+	RegionIsWaterfall map[int]bool           // Point / region is a waterfall
 
 	// Temperature related stuff
 	OceanTemperature []float64   // Ocean temperatures (yearly average)
@@ -73,45 +71,77 @@ type BaseObject struct {
 }
 
 func newBaseObject(seed int64, mesh *spheremesh.SphereMesh) *BaseObject {
-	return &BaseObject{
-		Seed:                   seed,
-		Rand:                   rand.New(rand.NewSource(seed)),
-		noise:                  noise.NewNoise(6, 2.0/3.0, seed),
-		SphereMesh:             mesh,
-		DistLandToOcean:        make([]float64, mesh.NumRegions),
-		DistOceanToLand:        make([]float64, mesh.NumRegions),
-		DistNeedUpdate:         true, // TODO: Set this to true whenever the mesh changes.
-		RegCellTypes:           make([]int, mesh.NumRegions),
-		RegCellTypesNeedUpdate: true,
-		Elevation:              make([]float64, mesh.NumRegions),
-		RegionCompression:      make(map[int]float64),
-		Compression:            make([]float64, mesh.NumRegions),
-		Moisture:               make([]float64, mesh.NumRegions),
-		Flux:                   make([]float64, mesh.NumRegions),
-		Waterpool:              make([]float64, mesh.NumRegions),
-		Rainfall:               make([]float64, mesh.NumRegions),
-		OceanTemperature:       make([]float64, mesh.NumRegions),
-		AirTemperature:         make([]float64, mesh.NumRegions),
-		Downhill:               make([]int, mesh.NumRegions),
-		Drainage:               make([]int, mesh.NumRegions),
-		Waterbodies:            make([]int, mesh.NumRegions),
-		WaterbodySize:          make(map[int]int),
-		BiomeRegions:           make([]int, mesh.NumRegions),
-		BiomeRegionSize:        make(map[int]int),
-		Landmasses:             make([]int, mesh.NumRegions),
-		LandmassSize:           make(map[int]int),
-		LakeSize:               make(map[int]int),
-		RegionIsMountain:       make(map[int]bool),
-		RegionIsVolcano:        make(map[int]bool),
-		RegionIsWaterfall:      make(map[int]bool),
-		TriPool:                make([]float64, mesh.NumTriangles),
-		TriElevation:           make([]float64, mesh.NumTriangles),
-		TriMoisture:            make([]float64, mesh.NumTriangles),
-		TriDownflowSide:        make([]int, mesh.NumTriangles),
-		OrderTri:               make([]int, mesh.NumTriangles),
-		TriFlow:                make([]float64, mesh.NumTriangles),
-		SideFlow:               make([]float64, mesh.NumSides),
+	bo := &BaseObject{
+		Seed:              seed,
+		Rand:              rand.New(rand.NewSource(seed)),
+		noise:             noise.NewNoise(6, 2.0/3.0, seed),
+		SphereMesh:        mesh,
+		RegionCompression: make(map[int]float64),
+		Compression:       make([]float64, mesh.NumRegions),
+		Waterpool:         make([]float64, mesh.NumRegions),
+		OceanTemperature:  make([]float64, mesh.NumRegions),
+		AirTemperature:    make([]float64, mesh.NumRegions),
+		Drainage:          make([]int, mesh.NumRegions),
+		Waterbodies:       make([]int, mesh.NumRegions),
+		WaterbodySize:     make(map[int]int),
+		BiomeRegions:      make([]int, mesh.NumRegions),
+		BiomeRegionSize:   make(map[int]int),
+		Landmasses:        make([]int, mesh.NumRegions),
+		LandmassSize:      make(map[int]int),
+		LakeSize:          make(map[int]int),
+		RegionIsMountain:  make(map[int]bool),
+		RegionIsVolcano:   make(map[int]bool),
+		RegionIsWaterfall: make(map[int]bool),
+		TriPool:           make([]float64, mesh.NumTriangles),
+		TriElevation:      make([]float64, mesh.NumTriangles),
+		TriMoisture:       make([]float64, mesh.NumTriangles),
+		TriDownflowSide:   make([]int, mesh.NumTriangles),
+		OrderTri:          make([]int, mesh.NumTriangles),
+		TriFlow:           make([]float64, mesh.NumTriangles),
+		SideFlow:          make([]float64, mesh.NumSides),
 	}
+	bo.RegCellTypes = NewPSlice(mesh.NumRegions, bo.getRegCellTypesNoCache)
+
+	bo.DistLandToOcean = NewPSliceMinMax(mesh.NumRegions, bo.getDistLandToOceanNoCache)
+	bo.DistLandToOcean.Impacts = append(bo.DistLandToOcean.Impacts, bo.RegCellTypes)
+
+	bo.DistOceanToLand = NewPSliceMinMax(mesh.NumRegions, bo.getDistOceanToLandNoCache)
+	bo.DistOceanToLand.Impacts = append(bo.DistOceanToLand.Impacts, bo.RegCellTypes)
+
+	bo.DistMountainToWater = NewPSliceMinMax(mesh.NumRegions, bo.getDistWaterToMountainNoCache)
+
+	// TODO: Flux should be updated when rainfall changes.
+	bo.Flux = NewPSliceMinMax(mesh.NumRegions, func() []float64 {
+		return bo.getFluxNoCache(false)
+	})
+
+	// Downhill will be updated when Elevation changes.
+	bo.Downhill = NewPSlice(mesh.NumRegions, func(oldVals []int) []int {
+		return bo.getDownhillNoCache(oldVals, true)
+	})
+	bo.Downhill.Impacts = append(bo.Downhill.Impacts, bo.Flux)
+
+	// DownhillNoPool will be updated when Elevation changes.
+	bo.DownhillNoPool = NewPSlice(mesh.NumRegions, func(oldVals []int) []int {
+		return bo.getDownhillNoCache(oldVals, false)
+	})
+	bo.DownhillNoPool.Impacts = append(bo.DownhillNoPool.Impacts, bo.Flux)
+
+	// TODO: Link moisture and rainfall to elevation and temperature.
+	bo.Moisture = NewPropertySliceNoUpdate(mesh.NumRegions)
+	bo.Rainfall = NewPropertySliceNoUpdate(mesh.NumRegions)
+	bo.Rainfall.Impacts = append(bo.Rainfall.Impacts, bo.Flux)
+
+	bo.Steepness = NewPSliceMinMax(mesh.NumRegions, bo.GetSteepnessNoCache)
+	bo.Elevation = NewPropertySliceNoUpdate(mesh.NumRegions)
+	bo.Elevation.Impacts = append(bo.Elevation.Impacts, bo.Steepness)
+	bo.Elevation.Impacts = append(bo.Elevation.Impacts, bo.DistLandToOcean)
+	bo.Elevation.Impacts = append(bo.Elevation.Impacts, bo.DistOceanToLand)
+	bo.Elevation.Impacts = append(bo.Elevation.Impacts, bo.RegCellTypes)
+	bo.Elevation.Impacts = append(bo.Elevation.Impacts, bo.DistMountainToWater)
+	bo.Elevation.Impacts = append(bo.Elevation.Impacts, bo.Downhill)
+	bo.Elevation.Impacts = append(bo.Elevation.Impacts, bo.DownhillNoPool)
+	return bo
 }
 
 // ResetRand resets the random number generator to its initial state.
@@ -187,8 +217,9 @@ func (m *BaseObject) PickRandomRegions2(n int) []GenRegion {
 // assignTriValues averages out the values of the mesh points / regions and assigns them
 // to the triangles of the mesh (or the triangle centroid).
 func (m *BaseObject) assignTriValues() {
-	rElevation := m.Elevation
-	rMoisture := m.Moisture
+	rElevation := m.Elevation.GetValues()
+	rMoisture := m.Moisture.GetValues()
+	rRainfall := m.Rainfall.GetValues()
 	rPool := m.Waterpool
 	tElevation := m.TriElevation
 	tMoisture := m.TriMoisture
@@ -213,7 +244,7 @@ func (m *BaseObject) assignTriValues() {
 		for i := 0; i < 3; i++ {
 			s := 3*t + i
 			r := mesh.S_begin_r(s)
-			moisture += m.Rainfall[r] / 3
+			moisture += rRainfall[r] / 3
 		}
 		tMoisture[t] = moisture
 	}
@@ -222,32 +253,29 @@ func (m *BaseObject) assignTriValues() {
 	m.TriMoisture = tMoisture
 }
 
-// AssignDownhill will populate r_downhill with a mapping of region to lowest neighbor region.
+// getDownhillNoCache will return a mapping of region to lowest neighbor region.
 // NOTE: This is based on mewo2's terrain generation code
 // See: https://github.com/mewo2/terrain
-func (m *BaseObject) AssignDownhill(usePool bool) {
-	m.Downhill = m.GetDownhill(usePool)
-}
-
-// GetDownhill will return a mapping of region to lowest neighbor region.
-//
 // If usePool is true, then the lowest neighbor will be calculated using
 // the water pool depth plus the elevation of the region.
-func (m *BaseObject) GetDownhill(usePool bool) []int {
+func (m *BaseObject) getDownhillNoCache(oldvals []int, usePool bool) []int {
 	// Here we will map each region to the lowest neighbor.
 	mesh := m.SphereMesh
-	rDownhill := make([]int, mesh.NumRegions)
+	if len(oldvals) != mesh.NumRegions {
+		oldvals = make([]int, mesh.NumRegions)
+	}
 
+	elev := m.Elevation.GetValues()
 	chunkProcessor := func(start, end int) {
 		outReg := make([]int, 0, 8)
 		for r := start; r < end; r++ {
 			lowestRegion := -1
-			lowestElevation := m.Elevation[r]
+			lowestElevation := elev[r]
 			if usePool {
 				lowestElevation += m.Waterpool[r]
 			}
 			for _, nbReg := range mesh.R_circulate_r(outReg, r) {
-				elev := m.Elevation[nbReg]
+				elev := elev[nbReg]
 				if usePool {
 					elev += m.Waterpool[nbReg]
 				}
@@ -256,7 +284,7 @@ func (m *BaseObject) GetDownhill(usePool bool) []int {
 					lowestRegion = nbReg
 				}
 			}
-			rDownhill[r] = lowestRegion
+			oldvals[r] = lowestRegion
 		}
 	}
 
@@ -268,7 +296,7 @@ func (m *BaseObject) GetDownhill(usePool bool) []int {
 		// Process the regions in a single chunk.
 		chunkProcessor(0, mesh.NumRegions)
 	}
-	return rDownhill
+	return oldvals
 }
 
 // AssignDownflow starts with triangles that are considered "ocean" and works its way
@@ -349,9 +377,9 @@ func (m *BaseObject) GetRegNeighbors(r int) []int {
 func (m *BaseObject) GetLowestRegNeighbor(r int) int {
 	lowestReg := -1
 	lowestElev := 999.0
-	rElev := m.Elevation[r]
+	rElev := m.Elevation.Values[r]
 	for _, nbReg := range m.GetRegNeighbors(r) {
-		elev := m.Elevation[nbReg]
+		elev := m.Elevation.Values[nbReg]
 		if elev < lowestElev && elev < rElev {
 			lowestElev = elev
 			lowestReg = nbReg
@@ -394,9 +422,10 @@ func (m *BaseObject) GetClosestNeighbor(outregs []int, r int, vec [2]float64) in
 // surface area of a unit sphere. :) Yay!
 func (m *BaseObject) TestAreas() {
 	var tot float64
+	rNbs := make([]int, 0, 6)
 	numRegs := m.SphereMesh.NumRegions
 	for i := 0; i < numRegs; i++ {
-		a := m.GetRegArea(i)
+		a := m.GetRegArea(i, rNbs)
 		tot += a
 		log.Println(a)
 	}
@@ -404,9 +433,14 @@ func (m *BaseObject) TestAreas() {
 }
 
 // GetRegArea returns the surface area of a region on a unit sphere.
-func (m *BaseObject) GetRegArea(r int) float64 {
+// If rNbs is provided, it will be reused for visiting the neighbors,
+// otherwise it will be created.
+func (m *BaseObject) GetRegArea(r int, rNbs []int) float64 {
+	if len(rNbs) == 0 {
+		rNbs = make([]int, 0, 6)
+	}
 	regLatLon := m.LatLon[r]
-	tris := m.SphereMesh.R_circulate_t(make([]int, 0, 6), r)
+	tris := m.SphereMesh.R_circulate_t(rNbs, r)
 	dists := make([]float64, len(tris))
 	for i, tri := range tris {
 		dLatLon := m.TriLatLon[tri]
@@ -438,7 +472,7 @@ func (m *BaseObject) GetSlope() []float64 {
 	slope := make([]float64, m.SphereMesh.NumRegions)
 
 	// Get the downhill neighbors for all regions (ignoring water pools for now).
-	dh := m.GetDownhill(false)
+	dh := m.DownhillNoPool.GetValues()
 
 	chunkProcessor := func(start, end int) {
 		outRegs := make([]int, 0, 8)
@@ -474,11 +508,18 @@ func (m *BaseObject) GetSlope() []float64 {
 // NOTE: We define steepness as the angle to a region from its downhill neighbor
 // expressed as a value between 0.0 to 1.0 (representing an angle from 0° to 90°).
 func (m *BaseObject) GetSteepness() []float64 {
+	return m.Steepness.GetValues()
+}
+
+func (m *BaseObject) GetSteepnessNoCache() []float64 {
 	// This will collect the steepness for each region.
 	steeps := make([]float64, m.SphereMesh.NumRegions)
 
 	// Get the downhill neighbors for all regions (ignoring water pools for now).
-	dh := m.GetDownhill(false)
+	dh := m.DownhillNoPool.GetValues()
+
+	// Get elevation values for all regions.
+	elevs := m.Elevation.GetValues()
 
 	chunkProcessor := func(start, end int) {
 		for r := start; r < end; r++ {
@@ -505,7 +546,7 @@ func (m *BaseObject) GetSteepness() []float64 {
 			// steepness = angle * 2 / Pi
 
 			// Calculate height difference between r and dh[r].
-			hDiff := m.Elevation[r] - m.Elevation[dhReg]
+			hDiff := elevs[r] - elevs[dhReg]
 
 			// Great arc distance between the lat/lon coordinates of r and dh[r].
 			regLatLon := m.LatLon[r]
@@ -570,10 +611,10 @@ func (m *BaseObject) regPolySlopeVec3(outRegs []int, i int) vectors.Vec3 {
 		// and elevation, then rotate the vector around the axis.
 		current := various.ConvToVec3(m.XYZ[r*3:]).
 			Rotate(axis, angle).
-			Mul(1 + 0.1*m.Elevation[r])
+			Mul(1 + 0.1*m.Elevation.Values[r])
 		next := various.ConvToVec3(m.XYZ[jNext*3:]).
 			Rotate(axis, angle).
-			Mul(1 + 0.1*m.Elevation[jNext])
+			Mul(1 + 0.1*m.Elevation.Values[jNext])
 		normal.X += (current.Z - next.Z) * (current.Y + next.Y)
 		normal.Y += (current.Y - next.Y) * (current.X + next.X)
 		normal.Z += (current.X - next.X) * (current.Z + next.Z)
@@ -673,9 +714,9 @@ func (m *BaseObject) RegTriNormal(t int, nbs []int) vectors.Vec3 {
 	p1 := various.ConvToVec3(m.XYZ[nbs[1]*3:])
 	p2 := various.ConvToVec3(m.XYZ[nbs[2]*3:])
 
-	p0 = p0.Rotate(axis, angle).Mul(1 + 0.05*m.Elevation[nbs[0]])
-	p1 = p1.Rotate(axis, angle).Mul(1 + 0.05*m.Elevation[nbs[1]])
-	p2 = p2.Rotate(axis, angle).Mul(1 + 0.05*m.Elevation[nbs[2]])
+	p0 = p0.Rotate(axis, angle).Mul(1 + 0.05*m.Elevation.Values[nbs[0]])
+	p1 = p1.Rotate(axis, angle).Mul(1 + 0.05*m.Elevation.Values[nbs[1]])
+	p2 = p2.Rotate(axis, angle).Mul(1 + 0.05*m.Elevation.Values[nbs[2]])
 
 	// Calculate the normal.
 	return p1.Sub(p0).Cross(p2.Sub(p0)).Normalize()
@@ -687,8 +728,14 @@ func (m *BaseObject) RegTriNormal(t int, nbs []int) vectors.Vec3 {
 func (m *BaseObject) GetSinks(skipSinksBelowSea, usePool bool) []int {
 	// Identify sinks above sea level.
 	var regSinks []int
-	for r, lowestReg := range m.GetDownhill(usePool) {
-		if lowestReg == -1 && (!skipSinksBelowSea || m.Elevation[r] > 0) { // && m.r_drainage[r] < 0
+	var dh []int
+	if usePool {
+		dh = m.Downhill.GetValues()
+	} else {
+		dh = m.DownhillNoPool.GetValues()
+	}
+	for r, lowestReg := range dh {
+		if lowestReg == -1 && (!skipSinksBelowSea || m.Elevation.Values[r] > 0) { // && m.r_drainage[r] < 0
 			regSinks = append(regSinks, r)
 		}
 	}
@@ -712,15 +759,16 @@ func (m *BaseObject) FillSinks(randEpsilon bool) []float64 {
 	// Reset the RNG.
 	m.ResetRand()
 
+	// Get elevation values.
+	currentHeight := m.Elevation.GetValues()
 	inf := math.Inf(0)
-	mesh := m.SphereMesh
-	baseEpsilon := 1.0 / (float64(mesh.NumRegions) * 1000.0)
-	newHeight := make([]float64, mesh.NumRegions)
+	baseEpsilon := 1.0 / (float64(m.NumRegions) * 1000.0)
+	newHeight := make([]float64, m.NumRegions)
 	for i := range newHeight {
-		if m.Elevation[i] <= 0 {
+		if currentHeight[i] <= 0 {
 			// Set the elevation at or below sea level to the current
 			// elevation.
-			newHeight[i] = m.Elevation[i]
+			newHeight[i] = currentHeight[i]
 		} else {
 			// Set the elevation above sea level to infinity.
 			newHeight[i] = inf
@@ -730,7 +778,7 @@ func (m *BaseObject) FillSinks(randEpsilon bool) []float64 {
 	// Loop until no more changes are made.
 	var epsilon float64
 	outReg := make([]int, 0, 8)
-	outPermRegs := make([]int, 0, len(m.Elevation))
+	outPermRegs := make([]int, 0, len(currentHeight))
 	for {
 		if randEpsilon {
 			// Variation.
@@ -747,17 +795,17 @@ func (m *BaseObject) FillSinks(randEpsilon bool) []float64 {
 
 		// By shuffling the order in which we parse regions,
 		// we ensure a more natural look.
-		for _, r := range m.randPerm(outPermRegs, len(m.Elevation)) {
+		for _, r := range m.randPerm(outPermRegs, len(currentHeight)) {
 			// Skip all regions that have the same elevation as in
 			// the current heightmap.
-			if newHeight[r] == m.Elevation[r] {
+			if newHeight[r] == currentHeight[r] {
 				continue
 			}
 
 			// Iterate over all neighbors.
 			// NOTE: This used to be in a random order, but that
 			// had a high cost, so I dropped it for now.
-			for _, nb := range mesh.R_circulate_r(outReg, r) {
+			for _, nb := range m.R_circulate_r(outReg, r) {
 				// Since we have set all inland regions to infinity,
 				// we will only succeed here if the newHeight of the neighbor
 				// is either below sea level or if the newHeight has already
@@ -767,8 +815,8 @@ func (m *BaseObject) FillSinks(randEpsilon bool) []float64 {
 				// the coast, comparing each region with the processed / set
 				// neighbors (that aren't set to infinity) in the new heightmap
 				// until we run out of regions that need change.
-				if m.Elevation[r] >= newHeight[nb]+epsilon {
-					newHeight[r] = m.Elevation[r]
+				if currentHeight[r] >= newHeight[nb]+epsilon {
+					newHeight[r] = currentHeight[r]
 					changed = true
 					break
 				}
@@ -789,7 +837,7 @@ func (m *BaseObject) FillSinks(randEpsilon bool) []float64 {
 				//
 				// TODO: Simplify this comment word salad.
 				oh := newHeight[nb] + epsilon
-				if newHeight[r] > oh && oh > m.Elevation[r] {
+				if newHeight[r] > oh && oh > currentHeight[r] {
 					newHeight[r] = oh
 					changed = true
 				}
@@ -811,17 +859,15 @@ func (m *BaseObject) AssignActualDistanceField(seedRegs []int, stopReg map[int]b
 	// Unlike the AssignDistanceField function, we need to keep track of the
 	// seed region that is closest to each region so we can compare the distances
 	// between the regions.
-	closestSeed := make([]int, m.SphereMesh.NumRegions)
+	closestSeed := make([]int, m.NumRegions)
 
 	// Reset the random number generator.
 	m.ResetRand()
 
 	inf := math.Inf(0)
-	mesh := m.SphereMesh
-	numRegions := mesh.NumRegions
 
 	// Initialize the distance values for all regions to +Inf.
-	regDistance := make([]float64, numRegions)
+	regDistance := make([]float64, m.NumRegions)
 	for i := range regDistance {
 		regDistance[i] = inf
 	}
@@ -832,7 +878,7 @@ func (m *BaseObject) AssignActualDistanceField(seedRegs []int, stopReg map[int]b
 
 	// Initialize the queue for the breadth first search with
 	// the seed regions.
-	queue := make([]int, len(seedRegs), numRegions)
+	queue := make([]int, len(seedRegs), m.NumRegions)
 	for i, r := range seedRegs {
 		queue[i] = r
 		regDistance[r] = 0
@@ -851,7 +897,7 @@ func (m *BaseObject) AssignActualDistanceField(seedRegs []int, stopReg map[int]b
 		pos := queueOut + m.Rand.Intn(len(queue)-queueOut)
 		currentReg := queue[pos]
 		queue[pos] = queue[queueOut]
-		for _, nbReg := range mesh.R_circulate_r(outRegs, currentReg) {
+		for _, nbReg := range m.R_circulate_r(outRegs, currentReg) {
 			if stopReg[nbReg] {
 				continue
 			}
@@ -870,14 +916,14 @@ func (m *BaseObject) AssignActualDistanceField(seedRegs []int, stopReg map[int]b
 
 		// If we have consumed over 1000000 elements in the queue,
 		// we reset the queue to the remaining elements.
-		if queueOut >= numRegions {
+		if queueOut >= m.NumRegions {
 			n := copy(queue, queue[queueOut:])
 			queue = queue[:n]
 			queueOut = 0
 		}
 	}
 	// Log how many times we updated the distance vs the number of regions.
-	log.Printf("Updated distance %d times for %d regions, %d seed points and %d stop regions", count, numRegions, len(seedRegs), len(stopReg))
+	log.Printf("Updated distance %d times for %d regions, %d seed points and %d stop regions", count, m.NumRegions, len(seedRegs), len(stopReg))
 
 	log.Println("Finished random search")
 
@@ -890,9 +936,7 @@ func (m *BaseObject) AssignActualDistanceField(seedRegs []int, stopReg map[int]b
 func (m *BaseObject) UpdateActualDistanceField(closestSeed []int, regDistance []float64, seedRegs []int, stopReg map[int]bool) ([]int, []float64) {
 	// Reset the random number generator.
 	m.ResetRand()
-	mesh := m.SphereMesh
-	numRegions := mesh.NumRegions
-	queue := make([]int, len(seedRegs), numRegions)
+	queue := make([]int, len(seedRegs), m.NumRegions)
 
 	// TODO: Also check if a seed point has "disappeared" .If so, we
 	// might need to recompute the distance field for all regions.
@@ -918,7 +962,7 @@ func (m *BaseObject) UpdateActualDistanceField(closestSeed []int, regDistance []
 		pos := queueOut + m.Rand.Intn(len(queue)-queueOut)
 		currentReg := queue[pos]
 		queue[pos] = queue[queueOut]
-		for _, nbReg := range mesh.R_circulate_r(outRegs, currentReg) {
+		for _, nbReg := range m.R_circulate_r(outRegs, currentReg) {
 			if stopReg[nbReg] {
 				continue
 			}
@@ -937,7 +981,7 @@ func (m *BaseObject) UpdateActualDistanceField(closestSeed []int, regDistance []
 
 		// If we have consumed over 1000000 elements in the queue,
 		// we reset the queue to the remaining elements.
-		if queueOut >= numRegions {
+		if queueOut >= m.NumRegions {
 			n := copy(queue, queue[queueOut:])
 			queue = queue[:n]
 			queueOut = 0
@@ -945,7 +989,7 @@ func (m *BaseObject) UpdateActualDistanceField(closestSeed []int, regDistance []
 	}
 
 	// Log how many times we updated the distance vs the number of regions.
-	log.Printf("Updated distance %d times for %d regions, %d seed points and %d stop regions", count, numRegions, len(seedRegs), len(stopReg))
+	log.Printf("Updated distance %d times for %d regions, %d seed points and %d stop regions", count, m.NumRegions, len(seedRegs), len(stopReg))
 
 	return closestSeed, regDistance
 }
@@ -1093,6 +1137,10 @@ func (m *BaseObject) Interpolate(regions []int) (*Interpolated, error) {
 	regionCompression := make(map[int]float64)
 	outRegs := make([]int, 0, 6)
 
+	var newElev []float64
+	var distLandToOcean, distOceanToLand, distWaterToMountain []float64
+	var newMoisture, newRainfall, newFlux []float64
+
 	mesh := m.SphereMesh
 	var xyz []float64
 	for _, r := range regions {
@@ -1112,17 +1160,18 @@ func (m *BaseObject) Interpolate(regions []int) (*Interpolated, error) {
 		ipl.NumRegions++
 		rxyz := m.XYZ[r*3 : (r*3)+3]
 		xyz = append(xyz, rxyz...)
-		ipl.Moisture = append(ipl.Moisture, m.Moisture[r])
-		ipl.Rainfall = append(ipl.Rainfall, m.Rainfall[r])
-		ipl.Flux = append(ipl.Flux, m.Flux[r])
+		newMoisture = append(newMoisture, m.Moisture.Values[r])
+		newRainfall = append(newRainfall, m.Rainfall.Values[r])
+		newFlux = append(newFlux, m.Flux.Values[r])
 		ipl.Waterpool = append(ipl.Waterpool, m.Waterpool[r])
-		ipl.Elevation = append(ipl.Elevation, m.Elevation[r])
+		newElev = append(newElev, m.Elevation.Values[r])
 		ipl.OceanTemperature = append(ipl.OceanTemperature, m.OceanTemperature[r])
 		ipl.AirTemperature = append(ipl.AirTemperature, m.AirTemperature[r])
 		ipl.Compression = append(ipl.Compression, m.Compression[r])
 
-		ipl.DistLandToOcean = append(ipl.DistLandToOcean, m.DistLandToOcean[r])
-		ipl.DistOceanToLand = append(ipl.DistOceanToLand, m.DistOceanToLand[r])
+		distLandToOcean = append(distLandToOcean, m.DistLandToOcean.Values[r])
+		distOceanToLand = append(distOceanToLand, m.DistOceanToLand.Values[r])
+		distWaterToMountain = append(distWaterToMountain, m.DistMountainToWater.Values[r])
 
 		// Circulate_r all points and add midpoints.
 		for _, nbReg := range mesh.R_circulate_r(outRegs, r) {
@@ -1152,31 +1201,33 @@ func (m *BaseObject) Interpolate(regions []int) (*Interpolated, error) {
 
 			// Calculate diff and use noise to add variation.
 			nvl := (ipl.noise.Eval3(mid.X, mid.Y, mid.Z) + 1) / 2
-			diffElevation := m.Elevation[nbReg] - m.Elevation[r]
-			diffMoisture := m.Moisture[nbReg] - m.Moisture[r]
-			diffRainfall := m.Rainfall[nbReg] - m.Rainfall[r]
-			diffFlux := m.Flux[nbReg] - m.Flux[r]
+			diffElevation := m.Elevation.Values[nbReg] - m.Elevation.Values[r]
+			diffMoisture := m.Moisture.Values[nbReg] - m.Moisture.Values[r]
+			diffRainfall := m.Rainfall.Values[nbReg] - m.Rainfall.Values[r]
+			diffFlux := m.Flux.Values[nbReg] - m.Flux.Values[r]
 			diffPool := m.Waterpool[nbReg] - m.Waterpool[r]
 			diffOceanTemp := m.OceanTemperature[nbReg] - m.OceanTemperature[r]
 			diffAirTemp := m.AirTemperature[nbReg] - m.AirTemperature[r]
 			diffCompression := m.Compression[nbReg] - m.Compression[r]
-			diffDistLandToOcean := m.DistLandToOcean[nbReg] - m.DistLandToOcean[r]
-			diffDistOceanToLand := m.DistOceanToLand[nbReg] - m.DistOceanToLand[r]
+			diffDistLandToOcean := m.DistLandToOcean.Values[nbReg] - m.DistLandToOcean.Values[r]
+			diffDistOceanToLand := m.DistOceanToLand.Values[nbReg] - m.DistOceanToLand.Values[r]
+			diffDistWaterToMountain := m.DistMountainToWater.Values[nbReg] - m.DistMountainToWater.Values[r]
 
 			// TODO: Add some better variation with the water pool and stuff.
 			// TODO: Add flood fill, downhill and flux?
 			// TODO: Average compression values?
 
-			ipl.Elevation = append(ipl.Elevation, m.Elevation[r]+(diffElevation*nvl))
-			ipl.Moisture = append(ipl.Moisture, m.Moisture[r]+(diffMoisture*nvl))
-			ipl.Rainfall = append(ipl.Rainfall, m.Rainfall[r]+(diffRainfall*nvl))
-			ipl.Flux = append(ipl.Flux, m.Flux[r]+(diffFlux*nvl))
+			newElev = append(newElev, m.Elevation.Values[r]+(diffElevation*nvl))
+			newMoisture = append(newMoisture, m.Moisture.Values[r]+(diffMoisture*nvl))
+			newRainfall = append(newRainfall, m.Rainfall.Values[r]+(diffRainfall*nvl))
+			newFlux = append(newFlux, m.Flux.Values[r]+(diffFlux*nvl))
 			ipl.Waterpool = append(ipl.Waterpool, m.Waterpool[r]+(diffPool*nvl))
 			ipl.OceanTemperature = append(ipl.OceanTemperature, m.OceanTemperature[r]+(diffOceanTemp*nvl))
 			ipl.AirTemperature = append(ipl.AirTemperature, m.AirTemperature[r]+(diffAirTemp*nvl))
 			ipl.Compression = append(ipl.Compression, m.Compression[r]+(diffCompression*nvl))
-			ipl.DistLandToOcean = append(ipl.DistLandToOcean, m.DistLandToOcean[r]+(diffDistLandToOcean*nvl))
-			ipl.DistOceanToLand = append(ipl.DistOceanToLand, m.DistOceanToLand[r]+(diffDistOceanToLand*nvl))
+			distLandToOcean = append(distLandToOcean, m.DistLandToOcean.Values[r]+(diffDistLandToOcean*nvl))
+			distOceanToLand = append(distOceanToLand, m.DistOceanToLand.Values[r]+(diffDistOceanToLand*nvl))
+			distWaterToMountain = append(distWaterToMountain, m.DistMountainToWater.Values[r]+(diffDistWaterToMountain*nvl))
 		}
 	}
 
@@ -1195,6 +1246,56 @@ func (m *BaseObject) Interpolate(regions []int) (*Interpolated, error) {
 	}
 	ipl.SphereMesh = sphere
 
+	// Update the properties.
+	ipl.RegCellTypes = NewPSlice(ipl.NumRegions, ipl.getRegCellTypesNoCache)
+
+	ipl.DistLandToOcean = NewPSliceMinMax(ipl.NumRegions, ipl.getDistLandToOceanNoCache)
+	ipl.DistLandToOcean.Impacts = append(ipl.DistLandToOcean.Impacts, ipl.RegCellTypes)
+	ipl.DistLandToOcean.SetValues(distLandToOcean)
+
+	ipl.DistOceanToLand = NewPSliceMinMax(ipl.NumRegions, ipl.getDistOceanToLandNoCache)
+	ipl.DistOceanToLand.Impacts = append(ipl.DistOceanToLand.Impacts, ipl.RegCellTypes)
+	ipl.DistOceanToLand.SetValues(distOceanToLand)
+
+	ipl.DistMountainToWater = NewPSliceMinMax(ipl.NumRegions, ipl.getDistWaterToMountainNoCache)
+	ipl.DistMountainToWater.Impacts = append(ipl.DistMountainToWater.Impacts, ipl.RegCellTypes)
+	ipl.DistMountainToWater.SetValues(distWaterToMountain)
+
+	// Update the flux.
+	ipl.Flux = NewPSliceMinMax(ipl.NumRegions, func() []float64 {
+		return ipl.getFluxNoCache(false)
+	})
+	ipl.Flux.SetValues(newFlux)
+
+	// Downhill.
+	ipl.Downhill = NewPSlice(ipl.NumRegions, func(oldVals []int) []int {
+		return ipl.getDownhillNoCache(oldVals, true)
+	})
+	ipl.Downhill.Impacts = append(ipl.Downhill.Impacts, ipl.Flux)
+	ipl.DownhillNoPool = NewPSlice(ipl.NumRegions, func(oldVals []int) []int {
+		return ipl.getDownhillNoCache(oldVals, false)
+	})
+	ipl.DownhillNoPool.Impacts = append(ipl.DownhillNoPool.Impacts, ipl.Flux)
+
+	ipl.Steepness = NewPSliceMinMax(sphere.NumRegions, ipl.GetSteepnessNoCache)
+
+	ipl.Elevation = NewPropertySliceNoUpdate(ipl.NumRegions)
+	ipl.Elevation.SetValues(newElev)
+	ipl.Elevation.Impacts = append(ipl.Elevation.Impacts, ipl.Steepness)
+	ipl.Elevation.Impacts = append(ipl.Elevation.Impacts, ipl.DistLandToOcean)
+	ipl.Elevation.Impacts = append(ipl.Elevation.Impacts, ipl.DistOceanToLand)
+	ipl.Elevation.Impacts = append(ipl.Elevation.Impacts, ipl.RegCellTypes)
+	ipl.Elevation.Impacts = append(ipl.Elevation.Impacts, ipl.DistMountainToWater)
+	ipl.Elevation.Impacts = append(ipl.Elevation.Impacts, ipl.Downhill)
+	ipl.Elevation.Impacts = append(ipl.Elevation.Impacts, ipl.DownhillNoPool)
+
+	// Update the moisture and rainfall.
+	ipl.Moisture = NewPropertySliceNoUpdate(ipl.NumRegions)
+	ipl.Moisture.SetValues(newMoisture)
+	ipl.Rainfall = NewPropertySliceNoUpdate(ipl.NumRegions)
+	ipl.Rainfall.SetValues(newRainfall)
+	ipl.Rainfall.Impacts = append(ipl.Rainfall.Impacts, ipl.Flux)
+
 	// Update quadtrees.
 	ipl.RegQuadTree = spheremesh.NewQuadTreeFromLatLon(ipl.SphereMesh.LatLon)
 	ipl.TriQuadTree = spheremesh.NewQuadTreeFromLatLon(ipl.SphereMesh.TriLatLon)
@@ -1212,10 +1313,6 @@ func (m *BaseObject) Interpolate(regions []int) (*Interpolated, error) {
 	ipl.TriFlow = make([]float64, sphere.NumTriangles)
 	ipl.SideFlow = make([]float64, sphere.NumSides)
 
-	ipl.RegCellTypes = make([]int, sphere.NumRegions)
-	ipl.RegCellTypesNeedUpdate = true
-
-	ipl.AssignDownhill(true)
 	ipl.assignTriValues()
 	ipl.AssignDownflow()
 	ipl.AssignFlow()
@@ -1227,7 +1324,7 @@ func (m *BaseObject) Interpolate(regions []int) (*Interpolated, error) {
 // randPerm returns a random permutation of the given slice indices.
 // This works like rand.Perm, but it reuses the same slice.
 func (m *BaseObject) randPerm(perm []int, n int) []int {
-	perm = perm[:utils.Min(cap(perm), n)]
+	perm = perm[:min(cap(perm), n)]
 	if diff := len(perm) - n; diff < 0 {
 		perm = append(perm, make([]int, -diff)...)
 	}

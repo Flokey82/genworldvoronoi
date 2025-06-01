@@ -7,73 +7,93 @@ import (
 	"github.com/Flokey82/genbiome"
 )
 
-// SumResources returns the sum of the resource flag IDs in the byte.
-// This is a convenience function for determining the approximate
-// value of local resources.
-// NOTE: In theory one could just cast the int to a byte and use the
-// value like that, but the value would be a power of 2, which might
-// be too stark a difference.
-func SumResources(r byte) int {
+type Resource struct {
+	Name  string
+	Type  ResourceType
+	Value int
+}
+
+type ResourceLocations struct {
+	NumRegs   int
+	Location  map[*Resource][]bool // This could be byte too since it uses the same amount of memory.
+	Resources []*Resource
+}
+
+// NewResourceLocation returns a new ResourceLocation.
+func NewResourceLocations(numRegs int) *ResourceLocations {
+	return &ResourceLocations{
+		NumRegs:   numRegs,
+		Location:  make(map[*Resource][]bool),
+		Resources: make([]*Resource, 0),
+	}
+}
+
+// AddResource adds a resource to the ResourceLocation.
+func (rl *ResourceLocations) AddResource(r *Resource) {
+	rl.Resources = append(rl.Resources, r)
+	rl.Location[r] = make([]bool, rl.NumRegs)
+}
+
+// SetResource sets the resource value for the region.
+func (rl *ResourceLocations) SetResource(r *Resource, reg int, value bool) {
+	rl.Location[r][reg] = value
+}
+
+// GetResources returns all available resources for the region.
+func (rl *ResourceLocations) GetResources(reg int) []*Resource {
+	resources := make([]*Resource, 0, len(rl.Resources))
+	for _, res := range rl.Resources {
+		if rl.Location[res][reg] {
+			resources = append(resources, res)
+		}
+	}
+	return resources
+}
+
+// HasType returns true if the region has the specified resource type.
+func (rl *ResourceLocations) HasType(reg int, rType ResourceType) bool {
+	for _, res := range rl.Resources {
+		if res.Type == rType && rl.Location[res][reg] {
+			return true
+		}
+	}
+	return false
+}
+
+// GetResourceTotal returns the total value of all resources.
+func (rl *ResourceLocations) GetResourceTotal() int {
+	total := 0
+	for _, res := range rl.Resources {
+		total += res.Value
+	}
+	return total
+}
+
+// SumValueOfRegion returns the sum of the resource values in the region.
+func (rl *ResourceLocations) SumValueOfRegion(r int) int {
 	sum := 0
-	for i := 0; i < 8; i++ {
-		if r&(1<<i) != 0 {
-			sum += i + 1
+	for _, res := range rl.Resources {
+		if rl.Location[res][r] {
+			sum += res.Value
 		}
 	}
 	return sum
 }
 
+type ResourceType int
+
+// DEDUPE WITH DUMB STORAGE TYPES
 const (
-	ResourceTypeMetal = iota
+	ResourceTypeMetal ResourceType = iota
 	ResourceTypeGem
 	ResourceTypeStone
+	ResourceTypeWood
+	ResourceTypeVarious
+	ResourceTypeAnimal
+	ResourceTypePlant        // Includes fungi and algae.
+	ResourceTypeManufactured // Includes tools, weapons, and other goods.
+	ResourceTypeMax
 )
-
-// getRegsWithResource returns the regions that have the specified resource.
-func (m *Geo) getRegsWithResource(resource byte, resourceType int) []int {
-	// Pick the correct resource slice.
-	var search []byte
-	switch resourceType {
-	case ResourceTypeMetal:
-		search = m.Metals
-	case ResourceTypeGem:
-		search = m.Gems
-	case ResourceTypeStone:
-		search = m.Stones
-	}
-
-	// Find the regions that have the specified resource.
-	var regions []int
-	for r, val := range search {
-		if val&resource != 0 {
-			regions = append(regions, r)
-		}
-	}
-	return regions
-}
-
-// Resources maps regions to natural resources.
-type Resources struct {
-	Metals  []byte // Metal ores
-	Gems    []byte // Gemstones
-	Stones  []byte // Rocks or minerals
-	Various []byte // Other resources
-	Wood    []byte // Wood
-}
-
-func newResources(size int) *Resources {
-	return &Resources{
-		Metals:  make([]byte, size),
-		Gems:    make([]byte, size),
-		Stones:  make([]byte, size),
-		Various: make([]byte, size),
-		Wood:    make([]byte, size),
-	}
-}
-
-func (res *Resources) sumRegion(r int) int {
-	return SumResources(res.Metals[r]) + SumResources(res.Gems[r]) + SumResources(res.Stones[r]) + SumResources(res.Various[r]) + SumResources(res.Wood[r])
-}
 
 func (m *Geo) resourceFitness() []float64 {
 	fitness := make([]float64, m.SphereMesh.NumRegions)
@@ -121,42 +141,45 @@ func (m *Geo) placeResources() {
 	// valley's center.
 }
 
-// Metal resource flags starting with the cheapest metal.
-const (
-	ResMetIron = 1 << iota
-	ResMetCopper
-	ResMetLead
-	ResMetTin
-	ResMetSilver
-	ResMetGold
-	ResMetPlatinum
+var (
+	ResMetalIron = &Resource{
+		Name:  "Iron",
+		Type:  ResourceTypeMetal,
+		Value: 3,
+	}
+	ResMetalCopper = &Resource{
+		Name:  "Copper",
+		Type:  ResourceTypeMetal,
+		Value: 6,
+	}
+	ResMetalLead = &Resource{
+		Name:  "Lead",
+		Type:  ResourceTypeMetal,
+		Value: 8,
+	}
+	ResMetalTin = &Resource{
+		Name:  "Tin",
+		Type:  ResourceTypeMetal,
+		Value: 10,
+	}
+	ResMetalSilver = &Resource{
+		Name:  "Silver",
+		Type:  ResourceTypeMetal,
+		Value: 16,
+	}
+	ResMetalGold = &Resource{
+		Name:  "Gold",
+		Type:  ResourceTypeMetal,
+		Value: 32,
+	}
+	ResMetalPlatinum = &Resource{
+		Name:  "Platinum",
+		Type:  ResourceTypeMetal,
+		Value: 64,
+	}
 )
 
-const ResMaxMetals = 7
-
-func MetalToString(metalID int) string {
-	switch 1 << metalID {
-	case ResMetIron:
-		return "Iron"
-	case ResMetCopper:
-		return "Copper"
-	case ResMetLead:
-		return "Lead"
-	case ResMetTin:
-		return "Tin"
-	case ResMetSilver:
-		return "Silver"
-	case ResMetGold:
-		return "Gold"
-	case ResMetPlatinum:
-		return "Platinum"
-	default:
-		return "Unknown"
-	}
-}
-
 func (m *Geo) placeMetals() {
-	steepness := m.GetSteepness()
 	// distMountains, _, _, _ := m.findCollisions()
 
 	// https://www.reddit.com/r/worldbuilding/comments/kbmnd6/a_guide_to_placing_resources_on_fictional_worlds/
@@ -179,7 +202,16 @@ func (m *Geo) placeMetals() {
 	//
 	// I feel pretty clever about this one, but it's not realistic.
 	m.ResetRand()
-	metals := make([]byte, len(steepness))
+
+	// Initialize resource locations for metals.
+	resLocs := m.ResourceLocations
+	resLocs.AddResource(ResMetalIron)
+	resLocs.AddResource(ResMetalCopper)
+	resLocs.AddResource(ResMetalLead)
+	resLocs.AddResource(ResMetalTin)
+	resLocs.AddResource(ResMetalSilver)
+	resLocs.AddResource(ResMetalGold)
+	resLocs.AddResource(ResMetalPlatinum)
 
 	// Commonly co-localized metals:
 	// - gold and copper
@@ -191,9 +223,12 @@ func (m *Geo) placeMetals() {
 
 	// TODO: Iron should be more common in general.
 
+	// Get elevation values.
+	elevs := m.Elevation.GetValues()
+
 	// TODO: Use noise intersection instead of rand.
 	for r := 0; r < m.SphereMesh.NumRegions; r++ {
-		if m.Elevation[r] <= 0.0 {
+		if elevs[r] <= 0.0 {
 			continue
 		}
 
@@ -201,32 +236,31 @@ func (m *Geo) placeMetals() {
 		if fmVal := fm(r); fmVal > 0.01 {
 			switch rv := math.Abs(m.Rand.NormFloat64() * fn(r)); {
 			case rv < chancePlatinum:
-				metals[r] |= ResMetPlatinum
+				resLocs.Location[ResMetalPlatinum][r] = true
 			case rv < chanceGold:
-				metals[r] |= ResMetGold
+				resLocs.Location[ResMetalGold][r] = true
 				if m.Rand.NormFloat64() < 0.5 {
-					metals[r] |= ResMetCopper
+					resLocs.Location[ResMetalCopper][r] = true
 				}
 			case rv < chanceSilver:
-				metals[r] |= ResMetSilver
+				resLocs.Location[ResMetalSilver][r] = true
 				if m.Rand.NormFloat64() < 0.5 {
-					metals[r] |= ResMetLead
+					resLocs.Location[ResMetalLead][r] = true
 				}
 			case rv < chanceCopper:
-				metals[r] |= ResMetCopper
+				resLocs.Location[ResMetalCopper][r] = true
 				if m.Rand.NormFloat64() < 0.5 {
-					metals[r] |= ResMetTin
+					resLocs.Location[ResMetalTin][r] = true
 				}
 			case rv < chanceLead:
-				metals[r] |= ResMetLead
+				resLocs.Location[ResMetalLead][r] = true
 			case rv < chanceTin:
-				metals[r] |= ResMetTin
+				resLocs.Location[ResMetalTin][r] = true
 			case rv < chanceIron:
-				metals[r] |= ResMetIron
+				resLocs.Location[ResMetalIron][r] = true
 			}
 		}
 	}
-	m.Metals = metals
 
 	// This attempts some weird variation of:
 	// https://www.redblobgames.com/x/1736-resource-placement/
@@ -266,38 +300,41 @@ func (m *Geo) placeMetals() {
 	//m.r_metals = resources
 }
 
-// Gemstone resource flags starting with the cheapest gem.
-const (
-	ResGemAmethyst = 1 << iota
-	ResGemTopaz
-	ResGemSapphire
-	ResGemEmerald
-	ResGemRuby
-	ResGemDiamond
+var (
+	ResGemsAmethyst = &Resource{
+		Name:  "Amethyst",
+		Type:  ResourceTypeGem,
+		Value: 1,
+	}
+	ResGemsTopaz = &Resource{
+		Name:  "Topaz",
+		Type:  ResourceTypeGem,
+		Value: 2,
+	}
+	ResGemsSapphire = &Resource{
+		Name:  "Sapphire",
+		Type:  ResourceTypeGem,
+		Value: 4,
+	}
+	ResGemsEmerald = &Resource{
+		Name:  "Emerald",
+		Type:  ResourceTypeGem,
+		Value: 8,
+	}
+	ResGemsRuby = &Resource{
+		Name:  "Ruby",
+		Type:  ResourceTypeGem,
+		Value: 16,
+	}
+	ResGemsDiamond = &Resource{
+		Name:  "Diamond",
+		Type:  ResourceTypeGem,
+		Value: 32,
+	}
 )
 
-const ResMaxGems = 6
-
-func GemToString(gemsID int) string {
-	switch 1 << gemsID {
-	case ResGemAmethyst:
-		return "Amethyst"
-	case ResGemTopaz:
-		return "Topaz"
-	case ResGemSapphire:
-		return "Sapphire"
-	case ResGemEmerald:
-		return "Emerald"
-	case ResGemRuby:
-		return "Ruby"
-	case ResGemDiamond:
-		return "Diamond"
-	default:
-		return "Unknown"
-	}
-}
-
 func (m *Geo) placeGems() {
+	elevs := m.Elevation.GetValues()
 	steepness := m.GetSteepness()
 	const (
 		chanceDiamond  = 0.005
@@ -310,22 +347,30 @@ func (m *Geo) placeGems() {
 		// chanceFlint    = 0.9
 	)
 
-	gems := make([]byte, len(steepness))
+	// Initialize resource locations for gems.
+	resLocs := m.ResourceLocations
+	resLocs.AddResource(ResGemsAmethyst)
+	resLocs.AddResource(ResGemsTopaz)
+	resLocs.AddResource(ResGemsSapphire)
+	resLocs.AddResource(ResGemsEmerald)
+	resLocs.AddResource(ResGemsRuby)
+	resLocs.AddResource(ResGemsDiamond)
+
 	for r := 0; r < m.SphereMesh.NumRegions; r++ {
-		if steepness[r] > 0.9 && m.Elevation[r] > 0.5 {
+		if steepness[r] > 0.9 && elevs[r] > 0.5 {
 			switch rv := math.Abs(m.Rand.NormFloat64()); {
 			case rv < chanceDiamond:
-				gems[r] |= ResGemDiamond
+				resLocs.Location[ResGemsDiamond][r] = true
 			case rv < chanceRuby:
-				gems[r] |= ResGemRuby
+				resLocs.Location[ResGemsRuby][r] = true
 			case rv < chanceEmerald:
-				gems[r] |= ResGemEmerald
+				resLocs.Location[ResGemsEmerald][r] = true
 			case rv < chanceSapphire:
-				gems[r] |= ResGemSapphire
+				resLocs.Location[ResGemsSapphire][r] = true
 			case rv < chanceTopaz:
-				gems[r] |= ResGemTopaz
+				resLocs.Location[ResGemsTopaz][r] = true
 			case rv < chanceAmethyst:
-				gems[r] |= ResGemAmethyst
+				resLocs.Location[ResGemsAmethyst][r] = true
 				// case rv < chanceQuartz:
 				//	gems[r] |= ResGemQuartz
 				// case rv < chanceFlint:
@@ -333,46 +378,50 @@ func (m *Geo) placeGems() {
 			}
 		}
 	}
-	m.Gems = gems
 }
 
-// Stone resource flags starting with the most common stone.
-// NOTE: Clay?
-const (
-	ResStoSandstone = 1 << iota
-	ResStoLimestone
-	ResStoChalk
-	ResStoSlate
-	ResStoMarble
-	ResStoGranite
-	ResStoBasalt
-	ResStoObsidian
-)
-
-const ResMaxStones = 7
-
-func StoneToString(stoneID int) string {
-	switch 1 << stoneID {
-	case ResStoSandstone:
-		return "Sandstone"
-	case ResStoLimestone:
-		return "Limestone"
-	case ResStoChalk:
-		return "Chalk"
-	case ResStoSlate:
-		return "Slate"
-	case ResStoMarble:
-		return "Marble"
-	case ResStoGranite:
-		return "Granite"
-	case ResStoBasalt:
-		return "Basalt"
-	case ResStoObsidian:
-		return "Obsidian"
-	default:
-		return "Unknown"
+var (
+	ResStoneSandstone = &Resource{
+		Name:  "Sandstone",
+		Type:  ResourceTypeStone,
+		Value: 1,
 	}
-}
+	ResStoneLimestone = &Resource{
+		Name:  "Limestone",
+		Type:  ResourceTypeStone,
+		Value: 2,
+	}
+	ResStoneChalk = &Resource{
+		Name:  "Chalk",
+		Type:  ResourceTypeStone,
+		Value: 4,
+	}
+	ResStoneSlate = &Resource{
+		Name:  "Slate",
+		Type:  ResourceTypeStone,
+		Value: 8,
+	}
+	ResStoneMarble = &Resource{
+		Name:  "Marble",
+		Type:  ResourceTypeStone,
+		Value: 16,
+	}
+	ResStoneGranite = &Resource{
+		Name:  "Granite",
+		Type:  ResourceTypeStone,
+		Value: 32,
+	}
+	ResStoneBasalt = &Resource{
+		Name:  "Basalt",
+		Type:  ResourceTypeStone,
+		Value: 64,
+	}
+	ResStoneObsidian = &Resource{
+		Name:  "Obsidian",
+		Type:  ResourceTypeStone,
+		Value: 128,
+	}
+)
 
 func (m *Geo) placeStones() {
 	log.Println("placing stones is not implemented")
@@ -417,10 +466,8 @@ func (m *Geo) placeStones() {
 	// Slate is formed when shale is subjected to intense heat and pressure. Slate
 	// will be placed near mountain ranges.
 
-	// Initialize the stone map.
-	stones := make([]byte, m.SphereMesh.NumRegions)
-
 	biomeFunc := m.GetRegWhittakerModBiomeFunc()
+	elevs := m.Elevation.GetValues()
 	steepness := m.GetSteepness()
 
 	// Generate a distance field for volcanoes, mountains, and faultlines.
@@ -439,12 +486,12 @@ func (m *Geo) placeStones() {
 		if math.Abs(m.RegionCompression[r]) > 0.1 {
 			faultlines = append(faultlines, r)
 		}
-		if m.Elevation[r] <= 0.0 {
+		if elevs[r] <= 0.0 {
 			stopSea[r] = true
 		} else {
 			// Check if the region is a beach.
 			for _, n := range m.R_circulate_r(out_r, r) {
-				if m.Elevation[n] <= 0.0 {
+				if elevs[n] <= 0.0 {
 					isBeach[r] = true
 					break
 				}
@@ -456,11 +503,25 @@ func (m *Geo) placeStones() {
 	distMountains := m.AssignDistanceField(mountains, stopSea)
 	distFaultlines := m.AssignDistanceField(faultlines, stopSea)
 
+	// Get current rainfall values.
+	rainfall := m.Rainfall.GetValues()
+
+	// Initialize resource locations for stones.
+	resLocs := m.ResourceLocations
+	resLocs.AddResource(ResStoneSandstone)
+	resLocs.AddResource(ResStoneLimestone)
+	resLocs.AddResource(ResStoneChalk)
+	resLocs.AddResource(ResStoneSlate)
+	resLocs.AddResource(ResStoneMarble)
+	resLocs.AddResource(ResStoneGranite)
+	resLocs.AddResource(ResStoneBasalt)
+	resLocs.AddResource(ResStoneObsidian)
+
 	// Loop through all the regions and place stones based on the region's
 	// properties.
 	for r := 0; r < m.SphereMesh.NumRegions; r++ {
 		// Skip water regions.
-		if m.Elevation[r] <= 0.0 {
+		if elevs[r] <= 0.0 {
 			continue
 		}
 
@@ -469,20 +530,20 @@ func (m *Geo) placeStones() {
 
 		// Check if we have sandstone (beach, or desert).
 		if biome == genbiome.WhittakerModBiomeSubtropicalDesert || isBeach[r] {
-			stones[r] |= ResStoSandstone
+			resLocs.Location[ResStoneSandstone][r] = true
 		}
 
 		// Chalk and limestone.
 		if biome == genbiome.WhittakerModBiomeTemperateGrassland && steepness[r] > 0.1 {
 			// If we are close to mountains, we have marble.
 			if distMountains[r] < 2 {
-				stones[r] |= ResStoMarble
+				resLocs.Location[ResStoneMarble][r] = true
 			} else if !m.IsRegRiver(r) && !m.IsRegLakeOrWaterBody(r) {
 				// Check if we have limestone (dryer, hilly grassland)
-				stones[r] |= ResStoLimestone
-			} else if m.Rainfall[r] > 0.5 {
+				resLocs.Location[ResStoneLimestone][r] = true
+			} else if rainfall[r] > 0.5 {
 				// Check if we have chalk (wetter, hilly grassland)
-				stones[r] |= ResStoChalk
+				resLocs.Location[ResStoneChalk][r] = true
 			}
 		}
 
@@ -491,138 +552,164 @@ func (m *Geo) placeStones() {
 		if distVolcanoes[r] < 2 || distFaultlines[r] < 2 {
 			// Check if we have obsidian (near a volcano).
 			if distVolcanoes[r] < 2 {
-				stones[r] |= ResStoObsidian
+				resLocs.Location[ResStoneObsidian][r] = true
 			}
 
 			// Check if we have basalt (near a faultline).
 			if distFaultlines[r] < 2 {
-				stones[r] |= ResStoBasalt
+				resLocs.Location[ResStoneBasalt][r] = true
 			}
 		}
 
 		// Check if we have granite (near a mountain and faultline).
 		if distMountains[r] < 3 && distFaultlines[r] < 2 {
-			stones[r] |= ResStoGranite
+			resLocs.Location[ResStoneGranite][r] = true
 		} else if steepness[r] > 0.2 && distMountains[r] > 2 && distMountains[r] < 5 {
 			// Slate.
 			// For slate, we need to check if we are near a mountain range or if the region
 			// is steep.
-			stones[r] |= ResStoSlate
+			resLocs.Location[ResStoneSlate][r] = true
 		}
 	}
-
-	// Assign the stone map.
-	m.Stones = stones
 }
 
-const (
-	ResVarClay = 1 << iota
-	ResVarSulfur
-	ResVarSalt
-	ResVarCoal
-	ResVarOil
-	ResVarGas
+var (
+	ResVariousClay = &Resource{
+		Name:  "Clay",
+		Type:  ResourceTypeVarious,
+		Value: 1,
+	}
+	ResVariousSulfur = &Resource{
+		Name:  "Sulfur",
+		Type:  ResourceTypeVarious,
+		Value: 2,
+	}
+	ResVariousSalt = &Resource{
+		Name:  "Salt",
+		Type:  ResourceTypeVarious,
+		Value: 4,
+	}
+	ResVariousCoal = &Resource{
+		Name:  "Coal",
+		Type:  ResourceTypeVarious,
+		Value: 8,
+	}
+	ResVariousOil = &Resource{
+		Name:  "Oil",
+		Type:  ResourceTypeVarious,
+		Value: 10,
+	}
+	ResVariousGas = &Resource{
+		Name:  "Gas",
+		Type:  ResourceTypeVarious,
+		Value: 10,
+	}
 )
 
-const ResMaxVarious = 6
-
-func VariousToString(v int) string {
-	switch 1 << v {
-	case ResVarClay:
-		return "clay"
-	case ResVarSulfur:
-		return "sulfur"
-	case ResVarSalt:
-		return "salt"
-	case ResVarCoal:
-		return "coal"
-	case ResVarOil:
-		return "oil"
-	case ResVarGas:
-		return "gas"
-	default:
-		return "unknown"
-	}
-}
-
 func (m *Geo) placeVarious() {
-	varRes := make([]byte, m.SphereMesh.NumRegions)
 	biomeFunc := m.GetRegWhittakerModBiomeFunc()
+	elevs := m.Elevation.GetValues()
 	steepness := m.GetSteepness()
+
+	// Initialize resource locations for various resources.
+	resLocs := m.ResourceLocations
+	resLocs.AddResource(ResVariousClay)
+	resLocs.AddResource(ResVariousSulfur)
+	resLocs.AddResource(ResVariousSalt)
+	resLocs.AddResource(ResVariousCoal)
+	resLocs.AddResource(ResVariousOil)
+	resLocs.AddResource(ResVariousGas)
+
 	for r := 0; r < m.SphereMesh.NumRegions; r++ {
-		if m.Elevation[r] <= 0.0 {
+		if elevs[r] <= 0.0 {
 			continue
 		}
 		biome := biomeFunc(r)
 
 		if m.RegionIsVolcano[r] {
-			varRes[r] |= ResVarSulfur
+			resLocs.Location[ResVariousSulfur][r] = true
 		}
 
 		if m.RegionIsMountain[r] {
-			varRes[r] |= ResVarCoal
+			resLocs.Location[ResVariousCoal][r] = true
 		}
 
 		if m.IsRegRiver(r) && steepness[r] > 0.1 && steepness[r] < 0.3 {
-			varRes[r] |= ResVarClay
+			resLocs.Location[ResVariousClay][r] = true
 		}
 
 		if biome == genbiome.WhittakerModBiomeHotSwamp {
-			varRes[r] |= ResVarGas
+			resLocs.Location[ResVariousGas][r] = true
 		}
 
 		// TODO: Salt, oil, coal.
 	}
-	m.Various = varRes
 }
 
-// The 8 most important types of wood.
-const (
-	ResWoodOak = 1 << iota
-	ResWoodBirch
-	ResWoodPine
-	ResWoodSpruce
-	ResWoodCedar
-	ResWoodShrub
-	ResWoodFir
-	ResWoodPalm
-)
-
-const ResMaxWoods = 8
-
-func WoodToString(v int) string {
-	switch 1 << v {
-	case ResWoodOak:
-		return "oak"
-	case ResWoodBirch:
-		return "birch"
-	case ResWoodPine:
-		return "pine"
-	case ResWoodSpruce:
-		return "spruce"
-	case ResWoodCedar:
-		return "cedar"
-	case ResWoodShrub:
-		return "shrub"
-	case ResWoodFir:
-		return "fir"
-	case ResWoodPalm:
-		return "palm"
-	default:
-		return "unknown"
+var (
+	ResWoodsOak = &Resource{
+		Name:  "Oak",
+		Type:  ResourceTypeWood,
+		Value: 1,
 	}
-}
+	ResWoodsBirch = &Resource{
+		Name:  "Birch",
+		Type:  ResourceTypeWood,
+		Value: 2,
+	}
+	ResWoodsPine = &Resource{
+		Name:  "Pine",
+		Type:  ResourceTypeWood,
+		Value: 1,
+	}
+	ResWoodsSpruce = &Resource{
+		Name:  "Spruce",
+		Type:  ResourceTypeWood,
+		Value: 2,
+	}
+	ResWoodsCedar = &Resource{
+		Name:  "Cedar",
+		Type:  ResourceTypeWood,
+		Value: 2,
+	}
+	ResWoodsShrub = &Resource{
+		Name:  "Shrub",
+		Type:  ResourceTypeWood,
+		Value: 1,
+	}
+	ResWoodsFir = &Resource{
+		Name:  "Fir",
+		Type:  ResourceTypeWood,
+		Value: 2,
+	}
+	ResWoodsPalm = &Resource{
+		Name:  "Palm",
+		Type:  ResourceTypeWood,
+		Value: 3,
+	}
+)
 
 func (m *Geo) placeForests() {
 	// Get all biomes that are forested.
 	// Place trees in those biomes based on the biome's tree type(s).
 	// Of course it can't be too steep.
 	biomeFunc := m.GetRegWhittakerModBiomeFunc()
+	elevs := m.Elevation.GetValues()
 	//steepness := m.GetSteepness()
 
-	wood := make([]byte, m.SphereMesh.NumRegions)
+	// Initialize resource locations for wood.
+	resLocs := m.ResourceLocations
+	resLocs.AddResource(ResWoodsOak)
+	resLocs.AddResource(ResWoodsBirch)
+	resLocs.AddResource(ResWoodsPine)
+	resLocs.AddResource(ResWoodsSpruce)
+	resLocs.AddResource(ResWoodsCedar)
+	resLocs.AddResource(ResWoodsShrub)
+	resLocs.AddResource(ResWoodsFir)
+	resLocs.AddResource(ResWoodsPalm)
+
 	for r := 0; r < m.SphereMesh.NumRegions; r++ {
-		if m.Elevation[r] <= 0.0 {
+		if elevs[r] <= 0.0 {
 			continue
 		}
 
@@ -630,39 +717,38 @@ func (m *Geo) placeForests() {
 		// in the world.
 		biome := biomeFunc(r)
 		if biome == genbiome.WhittakerModBiomeTemperateRainforest {
-			wood[r] |= ResWoodOak
+			resLocs.Location[ResWoodsOak][r] = true
 		} else if biome == genbiome.WhittakerModBiomeTemperateSeasonalForest {
-			wood[r] |= ResWoodOak
-			wood[r] |= ResWoodBirch
+			resLocs.Location[ResWoodsOak][r] = true
+			resLocs.Location[ResWoodsBirch][r] = true
 		} else if biome == genbiome.WhittakerModBiomeTropicalRainforest {
-			wood[r] |= ResWoodOak
-			wood[r] |= ResWoodPalm
+			resLocs.Location[ResWoodsOak][r] = true
+			resLocs.Location[ResWoodsPalm][r] = true
 		} else if biome == genbiome.WhittakerModBiomeTropicalSeasonalForest {
-			wood[r] |= ResWoodOak
-			wood[r] |= ResWoodPalm
-			wood[r] |= ResWoodBirch
+			resLocs.Location[ResWoodsOak][r] = true
+			resLocs.Location[ResWoodsPalm][r] = true
+			resLocs.Location[ResWoodsBirch][r] = true
 		} else if biome == genbiome.WhittakerModBiomeBorealForestTaiga {
-			wood[r] |= ResWoodPine
-			wood[r] |= ResWoodSpruce
-			wood[r] |= ResWoodCedar
+			resLocs.Location[ResWoodsPine][r] = true
+			resLocs.Location[ResWoodsSpruce][r] = true
+			resLocs.Location[ResWoodsCedar][r] = true
 		} else if biome == genbiome.WhittakerModBiomeTundra {
-			wood[r] |= ResWoodSpruce
-			wood[r] |= ResWoodCedar
-			wood[r] |= ResWoodFir
-			wood[r] |= ResWoodShrub
+			resLocs.Location[ResWoodsSpruce][r] = true
+			resLocs.Location[ResWoodsCedar][r] = true
+			resLocs.Location[ResWoodsFir][r] = true
+			resLocs.Location[ResWoodsShrub][r] = true
 		} else if biome == genbiome.WhittakerModBiomeWetlands {
-			wood[r] |= ResWoodShrub
-			wood[r] |= ResWoodFir
-			wood[r] |= ResWoodCedar
-			wood[r] |= ResWoodOak
-			wood[r] |= ResWoodBirch
+			resLocs.Location[ResWoodsShrub][r] = true
+			resLocs.Location[ResWoodsFir][r] = true
+			resLocs.Location[ResWoodsCedar][r] = true
+			resLocs.Location[ResWoodsOak][r] = true
+			resLocs.Location[ResWoodsBirch][r] = true
 		} else if biome == genbiome.WhittakerModBiomeWoodlandShrubland {
-			wood[r] |= ResWoodShrub
-			wood[r] |= ResWoodFir
-			wood[r] |= ResWoodCedar
-			wood[r] |= ResWoodOak
-			wood[r] |= ResWoodBirch
+			resLocs.Location[ResWoodsShrub][r] = true
+			resLocs.Location[ResWoodsFir][r] = true
+			resLocs.Location[ResWoodsCedar][r] = true
+			resLocs.Location[ResWoodsOak][r] = true
+			resLocs.Location[ResWoodsBirch][r] = true
 		}
 	}
-	m.Wood = wood
 }

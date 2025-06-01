@@ -21,10 +21,11 @@ func (m *BaseObject) assignWaterbodies() {
 // NOTE: For regions that are not part of an ocean (elevation above sea level)
 // a value of -2 is assigned.
 func (m *BaseObject) getWaterBodies() []int {
+	elevs := m.Elevation.GetValues()
 	// Initialize the waterbody (ocean) mapping.
 	done := make([]int, m.SphereMesh.NumRegions)
 	for i := range done {
-		if m.Elevation[i] > 0 {
+		if elevs[i] > 0 {
 			done[i] = -2 // Non-ocean regions above sealevel.
 		} else {
 			done[i] = -1 // Ocean regions that have not been visited yet.
@@ -33,8 +34,7 @@ func (m *BaseObject) getWaterBodies() []int {
 
 	out_r := make([]int, 0, 8)
 	for r := range done {
-		// Skip regions that have already been visited or that are
-		// non-ocean / above sealevel.
+		// Skip regions that have already been visited or that are non-ocean / above sealevel.
 		if done[r] != -1 {
 			continue
 		}
@@ -53,7 +53,7 @@ func (m *BaseObject) getWaterBodies() []int {
 			out_rc := make([]int, 0, 8)
 			for _, nbs := range m.R_circulate_r(out_r, rd) {
 				// If we have reached land or already visited nbs, skip.
-				if m.Elevation[nbs] > 0 || done[nbs] != -1 {
+				if elevs[nbs] > 0 || done[nbs] != -1 {
 					continue
 				}
 				// Assign the source region index to nbs.

@@ -15,26 +15,27 @@ const (
 	FluxVolVariantWalk2           = 3
 )
 
-// assignFlux will populate r_flux by summing up the rainfall for each region from highest to
-// lowest using r_downhill to reconstruct the downhill path that water would follow.
-// NOTE: This is based on mewo2's terrain generation code
-// See: https://github.com/mewo2/terrain
-func (m *Geo) assignFlux(skipBelowSea bool) {
-	m.Flux = m.getFlux(skipBelowSea)
-}
-
-// getFlux calculates and returns the water flux values for each region.
-func (m *Geo) getFlux(skipBelowSea bool) []float64 {
+// getFluxNoCache calculates and returns the water flux values for each region.
+func (m *BaseObject) getFluxNoCache(skipBelowSea bool) []float64 {
 	// Determines which flux calculation algorithm we use.
 	variant := FluxVolVariantBasic
 
+	// Get elevation values.
+	elevs := m.Elevation.GetValues()
+
+	// Get rainfall values.
+	rains := m.Rainfall.GetValues()
+
 	// Initialize flux values with r_rainfall.
 	regFlux := make([]float64, m.SphereMesh.NumRegions)
-	for i := 0; i < m.SphereMesh.NumRegions; i++ {
-		if m.Elevation[i] >= 0 || !skipBelowSea {
-			regFlux[i] = m.Rainfall[i]
+	for r := 0; r < m.SphereMesh.NumRegions; r++ {
+		if elevs[r] >= 0 || !skipBelowSea {
+			regFlux[r] = rains[r]
 		}
 	}
+
+	// Get the downhill neighbors.
+	dh := m.Downhill.GetValues()
 
 	switch variant {
 	case FluxVolVariantBasic:
@@ -45,7 +46,7 @@ func (m *Geo) getFlux(skipBelowSea bool) []float64 {
 			idxs[i] = i
 		}
 		sort.Slice(idxs, func(a, b int) bool {
-			return m.Elevation[idxs[a]] > m.Elevation[idxs[b]]
+			return elevs[idxs[a]] > elevs[idxs[b]]
 		})
 
 		// Highest elevation first.
@@ -53,12 +54,12 @@ func (m *Geo) getFlux(skipBelowSea bool) []float64 {
 			// Skip calculation if we are below sea level or there is no downhill
 			// neighbor where the water could flow to.
 			// NOTE: In this case we allow water to flow to sea level.
-			if (m.Elevation[r] < 0 && skipBelowSea) || m.Downhill[r] < 0 {
+			if (elevs[r] < 0 && skipBelowSea) || dh[r] < 0 {
 				continue
 			}
 
 			// Add the flux of the region to the downhill neighbor.
-			regFlux[m.Downhill[r]] += regFlux[r]
+			regFlux[dh[r]] += regFlux[r]
 		}
 	case FluxVolVariantBasicWithDrains:
 		// Basic variant copying the flux to the downhill neighbor or the drainage.
@@ -75,14 +76,14 @@ func (m *Geo) getFlux(skipBelowSea bool) []float64 {
 
 		// Sort index array.
 		sort.Slice(idxs, func(a, b int) bool {
-			return (m.Elevation[idxs[b]] + m.Waterpool[idxs[b]]) < (m.Elevation[idxs[a]] + m.Waterpool[idxs[a]])
+			return (elevs[idxs[b]] + m.Waterpool[idxs[b]]) < (elevs[idxs[a]] + m.Waterpool[idxs[a]])
 		})
 
 		// Copy flux to known drainage point or next lowest neighbor.
 		for _, j := range idxs {
 			// Do not copy flux if we are below sea level.
 			// NOTE: In this case we allow water to flow to sea level.
-			if m.Elevation[j] < 0 && skipBelowSea {
+			if elevs[j] < 0 && skipBelowSea {
 				continue
 			}
 
@@ -93,9 +94,9 @@ func (m *Geo) getFlux(skipBelowSea bool) []float64 {
 				// In this case we copy the flux directly to the region where
 				// this region drains into.
 				regFlux[m.Drainage[j]] += regFlux[j]
-			} else if m.Downhill[j] >= 0 {
+			} else if dh[j] >= 0 {
 				// Add the flux of the region to the downhill neighbor.
-				regFlux[m.Downhill[j]] += regFlux[j]
+				regFlux[dh[j]] += regFlux[j]
 			}
 		}
 	case FluxVolVariantWalk1:
@@ -108,18 +109,18 @@ func (m *Geo) getFlux(skipBelowSea bool) []float64 {
 			seen := make(map[int]bool)
 			drain := m.Drainage[j]
 			if drain == -1 {
-				drain = m.Downhill[j]
+				drain = dh[j]
 			}
 			for drain != -1 {
 				// NOTE: In this case we allow water to flow to sea level.
-				if m.Elevation[drain] < 0 && skipBelowSea {
+				if elevs[drain] < 0 && skipBelowSea {
 					break
 				}
 				regFluxTmp[drain] += fl
 				if m.Drainage[drain] >= 0 && !seen[drain] {
 					drain = m.Drainage[drain]
-				} else if m.Downhill[drain] >= 0 {
-					drain = m.Downhill[drain]
+				} else if dh[drain] >= 0 {
+					drain = dh[drain]
 				} else {
 					drain = -1
 				}
@@ -158,13 +159,13 @@ func (m *Geo) getFlux(skipBelowSea bool) []float64 {
 				if m.Drainage[r] >= 0 {
 					r = m.Drainage[r] // continue with drainage point
 				} else {
-					r = m.Downhill[r] // use downhill neighbor
+					r = dh[r] // use downhill neighbor
 				}
 
 				// If we couldn't find a region to drain into, or if
 				// we are below sea level, stop here.
 				// NOTE: In this case we allow water to flow to sea level.
-				if r < 0 || m.Elevation[r] < 0 && skipBelowSea {
+				if r < 0 || elevs[r] < 0 && skipBelowSea {
 					break
 				}
 				// Abort if we have already visited r to avoid circular
@@ -243,10 +244,11 @@ func (m *BaseObject) AssignFlow() {
 
 // assignWaterfalls finds regions that carry a river and are steep enough to be a waterfall.
 func (m *BaseObject) assignWaterfalls() {
+	elevs := m.Elevation.GetValues()
 	steepness := m.GetSteepness()
 	wfRegs := make(map[int]bool)
 	for i, s := range steepness {
-		if m.Elevation[i] <= 0.0 {
+		if elevs[i] <= 0.0 {
 			continue
 		}
 		// 1.0 is the maximum steepness (90 degrees), so
@@ -311,15 +313,21 @@ func (m *BaseObject) getRiverSegments(limit float64) [][2]int {
 	// or other factors might have changed this?
 
 	// Get (cached) downhill neighbors.
-	dh := m.Downhill
+	dh := m.Downhill.GetValues()
+
+	// Get elevation values.
+	elevs := m.Elevation.GetValues()
+
+	// Get rainfall values.
+	rains := m.Rainfall.GetValues()
 
 	// Get (cached) flux values.
-	flux := m.Flux
+	flux := m.Flux.GetValues()
 
 	// Adjust the limit to be a fraction of the max flux.
 	// This will save us a lot of cycles when comparing
 	// flux values to the limit.
-	_, maxFlux := minMax(flux)
+	maxFlux := m.Flux.Max
 	limit *= maxFlux
 
 	// Find all link segments that have a high enough flux value.
@@ -327,7 +335,7 @@ func (m *BaseObject) getRiverSegments(limit float64) [][2]int {
 	for r := 0; r < m.SphereMesh.NumRegions; r++ {
 		// Skip all regions that are sinks / have no downhill neighbor or
 		// regions below sea level.
-		if dh[r] < 0 || m.Elevation[r] < 0 {
+		if dh[r] < 0 || elevs[r] < 0 {
 			continue
 		}
 
@@ -336,7 +344,7 @@ func (m *BaseObject) getRiverSegments(limit float64) [][2]int {
 		// water influx.
 		// NOTE: Rivers need at least one contributor region and would therefore have a flux
 		// value that is higher than the rainfall in the region.
-		if flux[r] <= m.Rainfall[r] || flux[dh[r]] <= m.Rainfall[dh[r]] {
+		if flux[r] <= rains[r] || flux[dh[r]] <= rains[dh[r]] {
 			continue
 		}
 

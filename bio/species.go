@@ -28,7 +28,7 @@ func (b *Bio) genNRandomSpecies(n int) {
 	// distance between species that compete for the same resources.
 	distSeedFunc := func() []int {
 		var res []int
-		for _, s := range b.Species {
+		for _, s := range b.Species.Objects {
 			res = append(res, s.Origin)
 		}
 		return res
@@ -37,11 +37,6 @@ func (b *Bio) genNRandomSpecies(n int) {
 	// Place n species on the map.
 	for i := 0; i < n; i++ {
 		b.PlaceSpecies(sf, distSeedFunc)
-	}
-
-	// DEBUG: Print all species.
-	for _, s := range b.Species {
-		fmt.Println(s)
 	}
 }
 
@@ -71,34 +66,35 @@ func (b *Bio) placeSpeciesAt(r int, tf func(int) SpeciesTolerances) *Species {
 	// TODO: Pick species type based on biome through a weighted random array.
 	b.rand.Seed(b.Seed + int64(r))
 	s := b.newSpecies(r, SpeciesKingdoms[b.rand.Intn(len(SpeciesKingdoms))], tf)
-	b.Species = append(b.Species, s)
+	b.Species.PlaceObjectAt(s, r)
 	return s
 }
 
-func (b *Bio) expandSpecies() []int {
+func (b *Bio) expandSpecificSpecies(ss []*Species) []int {
 	// For now, let's just do this the dumb way.
 	// TODO: Species with different competition hashes should be able to coexist in
 	// the same region?
 	// We might need to create a full index of all regions for each unique
 	// competition hash.... or, which is more wasteful, per species.
-	var seedPoints []int
-	originToSpecFit := make(map[int]func(int) float64)
-	for _, s := range b.Species {
-		seedPoints = append(seedPoints, s.Origin)
-		originToSpecFit[s.Origin] = b.getToleranceScoreFunc(s.SpeciesTolerances)
+	idToSpecFit := make(map[int]func(int) float64)
+	for _, s := range ss {
+		idToSpecFit[s.GetID()] = b.getToleranceScoreFunc(s.SpeciesTolerances)
 	}
 	var queue geo.AscPriorityQueue
 	heap.Init(&queue)
 	outReg := make([]int, 0, 8)
 
 	// Get maxFlux and maxElev for normalizing.
-	_, maxFlux := minMax(b.Flux)
-	_, maxElev := minMax(b.Elevation)
+	flux := b.Flux.GetValues()
+	maxFlux := b.Flux.Max
+
+	elevs := b.Elevation.GetValues()
+	maxElev := b.Elevation.Max
 
 	// TODO: Move this to a generic function.
 	terrainWeight := func(o, u, v int) float64 {
 		// Don't cross from water to land and vice versa.
-		if (b.Elevation[u] > 0) != (b.Elevation[v] > 0) {
+		if (elevs[u] > 0) != (elevs[v] > 0) {
 			return -1
 		}
 
@@ -110,7 +106,7 @@ func (b *Bio) expandSpecies() []int {
 		horiz := various.Haversine(ulat, ulon, vlat, vlon) / (2 * math.Pi)
 
 		// Calculate vertical distance.
-		vert := (b.Elevation[v] - b.Elevation[u]) / maxElev
+		vert := (elevs[v] - elevs[u]) / maxElev
 		if vert > 0 {
 			vert /= 10
 		}
@@ -118,16 +114,16 @@ func (b *Bio) expandSpecies() []int {
 
 		// NOTE: Flux should only apply to animals since plants and fungi
 		// don't need to worry about drowning.
-		diff += 100 * math.Sqrt(b.Flux[u]/maxFlux)
-		if b.Elevation[u] <= 0 {
+		diff += 100 * math.Sqrt(flux[u]/maxFlux)
+		if elevs[u] <= 0 {
 			diff = 100
 		}
 		return horiz * diff
 	}
 
-	weight := func(o, u, v int) float64 {
+	weight := func(o, u, v, id int) float64 {
 		// Call species specific fitness function.
-		sFit := originToSpecFit[o](v)
+		sFit := idToSpecFit[id](v)
 		if sFit < 0 {
 			return -1
 		}
@@ -142,17 +138,18 @@ func (b *Bio) expandSpecies() []int {
 	// 'terr' will hold a mapping of region to species.
 	// The territory ID is the region number of the species origin.
 	terr := initRegionSlice(b.SphereMesh.NumRegions)
-	for i := 0; i < len(seedPoints); i++ {
-		terr[seedPoints[i]] = seedPoints[i]
-		for _, v := range b.SphereMesh.R_circulate_r(outReg, seedPoints[i]) {
-			newdist := weight(seedPoints[i], seedPoints[i], v)
+	for _, s := range ss {
+		terr[s.Origin] = s.ID
+		for _, v := range b.SphereMesh.R_circulate_r(outReg, s.Origin) {
+			newdist := weight(s.Origin, s.Origin, v, s.ID)
 			if newdist < 0 {
 				continue
 			}
 			heap.Push(&queue, &geo.QueueEntry{
 				Score:       newdist,
-				Origin:      seedPoints[i],
+				Origin:      s.Origin,
 				Destination: v,
+				ID:          s.ID,
 			})
 		}
 	}
@@ -163,12 +160,12 @@ func (b *Bio) expandSpecies() []int {
 		if terr[u.Destination] >= 0 {
 			continue
 		}
-		terr[u.Destination] = u.Origin
+		terr[u.Destination] = u.ID
 		for _, v := range b.SphereMesh.R_circulate_r(outReg, u.Destination) {
 			if terr[v] >= 0 {
 				continue
 			}
-			newdist := weight(u.Origin, u.Destination, v)
+			newdist := weight(u.Origin, u.Destination, v, u.ID)
 			if newdist < 0 {
 				continue
 			}
@@ -176,15 +173,52 @@ func (b *Bio) expandSpecies() []int {
 				Score:       u.Score + newdist,
 				Origin:      u.Origin,
 				Destination: v,
+				ID:          u.ID,
 			})
 		}
 	}
 	return terr
 }
 
+func (b *Bio) expandSpecies() {
+	// We group the species by the competition hash.
+	// We then expand the species from the origin until we encounter a competing species.
+
+	groupToSpecies := make(map[SpeciesGroup][]*Species)
+	var groups []SpeciesGroup
+
+	// Group species by competition hash and familiy.
+	for _, s := range b.Species.Objects {
+		group := s.Group()
+		if _, ok := groupToSpecies[group]; !ok {
+			groups = append(groups, group)
+		}
+		groupToSpecies[group] = append(groupToSpecies[group], s)
+	}
+
+	// Now we iterate over the groups and expand the species for each group.
+	b.Species.ResetRegions()
+	for _, group := range groups {
+		// Map id to object.
+		objByID := make(map[int]*Species)
+		for _, s := range groupToSpecies[group] {
+			objByID[s.ID] = s
+		}
+		terr := b.expandSpecificSpecies(groupToSpecies[group])
+
+		// Add the territories to the species.
+		for r, id := range terr {
+			if id >= 0 {
+				b.Species.PlaceObjectAt(objByID[id], r)
+			}
+		}
+	}
+}
+
 func (b *Bio) newSpecies(r int, t SpeciesKingdom, tf func(int) SpeciesTolerances) *Species {
 	// TODO: Get culture and language from the region and use it to generate the name.
 	s := &Species{
+		ID:     getNextSpeciesID(),
 		Origin: r,
 		SpeciesProperties: SpeciesProperties{
 			Kingdom: t,
@@ -242,11 +276,24 @@ func (b *Bio) getSpeciesScores(s *Species) []float64 {
 	return scores
 }
 
+var speciesID int
+
+func getNextSpeciesID() int {
+	speciesID++
+	return speciesID
+}
+
 type Species struct {
+	ID     int
 	Name   string
 	Origin int // The region where the species originated, acts as a seed.
 	SpeciesProperties
 	SpeciesTolerances
+}
+
+// GetID returns the species ID.
+func (s Species) GetID() int {
+	return s.ID
 }
 
 func (s *Species) String() string {

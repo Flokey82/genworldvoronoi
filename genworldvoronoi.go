@@ -4,14 +4,18 @@
 package genworldvoronoi
 
 import (
+	"log"
+
 	"github.com/Flokey82/genworldvoronoi/bio"
+	"github.com/Flokey82/genworldvoronoi/civ2"
 	"github.com/Flokey82/genworldvoronoi/geo"
 )
 
 type Map struct {
 	*geo.Geo // Geography / geology
 	*bio.Bio // Plants / animals / funghi
-	*Civ     // Civilization
+	//*civ.Civ // Civilization
+	*civ2.Civ
 
 	// *TileCache
 	// CoarseMeshes []*SphereMesh // Coarse meshes for each zoom level.
@@ -32,7 +36,8 @@ func NewMapFromConfig(seed int64, cfg *Config) (*Map, error) {
 	m := &Map{
 		Geo: geo,
 		Bio: bio.NewBio(geo, cfg.BioConfig),
-		Civ: NewCiv(geo, cfg.CivConfig),
+		//Civ: civ.NewCiv(geo, cfg.CivConfig),
+		Civ: civ2.NewCiv(geo),
 	}
 	m.generateMap()
 
@@ -76,14 +81,21 @@ func (m *Map) getCoarseForZoom(zoom int) (*SphereMesh, int) {
 */
 
 func (m *Map) generateMap() {
+	log.Println("Generating map...")
+
 	// Build geography / geology / climate.
+	log.Println("Generating geology...")
 	m.GenerateGeology()
 
 	// Build plants / animals / funghi.
+	log.Println("Generating biology...")
 	m.GenerateBiology()
 
 	// Build civilization.
+	log.Println("Generating civilization...")
 	m.GenerateCivilization()
+
+	log.Println("Map generated.")
 }
 
 // Tick advances the map by one tick.

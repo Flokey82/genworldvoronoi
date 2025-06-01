@@ -24,13 +24,14 @@ func main() {
 	}
 
 	cfg := genworldvoronoi.NewConfig()
+	cfg.NumPoints = 400000
+	cfg.EnableCityAging = false
 
 	sp, err := genworldvoronoi.NewMapFromConfig(1234, cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	sp.GetEmpires()
 	exportPNG := true
 	exportOBJ := true
 	exportSVG := true

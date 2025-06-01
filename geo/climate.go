@@ -8,21 +8,34 @@ import (
 )
 
 // GetAzgaarRegionBiome returns the biome for a given region as per Azgaar's map generator.
-func (m *Geo) GetAzgaarRegionBiome(r int, elev, maxElev float64) int {
-	return genbiome.GetAzgaarBiome(int(20.0*m.Moisture[r]), int(m.GetRegTemperature(r, maxElev)), int(elev*100))
+func (m *Geo) GetAzgaarRegionBiome(r int, elev float64) int {
+	return genbiome.GetAzgaarBiome(int(20.0*m.Moisture.Values[r]), int(m.GetRegTemperature(r)), int(elev*100))
 }
 
 // GetRegWhittakerModBiomeFunc returns a function that returns the Whittaker biome
 // for a given region.
 func (m *Geo) GetRegWhittakerModBiomeFunc() func(r int) int {
-	_, maxElev := minMax(m.Elevation)
-	_, maxMois := minMax(m.Moisture)
+	elevs := m.Elevation.GetValues()
+	maxElev := m.Elevation.Max
+	moiss := m.Moisture.GetValues()
+	maxMois := m.Moisture.Max
 	return func(r int) int {
-		valElev := m.Elevation[r] / maxElev
-		valMois := m.Moisture[r] / maxMois
+		valElev := elevs[r] / maxElev
+		valMois := moiss[r] / maxMois
 		regLat := m.LatLon[r][0]
 		return getWhittakerModBiome(regLat, valElev, valMois)
 	}
+}
+
+type HackyBiome int
+
+func (b HackyBiome) String() string {
+	return genbiome.WhittakerModBiomeToString(int(b))
+}
+
+// GetRegWhittakerModBiome returns the Whittaker biome for a given region.
+func (m *Geo) GetRegWhittakerModBiome(r int) HackyBiome {
+	return HackyBiome(getWhittakerModBiome(m.LatLon[r][0], m.Elevation.Values[r]/m.Elevation.Max, m.Moisture.Values[r]/m.Moisture.Max))
 }
 
 func getWhittakerModBiome(latitude, elevation, moisture float64) int {
@@ -50,9 +63,13 @@ func (m *Geo) assignBiomeRegions() {
 func (m *Geo) identifyBiomeRegions() []int {
 	// We use a flood fill algorithm to identify regions with the same biome
 	biomeToRegs := initRegionSlice(m.SphereMesh.NumRegions)
+
+	// Get elevation values.
+	elevs := m.Elevation.GetValues()
+
 	// Set all ocean regions to -2.
 	for r := range biomeToRegs {
-		if m.Elevation[r] <= 0.0 {
+		if elevs[r] <= 0.0 {
 			biomeToRegs[r] = -2
 		}
 	}

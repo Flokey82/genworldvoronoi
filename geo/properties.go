@@ -1,6 +1,7 @@
 package geo
 
 import (
+	"log"
 	"math"
 
 	"github.com/Flokey82/genworldvoronoi/various"
@@ -30,13 +31,14 @@ func (m *Geo) GetRegPropertyFunc() func(int) RegProperty {
 	// TODO: Add chance of tropical storms, wildfires, etc.
 	disasterFunc := m.GetGeoDisasterFunc()
 	steepness := m.GetSteepness()
+	elevs := m.Elevation.GetValues()
+	rains := m.Rainfall.GetValues()
 	inlandValleyFunc := m.GetFitnessInlandValleys()
 	biomeFunc := m.GetRegWhittakerModBiomeFunc()
-	_, maxElev := minMax(m.Elevation)
 	var oceanRegs, volcanoRegs, riverRegs, faultlineRegs []int
 	stopOcean := make(map[int]bool)
 	for r := 0; r < m.SphereMesh.NumRegions; r++ {
-		if m.Elevation[r] <= 0 {
+		if elevs[r] <= 0 {
 			oceanRegs = append(oceanRegs, r)
 			stopOcean[r] = true
 		}
@@ -62,7 +64,7 @@ func (m *Geo) GetRegPropertyFunc() func(int) RegProperty {
 		if isValley {
 			var count int
 			for _, n := range m.GetRegNeighbors(id) {
-				if m.Elevation[n] > m.Elevation[id] {
+				if elevs[n] > elevs[id] {
 					continue
 				}
 				count++
@@ -75,7 +77,7 @@ func (m *Geo) GetRegPropertyFunc() func(int) RegProperty {
 
 		return RegProperty{
 			ID:                  id,
-			Elevation:           m.Elevation[id],
+			Elevation:           elevs[id],
 			Steepness:           steepness[id],
 			Biome:               biomeFunc(id),
 			DistanceToCoast:     distOcean[id],
@@ -83,8 +85,8 @@ func (m *Geo) GetRegPropertyFunc() func(int) RegProperty {
 			DistanceToRiver:     distRiver[id],
 			DistanceToVolcano:   distVolcano[id],
 			DistanceToFaultline: distFaultline[id],
-			Temperature:         m.GetRegTemperature(id, maxElev),
-			Rainfall:            m.Rainfall[id],
+			Temperature:         m.GetRegTemperature(id),
+			Rainfall:            rains[id],
 			Danger:              disasterFunc(id),
 			HasWaterfall:        m.RegionIsWaterfall[id],
 			IsValley:            isValley,
@@ -141,7 +143,7 @@ func (m *Geo) GetRegHaven(reg int) (int, int) {
 	// get all neighbors that are below or at sea level.
 	water := make([]int, 0, 8)
 	for _, nb := range m.GetRegNeighbors(reg) {
-		if m.Elevation[nb] <= 0.0 {
+		if m.Elevation.Values[nb] <= 0.0 {
 			water = append(water, nb)
 		}
 	}
@@ -191,15 +193,18 @@ const (
 // +2: region is a land cell next to a coastal land cell
 // >2: region is inland
 func (m *BaseObject) GetRegCellTypes() []int {
-	if !m.RegCellTypesNeedUpdate {
-		return m.RegCellTypes
-	}
+	return m.RegCellTypes.GetValues()
+}
+
+func (m *BaseObject) getRegCellTypesNoCache(cellType []int) []int {
+	// Get elevation values.
+	elevs := m.Elevation.GetValues()
 
 	oceanRegs := make([]int, 0, m.SphereMesh.NumRegions)
 	landRegs := make([]int, 0, m.SphereMesh.NumRegions)
 	stop_land := make(map[int]bool)
 	stop_ocean := make(map[int]bool)
-	for r, elev := range m.Elevation {
+	for r, elev := range elevs {
 		if elev <= 0.0 {
 			oceanRegs = append(oceanRegs, r)
 			stop_ocean[r] = true
@@ -211,41 +216,84 @@ func (m *BaseObject) GetRegCellTypes() []int {
 
 	// Assign distance fields to ocean and land regions.
 	// TODO: Do this concurrently.
-	if m.DistNeedUpdate {
-		m.DistLandToOcean = m.AssignDistanceField(oceanRegs, stop_land)
-		m.DistOceanToLand = m.AssignDistanceField(landRegs, stop_ocean)
-		m.DistNeedUpdate = false
-	}
+	distLandToOcean := m.DistLandToOcean.GetValues()
+	distOceanToLand := m.DistOceanToLand.GetValues()
 
-	cellType := make([]int, m.SphereMesh.NumRegions)
+	if len(cellType) != m.SphereMesh.NumRegions {
+		cellType = make([]int, m.SphereMesh.NumRegions)
+	}
 	for i := range cellType {
 		// Is it water?
-		if m.Elevation[i] <= 0.0 {
+		if elevs[i] <= 0.0 {
 			// Figure out if it has a land neighbor.
 			// If so, it is -1 (water near coast)
-			if m.DistOceanToLand[i] < 2 {
+			if distOceanToLand[i] < 2 {
 				cellType[i] = CellTypeCoastalWater
 			} else {
 				// If not, it is -2 (water far from coast)
 				cellType[i] = CellTypeDeepWaters
 			}
-		} else if m.DistLandToOcean[i] < 2 { // Figure out if it has a water neighbor.
+		} else if distLandToOcean[i] < 2 { // Figure out if it has a water neighbor.
 			// If so, it is 1 (land near coast)
 			cellType[i] = CellTypeCoastalLand
 		} else {
 			// If not, it is >=2 (land far from coast)
-			cellType[i] = int(m.DistLandToOcean[i])
+			cellType[i] = int(distLandToOcean[i])
 		}
 	}
-
-	m.RegCellTypes = cellType
-	m.RegCellTypesNeedUpdate = false
-
 	return cellType
 }
 
+func (m *BaseObject) getDistLandToOceanNoCache() []float64 {
+	// Get elevation values.
+	elevs := m.Elevation.GetValues()
+
+	oceanRegs := make([]int, 0, m.SphereMesh.NumRegions)
+	stop_land := make(map[int]bool)
+	for r, elev := range elevs {
+		if elev <= 0.0 {
+			oceanRegs = append(oceanRegs, r)
+		} else {
+			stop_land[r] = true
+		}
+	}
+
+	return m.AssignDistanceField(oceanRegs, stop_land)
+}
+
+func (m *BaseObject) getDistOceanToLandNoCache() []float64 {
+	// Get elevation values.
+	elevs := m.Elevation.GetValues()
+
+	landRegs := make([]int, 0, m.SphereMesh.NumRegions)
+	stop_ocean := make(map[int]bool)
+	for r, elev := range elevs {
+		if elev > 0.0 {
+			landRegs = append(landRegs, r)
+		} else {
+			stop_ocean[r] = true
+		}
+	}
+
+	return m.AssignDistanceField(landRegs, stop_ocean)
+}
+
+func (m *BaseObject) getDistWaterToMountainNoCache() []float64 {
+	// Get elevation values.
+	elevs := m.Elevation.GetValues()
+
+	var seedWater []int
+	for r := range elevs {
+		if m.IsRegLakeOrWaterBody(r) || m.IsRegBigRiver(r) {
+			seedWater = append(seedWater, r)
+		}
+	}
+
+	return m.AssignDistanceField(seedWater, m.RegionIsMountain)
+}
+
 func (m *BaseObject) IsRegBelowOrAtSeaLevelOrPool(r int) bool {
-	return m.Elevation[r] <= 0 || m.Waterpool[r] > 0
+	return m.Elevation.Values[r] <= 0 || m.Waterpool[r] > 0
 }
 
 func (m *BaseObject) IsRegLakeOrWaterBody(r int) bool {
@@ -261,9 +309,109 @@ func (m *BaseObject) IsRegLake(r int) bool {
 }
 
 func (m *BaseObject) IsRegRiver(r int) bool {
-	return m.Flux[r] > m.Rainfall[r]
+	return m.Flux.Values[r] > m.Rainfall.Values[r]
 }
 
 func (m *BaseObject) IsRegBigRiver(r int) bool {
-	return m.Flux[r] > m.Rainfall[r]*2
+	return m.Flux.Values[r] > m.Rainfall.Values[r]*2
+}
+
+// IsUpstream returns true if the given region is upstream of the other region.
+func (m *BaseObject) IsUpstream(r1, r2 int) bool {
+	return m.Downhill.Values[r1] == r2
+}
+
+// IsDownstream returns true if the given region is downstream of the other region.
+func (m *BaseObject) IsDownstream(r1, r2 int) bool {
+	return m.Downhill.Values[r2] == r1
+}
+
+// GetUpstreamRegion returns the upstream region of the given region.
+// This region is determined by:
+// - Higher elevation
+// - Higher flux than all other neighbors that have a higher elevation.
+// - The given region is the downhill neighbor of the upstream region.
+func (m *BaseObject) GetUpstreamRegion(r int) int {
+	// Get the neighbors of the region.
+	nbs := m.R_circulate_r(nil, r)
+	flux := m.Flux.GetValues()
+	maxFlux := 0.0
+	upstream := -1
+	elev := m.Elevation.Values[r]
+	for _, nb := range nbs {
+		if m.Elevation.Values[nb] > elev && flux[nb] > maxFlux && m.Downhill.Values[nb] == r {
+			upstream = nb
+			maxFlux = flux[nb]
+		}
+	}
+	return upstream
+}
+
+// GetDownstreamRegion returns the downstream region of the given region.
+// This region is determined by:
+// - Downhill neighbor of the given region.
+func (m *BaseObject) GetDownstreamRegion(r int) int {
+	return m.Downhill.Values[r]
+}
+
+type RegionProp struct {
+	Biome HackyBiome
+	RegionProximity
+}
+
+type RegionProximity struct {
+	River    bool
+	Lake     bool
+	Ocean    bool
+	Mountain bool
+}
+
+func (r *RegionProp) Log() {
+	log.Printf("  biome: %s", r.Biome)
+	log.Printf("  river proximity: %v", r.River)
+	log.Printf("  lake proximity: %v", r.Lake)
+	log.Printf("  ocean proximity: %v", r.Ocean)
+	log.Printf("  mountain proximity: %v", r.Mountain)
+}
+
+// GetRegionProp returns the properties of the region.
+func (m *Geo) GetRegionProp(r int) RegionProp {
+	// TODO: Find better way to determine mountain proximity. 0.3 is very low.
+	return RegionProp{
+		Biome:           m.GetRegWhittakerModBiome(r),
+		RegionProximity: m.GetRegionProx(r),
+	}
+}
+
+// GetRegionProx returns the proximity of the region to rivers, lakes, oceans, and mountains.
+func (m *Geo) GetRegionProx(r int) RegionProximity {
+	return RegionProximity{
+		River:    m.IsRegRiver(r),
+		Lake:     m.LakeProxFunc(r),
+		Ocean:    m.OceanProxFunc(r),
+		Mountain: m.Elevation.Values[r] > 0.3,
+	}
+}
+
+// NOTE: This won't be thread safe.
+var rNbs = make([]int, 0, 6)
+
+// Fake the lake proximity function.
+func (m *Geo) LakeProxFunc(r int) bool {
+	for _, nb := range m.R_circulate_r(rNbs, r) {
+		if m.IsRegLakeOrWaterBody(nb) && m.WaterbodySize[nb] > 5 {
+			return true
+		}
+	}
+	return false
+}
+
+// Fake the ocean proximity function.
+func (m *Geo) OceanProxFunc(r int) bool {
+	for _, nb := range m.R_circulate_r(rNbs, r) {
+		if m.Elevation.Values[nb] <= 0 && m.WaterbodySize[nb] > 5 {
+			return true
+		}
+	}
+	return false
 }

@@ -29,34 +29,29 @@ Loop:
 			if !m.IsRegBelowOrAtSeaLevelOrPool(r) {
 				continue Loop
 			}
-			if m.Elevation[nb] < lowest {
-				lowest = m.Elevation[nb]
+			if m.Elevation.Values[nb] < lowest {
+				lowest = m.Elevation.Values[nb]
 			}
 		}
-		m.Elevation[r] = lowest
+		m.Elevation.Values[r] = lowest
 	}
 
 	// Start off by filling sinks.
-	m.Elevation = m.FillSinks(true)
+	m.Elevation.SetValues(m.FillSinks(true))
 
 	// Try to flood all sinks.
 	var attempts int
 	for {
 		// Abort if we have no more sinks or ran out of attempts.
 		if attempts > maxAttempts {
-			m.Elevation = m.FillSinks(true)
+			m.Elevation.SetValues(m.FillSinks(true))
 
 			// Regenerate winds.
 			// m.assignWindVectors()
 
+			// Assign rainfall, flux will automatically be regenerated.
 			// TODO: Diffuse flux and pool.
 			m.assignRainfallBasic()
-
-			// Regenerate downhill.
-			m.AssignDownhill(true)
-
-			// Regenerate flux.
-			m.assignFlux(true)
 			break
 		}
 		attempts++
@@ -72,22 +67,17 @@ Loop:
 		}
 
 		// Fill sinks.
-		m.Elevation = m.FillSinks(true)
+		m.Elevation.SetValues(m.FillSinks(true))
 
 		// Regenerate winds.
 		// m.assignWindVectors()
 
+		// Assign rainfall, flux will automatically be regenerated.
 		// TODO: Diffuse flux and pool.
 		m.assignRainfallBasic()
 
-		// Regenerate downhill.
-		m.AssignDownhill(true)
-
-		// Regenerate flux.
-		m.assignFlux(false)
-
 		// Erode a little.
-		m.Elevation = m.Erode(erosionAmount) // NOTE: Flux would change as downhill values would change.
+		m.Elevation.SetValues(m.Erode(erosionAmount)) // NOTE: Flux would change as downhill values would change.
 	}
 
 	// TODO: Move this somewhere else.
@@ -116,15 +106,11 @@ func (m *Geo) assignHydrologyWithFlooding() {
 
 		// Abort if we have no more sinks or ran out of attempts.
 		if len(r_sinks) == 0 || attempts > maxAttempts {
-			m.Elevation = m.FillSinks(true)
-			// Regenerate downhill.
-			m.BaseObject.AssignDownhill(true)
+			m.Elevation.SetValues(m.FillSinks(true))
 
-			// Regenerate flux.
-			m.assignFlux(true)
-
+			// Assign rainfall, flux will automatically be regenerated.
 			// TODO: Diffuse flux and pool.
-			m.assignRainfall(4, moistTransferDirect, moistOrderWind)
+			m.assignRainfallBasic()
 
 			log.Println("ran out of attempts", len(r_sinks))
 			// TODO: Fill remaining sinks and re-generate downhill and flux.
@@ -148,18 +134,18 @@ func (m *Geo) assignHydrologyWithFlooding() {
 		// Erode a little.
 		// m.r_elevation = m.rErode(0.01) // NOTE: Flux would change as downhill values would change.
 
-		// Regenerate downhill and do not skip below sea level.
-		m.BaseObject.AssignDownhill(false)
-
-		// Regenerate flux.
-		m.assignFlux(true)
-
 		// Identify sinks above sea level.
 		r_sinks = m.BaseObject.GetSinks(false, false)
 
+		// Get current elevation.
+		elevs := m.Elevation.GetValues()
+
+		// Get current flux.
+		flux := m.Flux.GetValues()
+
 		// Start from lowest sink.
 		sort.Slice(r_sinks, func(i, j int) bool {
-			return m.Elevation[r_sinks[i]] < m.Elevation[r_sinks[j]]
+			return elevs[r_sinks[i]] < elevs[r_sinks[j]]
 		})
 
 		// Flood sink up to lowest neighbor + epsilon.
@@ -169,14 +155,14 @@ func (m *Geo) assignHydrologyWithFlooding() {
 			//}
 			switch floodVariant {
 			case FloodVariant1:
-				m.floodV1(r, m.Flux[r])
+				m.floodV1(r, flux[r])
 			case FloodVariant2:
-				m.floodV2(r, m.Flux[r])
+				m.floodV2(r, flux[r])
 			}
 		}
 
 		// TODO: Diffuse flux and pool.
-		m.assignRainfall(1, moistTransferDirect, moistOrderWind)
+		m.assignRainfallBasic()
 	}
 
 	// TODO: Triangle downhill.
@@ -199,7 +185,7 @@ func (m *BaseObject) floodSinks() []float64 {
 	// - Get the elevation from the fill sinks algorithm.
 	filledSinks := m.FillSinks(false)
 
-	newHeight := make([]float64, len(m.Elevation))
+	newHeight := make([]float64, m.NumRegions)
 	copy(newHeight, filledSinks)
 
 	// Compare the unaltered elevation of the lake regions
@@ -208,15 +194,15 @@ func (m *BaseObject) floodSinks() []float64 {
 	//
 	// NOTE: The surface of the lakes would not level if used
 	// unaltered due to the way the fill sinks algorithm works.
-	pool := make([]float64, len(m.Elevation))
+	pool := make([]float64, m.NumRegions)
 	for i, v := range filledSinks {
-		pool[i] = v - m.Elevation[i]
+		pool[i] = v - m.Elevation.Values[i]
 	}
 
 	// Sort the regions by their filled elevation in ascending order.
 	// This way we avoid picking a high region as the seed region.
 	// The seed region is the region that is used to represent the lake.
-	sortedRegs := make([]int, len(m.Elevation))
+	sortedRegs := make([]int, m.NumRegions)
 	for i := range sortedRegs {
 		sortedRegs[i] = i
 	}
@@ -227,10 +213,10 @@ func (m *BaseObject) floodSinks() []float64 {
 	outRegs := make([]int, 0, 8)
 
 	// drainage holds mapping of region to drainage region.
-	drainage := initRegionSlice(len(m.Elevation))
+	drainage := initRegionSlice(m.NumRegions)
 
 	// poolIDs olds mapping of region to pool ID.
-	poolIDs := initRegionSlice(len(m.Elevation))
+	poolIDs := initRegionSlice(m.NumRegions)
 
 	// poolIDToLowestReg holds mapping of pool ID to lowest region
 	// (for normalizing/leveling the water surface).
@@ -304,6 +290,9 @@ func (m *BaseObject) floodSinks() []float64 {
 	// Loop over the lake seeds and sum up the precipitation and flux
 	// of the lake regions. If the sum is zero, we fill up the elevation
 	// of the lake regions instead of the water pool.
+	currentElev := m.Elevation.GetValues()
+	currentRains := m.Rainfall.GetValues()
+	currentFlux := m.Flux.GetValues()
 	for _, seed := range poolSeeds {
 		lowestReg := poolIDToLowestReg[seed]
 		var sumPrecip, sumFlux float64
@@ -311,8 +300,8 @@ func (m *BaseObject) floodSinks() []float64 {
 			if rID != seed {
 				continue
 			}
-			sumPrecip += m.Rainfall[reg]
-			sumFlux += m.Flux[reg]
+			sumPrecip += currentRains[reg]
+			sumFlux += currentFlux[reg]
 		}
 
 		// Fill up the elevation of the lake regions instead of the water pool if:
@@ -341,7 +330,7 @@ func (m *BaseObject) floodSinks() []float64 {
 					continue
 				}
 
-				if filledSinks[lowestReg] < m.Elevation[reg] {
+				if filledSinks[lowestReg] < currentElev[reg] {
 					// Use the actual elevation of the region if it is higher
 					// than the lowest lake region.
 					pool[reg] = 0
@@ -356,8 +345,8 @@ func (m *BaseObject) floodSinks() []float64 {
 				} else {
 					// If the the actual elevation of the region is higher than the
 					// lowest lake region, we fill up the water pool to the actual
-					pool[reg] = (m.Elevation[lowestReg] + pool[lowestReg]) - m.Elevation[reg]
-					newHeight[reg] = m.Elevation[reg]
+					pool[reg] = (currentElev[lowestReg] + pool[lowestReg]) - currentElev[reg]
+					newHeight[reg] = currentElev[reg]
 
 					// Set the drainage of the lake regions to the drainage region
 					// which is the lowest region of the lake neighbors.
@@ -367,7 +356,7 @@ func (m *BaseObject) floodSinks() []float64 {
 			}
 		}
 	}
-	m.Elevation = newHeight
+	m.Elevation.SetValues(newHeight)
 	m.Drainage = drainage
 	m.Waterpool = pool
 	return pool
@@ -389,7 +378,7 @@ func (m *Geo) floodV1(r int, dVol float64) {
 		drainage     = 0.01
 	)
 
-	plane := m.Elevation[r] + m.Waterpool[r]
+	plane := m.Elevation.Values[r] + m.Waterpool[r]
 	initialplane := plane
 
 	// Floodset contains all regions that are part of a floodplain.
@@ -397,6 +386,9 @@ func (m *Geo) floodV1(r int, dVol float64) {
 
 	// Abort after 200 attempts.
 	fail := 200
+
+	// Get current elevation.
+	elevs := m.Elevation.GetValues()
 
 	// Keep track of the regions we have visitad during a flood fill attempt.
 	tried := make([]bool, m.SphereMesh.NumRegions)
@@ -411,14 +403,14 @@ func (m *Geo) floodV1(r int, dVol float64) {
 		tried[i] = true
 
 		// Wall / Boundary
-		currHeight := m.Elevation[i] + m.Waterpool[i]
+		currHeight := elevs[i] + m.Waterpool[i]
 		if plane < currHeight {
 			return
 		}
 
 		// Drainage Point
 		if initialplane > currHeight {
-			if !drainfound || currHeight < m.Waterpool[drain]+m.Elevation[drain] {
+			if !drainfound || currHeight < m.Waterpool[drain]+elevs[drain] {
 				// No Drain yet or lower drain.
 				drain = i
 			}
@@ -436,7 +428,7 @@ func (m *Geo) floodV1(r int, dVol float64) {
 		// NOTE: The regions are sorted in ascending order, so the first
 		// region in the list will be the lowest one.
 		sort.Slice(nbs, func(si, sj int) bool {
-			return m.Elevation[nbs[si]]+m.Waterpool[nbs[si]] < m.Elevation[nbs[sj]]+m.Waterpool[nbs[sj]]
+			return elevs[nbs[si]]+m.Waterpool[nbs[si]] < elevs[nbs[sj]]+m.Waterpool[nbs[sj]]
 		})
 
 		// Expand floodset by attempting to fill all neighbors.
@@ -464,12 +456,12 @@ func (m *Geo) floodV1(r int, dVol float64) {
 		// Drainage Point
 		if drainfound {
 			// Set the New Waterlevel (Slowly)
-			plane = (1.0-drainage)*initialplane + drainage*(m.Elevation[drain]+m.Waterpool[drain])
+			plane = (1.0-drainage)*initialplane + drainage*(elevs[drain]+m.Waterpool[drain])
 
 			// Compute the New Height
 			for _, s := range set {
-				if plane > m.Elevation[s] {
-					m.Waterpool[s] = plane - m.Elevation[s]
+				if plane > elevs[s] {
+					m.Waterpool[s] = plane - elevs[s]
 					m.Drainage[s] = drain
 				} else {
 					m.Waterpool[s] = 0.0
@@ -487,14 +479,14 @@ func (m *Geo) floodV1(r int, dVol float64) {
 		// gives up the total missing volume required for a full flood.
 		var totalVol float64
 		for _, s := range set {
-			totalVol += volumeFactor * (plane - (m.Elevation[s] + m.Waterpool[s]))
+			totalVol += volumeFactor * (plane - (elevs[s] + m.Waterpool[s]))
 		}
 		// log.Println("totalVol", totalVol, "dVol", dVol, "setLen", len(set))
 		// We can fill the volume of the sink.
 		if totalVol <= dVol && initialplane < plane {
 			// Raise water level to plane height.
 			for _, s := range set {
-				m.Waterpool[s] = plane - m.Elevation[s]
+				m.Waterpool[s] = plane - elevs[s]
 			}
 
 			// Adjust flux Volume
@@ -540,6 +532,9 @@ func (m *Geo) floodV2(r int, dVol float64) bool {
 
 	useDrain := true // Use drainage point instead of region draining into drainage point.
 
+	// Get current elevation.
+	elevs := m.Elevation.GetValues()
+
 	// Returns whether the set is closed at given height
 	var findset func(i int, plane float64) bool
 	findset = func(i int, plane float64) bool {
@@ -550,7 +545,7 @@ func (m *Geo) floodV2(r int, dVol float64) bool {
 		tried[i] = true
 
 		// Wall / Boundary
-		currHeight := m.Elevation[i] + m.Waterpool[i]
+		currHeight := elevs[i] + m.Waterpool[i]
 		if plane < currHeight {
 			boundary[i] = currHeight
 			return true
@@ -559,7 +554,7 @@ func (m *Geo) floodV2(r int, dVol float64) bool {
 		// Drainage Point
 		if currHeight < plane {
 			// No Drain yet
-			if !drainfound || currHeight < m.Waterpool[drain]+m.Elevation[drain] {
+			if !drainfound || currHeight < m.Waterpool[drain]+elevs[drain] {
 				drain = i
 			}
 			drainfound = true
@@ -570,7 +565,7 @@ func (m *Geo) floodV2(r int, dVol float64) bool {
 		floodset = append(floodset, i)
 		nbs := m.GetRegNeighbors(i)
 		sort.Slice(nbs, func(si, sj int) bool {
-			return m.Elevation[nbs[si]]+m.Waterpool[nbs[si]] < m.Elevation[nbs[sj]]+m.Waterpool[nbs[sj]]
+			return elevs[nbs[si]]+m.Waterpool[nbs[si]] < elevs[nbs[sj]]+m.Waterpool[nbs[sj]]
 		})
 		for _, nbReg := range nbs {
 			if !findset(nbReg, plane) {
@@ -581,7 +576,7 @@ func (m *Geo) floodV2(r int, dVol float64) bool {
 					} else {
 						newDrain = i
 					}
-					if drainedFrom == -1 || m.Elevation[newDrain]+m.Waterpool[newDrain] < m.Elevation[drainedFrom]+m.Waterpool[drainedFrom] {
+					if drainedFrom == -1 || elevs[newDrain]+m.Waterpool[newDrain] < elevs[drainedFrom]+m.Waterpool[drainedFrom] {
 						drainedFrom = newDrain
 					}
 				}
@@ -591,7 +586,7 @@ func (m *Geo) floodV2(r int, dVol float64) bool {
 		return true
 	}
 
-	plane := m.Waterpool[r] + m.Elevation[r]
+	plane := m.Waterpool[r] + elevs[r]
 	minboundFirst := r
 	minboundSecond := plane
 	for dVol > minVol && findset(r, plane) {
@@ -615,7 +610,7 @@ func (m *Geo) floodV2(r int, dVol float64) bool {
 		}
 
 		for _, s := range floodset {
-			m.Waterpool[s] = plane - m.Elevation[s]
+			m.Waterpool[s] = plane - elevs[s]
 			if s != drainedFrom {
 				m.Drainage[s] = drainedFrom // WROOOOONG?????
 			}
@@ -635,19 +630,19 @@ func (m *Geo) floodV2(r int, dVol float64) bool {
 					return
 				}
 				// Below Drain Height
-				if m.Elevation[i]+m.Waterpool[i] < m.Elevation[drain]+m.Waterpool[drain] {
+				if elevs[i]+m.Waterpool[i] < elevs[drain]+m.Waterpool[drain] {
 					return
 				}
 				// Higher than Plane (we want lower)
-				if m.Elevation[i]+m.Waterpool[i] >= plane {
+				if elevs[i]+m.Waterpool[i] >= plane {
 					return
 				}
-				plane = m.Elevation[i] + m.Waterpool[i]
+				plane = elevs[i] + m.Waterpool[i]
 			}
 
 			nbs := m.GetRegNeighbors(drain)
 			sort.Slice(nbs, func(si, sj int) bool {
-				return m.Elevation[nbs[si]]+m.Waterpool[nbs[si]] < m.Elevation[nbs[sj]]+m.Waterpool[nbs[sj]]
+				return elevs[nbs[si]]+m.Waterpool[nbs[si]] < elevs[nbs[sj]]+m.Waterpool[nbs[sj]]
 			})
 
 			// Fill Neighbors
@@ -663,8 +658,8 @@ func (m *Geo) floodV2(r int, dVol float64) bool {
 		// Water-Level to Plane-Height
 		for _, s := range floodset {
 			// volume += ((plane > h[ind])?(h[ind] + p[ind] - plane):p[ind])/volumeFactor;
-			if plane > m.Elevation[s] {
-				m.Waterpool[s] = plane - m.Elevation[s]
+			if plane > elevs[s] {
+				m.Waterpool[s] = plane - elevs[s]
 				if s != drainedFrom {
 					m.Drainage[s] = drainedFrom
 				}
@@ -676,8 +671,8 @@ func (m *Geo) floodV2(r int, dVol float64) bool {
 
 		for bfirst := range boundary {
 			// volume += ((plane > h[ind])?(h[ind] + p[ind] - plane):p[ind])/volumeFactor;
-			if plane > m.Elevation[bfirst] {
-				m.Waterpool[bfirst] = plane - m.Elevation[bfirst]
+			if plane > elevs[bfirst] {
+				m.Waterpool[bfirst] = plane - elevs[bfirst]
 				if bfirst != drainedFrom {
 					m.Drainage[bfirst] = drainedFrom
 				}

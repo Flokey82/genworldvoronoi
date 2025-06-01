@@ -74,6 +74,6 @@ func main() {
 		os.Exit(1)
 	}
 	if err := ebiten.RunGame(g); err != nil {
-		log.Println("error running game: %v", err)
+		log.Printf("error running game: %v", err)
 	}
 }

@@ -6,6 +6,7 @@ type QueueEntry struct {
 	Score       float64 // priority of the item in the queue.
 	Origin      int     // origin region / ID
 	Destination int     // destination region / ID
+	ID          int     // ID of the original item.
 }
 
 // AscPriorityQueue implements heap.Interface and holds Items.

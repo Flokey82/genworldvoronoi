@@ -194,10 +194,6 @@ func calculateSunPosition(latitude, longitude, altitude float64, dayOfYear int, 
 	elevation = theta
 	azimuth = alpha * 180.0 / math.Pi
 
-	// Log eqation of time and declination.
-	//log.Printf("Eqation of time: %f, Declination: %f", eqTime, declination*180.0/math.Pi)
-	//log.Printf("Elevation: %f, Azimuth: %f", elevation, azimuth)
-
 	return elevation, azimuth
 }
 
@@ -229,13 +225,16 @@ func (m *Geo) GetAverageInsolation(day int) []float64 {
 	// distance.
 	distRegion := math.Sqrt(4 * math.Pi / float64(m.SphereMesh.NumRegions))
 
+	// Get elevation values.
+	elevs := m.Elevation.GetValues()
+
 	chunkProcessor := func(start, end int) {
 		nbs := make([]int, 0, 7)
 		outTri := make([]int, 0, 7)
 		outRegs := make([]int, 0, 7)
 		for i := start; i < end; i++ {
 			// If we are below sea level, we set the insolation to 0.
-			if m.Elevation[i] < 0 {
+			if elevs[i] < 0 {
 				res[i] = 0
 				continue
 			}
@@ -377,7 +376,10 @@ func (m *Geo) TriangulateElevation(lat, lon float64, outTri, outRegs []int) floa
 		}
 	}
 
-	return calcHeightMercator(m.LatLon[regs[0]], m.LatLon[regs[1]], m.LatLon[regs[2]], latlon, m.Elevation[regs[0]], m.Elevation[regs[1]], m.Elevation[regs[2]])
+	// Get elevation values.
+	elevs := m.Elevation.Values
+
+	return calcHeightMercator(m.LatLon[regs[0]], m.LatLon[regs[1]], m.LatLon[regs[2]], latlon, elevs[regs[0]], elevs[regs[1]], elevs[regs[2]])
 }
 
 func wrapLat(latitude float64) float64 {
@@ -431,6 +433,9 @@ func (m *Geo) GetInsolationShadowDistance(region, day int, hour float64, outTri,
 	// Convert elevation to radians.
 	elevation = elevation * math.Pi / 180.0
 
+	// Get elevation values.
+	elev := m.Elevation.Values[region]
+
 	azCos := math.Cos(azimuth * math.Pi / 180.0)
 	azSin := math.Sin(azimuth * math.Pi / 180.0)
 	for i := 0; i < 4; i++ {
@@ -450,7 +455,7 @@ func (m *Geo) GetInsolationShadowDistance(region, day int, hour float64, outTri,
 			log.Printf("%d: Lat: %f, Lon: %f", i, lat2, lon2)
 		}
 
-		height1 := m.Elevation[region]
+		height1 := elev
 		if height1 < 0 {
 			height1 = 0
 		}

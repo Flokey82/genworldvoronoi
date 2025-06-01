@@ -42,6 +42,9 @@ func (m *Map) GetHeightMapTile(x, y, zoom int) []byte {
 	tbbWidth := lo2 - lo1
 	tbbHeight := la2 - la1
 
+	// Get elevation values.
+	elevs := m.Elevation.GetValues()
+
 	calcHeightMercator := func(p1, p2, p3, p [2]float64, z1, z2, z3 float64) float64 {
 		// Convert the points to mercator.
 		p1x, p1y := latLonToPixels(p1[0], p1[1], zoom)
@@ -121,7 +124,7 @@ func (m *Map) GetHeightMapTile(x, y, zoom int) []byte {
 		}
 		// Now we measure the distance of each point in the triangle from the point
 		// and use their respektive weights to calculate the height.
-		height := calcHeightMercator(m.LatLon[regs[0]], m.LatLon[regs[1]], m.LatLon[regs[2]], latlon, m.Elevation[regs[0]], m.Elevation[regs[1]], m.Elevation[regs[2]])
+		height := calcHeightMercator(m.LatLon[regs[0]], m.LatLon[regs[1]], m.LatLon[regs[2]], latlon, elevs[regs[0]], elevs[regs[1]], elevs[regs[2]])
 		// Reverse lat and long.
 		// height := calcHeight(m.LatLon[regs[0]][0], m.LatLon[regs[0]][1], m.Elevation[regs[0]], m.LatLon[regs[1]][0], m.LatLon[regs[1]][1], m.Elevation[regs[1]], m.LatLon[regs[2]][0], m.LatLon[regs[2]][1], m.Elevation[regs[2]], latlon[0], latlon[1])
 
@@ -170,6 +173,9 @@ func (m *Map) Get3DTile(x, y, zoom int) *Tile3D {
 		return lat >= la1 && lat <= la2 && lon >= lo1 && lon <= lo2
 	}
 
+	// Get elevation values.
+	elevs := m.Elevation.GetValues()
+
 	// Collect min max elevation of all regions in the tile.
 	var minElev, maxElev float64
 	var regionsInBounds []int
@@ -178,7 +184,7 @@ func (m *Map) Get3DTile(x, y, zoom int) *Tile3D {
 		rLon := m.LatLon[i][1]
 		if isLatLonInBounds(rLat, rLon) {
 			regionsInBounds = append(regionsInBounds, i)
-			elev := m.Elevation[i]
+			elev := elevs[i]
 			if elev < minElev {
 				minElev = elev
 			}
@@ -227,7 +233,7 @@ func (m *Map) Get3DTile(x, y, zoom int) *Tile3D {
 		// within the tile.
 		// - For other values, the vertex's height is a linear interpolation between the
 		// minimum and maximum heights.
-		heightBuffer[i] = int64((m.Elevation[r] - minElev) / (maxElev - minElev) * 32767)
+		heightBuffer[i] = int64((elevs[r] - minElev) / (maxElev - minElev) * 32767)
 	}
 
 	// Zig-zag encode the values.

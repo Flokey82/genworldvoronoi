@@ -20,11 +20,14 @@ func (m *Geo) assignLandmasses() {
 // IdentifyLandmasses returns a mapping from region to landmass ID.
 // A landmass is a connected number of regions above sealevel.
 func (m *Geo) IdentifyLandmasses() []int {
+	// Get elevation values.
+	elevs := m.Elevation.GetValues()
+
 	// NOTE: this is still in need of refinement.
 	landMasses := initRegionSlice(m.SphereMesh.NumRegions)
 	for r := range landMasses {
 		// Skip everything that is ocean.
-		if m.Elevation[r] <= 0 {
+		if elevs[r] <= 0 {
 			landMasses[r] = -2
 		}
 	}
@@ -74,6 +77,5 @@ func (m *Geo) IdentifyLandmasses() []int {
 		landID++
 	}
 	log.Println("number of landmasses", landID)
-	// log.Println(landSizes)
 	return landMasses
 }

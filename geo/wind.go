@@ -85,7 +85,8 @@ func (m *Geo) assignWindVectors() {
 	regWindVecLocal := make([][2]float64, m.NumRegions)
 
 	// NOTE: This is currently overridden by the altitude changes below.
-	_, maxElev := minMax(m.Elevation)
+	maxElev := m.Elevation.Max
+	elevs := m.Elevation.GetValues()
 	switch calcMode {
 	case localWindModeTemperature:
 		// Add local wind vectors based on local temperature gradients.
@@ -100,7 +101,7 @@ func (m *Geo) assignWindVectors() {
 		// Determine all sea regions.
 		var seaRegs []int
 		for r := 0; r < m.SphereMesh.NumRegions; r++ {
-			if m.Elevation[r] <= 0 {
+			if elevs[r] <= 0 {
 				seaRegs = append(seaRegs, r)
 			}
 		}
@@ -112,8 +113,8 @@ func (m *Geo) assignWindVectors() {
 				regVec := regWindVec[r]
 				lat := m.LatLon[r][0]
 				lon := m.LatLon[r][1]
-				tempReg := GetMeanAnnualTemp(lat) - GetTempFalloffFromAltitude(MaxAltitudeFactor*m.Elevation[r]/maxElev)
-				if m.Elevation[r] < 0 {
+				tempReg := GetMeanAnnualTemp(lat) - GetTempFalloffFromAltitude(MaxAltitudeFactor*elevs[r]/maxElev)
+				if elevs[r] < 0 {
 					// TODO: Use actual distance from ocean to calculate temperature falloff.
 					tempReg -= 1 / (regDistanceSea[r] + 1)
 				}
@@ -125,8 +126,8 @@ func (m *Geo) assignWindVectors() {
 				for _, nb := range m.SphereMesh.R_circulate_r(outRegs, r) {
 					nbLat := m.LatLon[nb][0]
 					nbLon := m.LatLon[nb][1]
-					tempNb := GetMeanAnnualTemp(nbLat) - GetTempFalloffFromAltitude(MaxAltitudeFactor*m.Elevation[nb]/maxElev)
-					if m.Elevation[nb] < 0 {
+					tempNb := GetMeanAnnualTemp(nbLat) - GetTempFalloffFromAltitude(MaxAltitudeFactor*elevs[nb]/maxElev)
+					if elevs[nb] < 0 {
 						// TODO: Use actual distance from ocean to calculate temperature falloff.
 						tempNb -= 1 / (regDistanceSea[nb] + 1)
 					}
@@ -149,7 +150,7 @@ func (m *Geo) assignWindVectors() {
 				// Get polar coordinates.
 				regLat := m.LatLon[r][0]
 				regLon := m.LatLon[r][1]
-				h := m.Elevation[r]
+				h := elevs[r]
 				if h < 0 {
 					h = 0
 				}
@@ -189,7 +190,7 @@ func (m *Geo) assignWindVectors() {
 					// current neighbor.
 					// See: https://www.scratchapixel.com/lessons/3d-basic-rendering/introduction-to-shading/shading-normals
 					dotV := vectors.Dot3(va, vb)
-					hnb := m.Elevation[nbReg]
+					hnb := elevs[nbReg]
 					if hnb < 0 {
 						hnb = 0
 					}
@@ -230,7 +231,7 @@ func (m *Geo) assignWindVectors() {
 				// Elevation change is negative if the current region is higher than the region the wind blows past.
 				// This will result in wind slowing down if it blows towards a mountain and to speed up if it blows
 				// towards a valley.
-				elevationChange := math.Max(m.Elevation[blowsPastReg], WATER_LEVEL) - math.Max(m.Elevation[r], WATER_LEVEL)
+				elevationChange := math.Max(elevs[blowsPastReg], WATER_LEVEL) - math.Max(elevs[r], WATER_LEVEL)
 				windSpeed := (1 - (2*elevationChange)*ELEVATION_CHANGE_FACTOR)
 				windSpeed = math.Max(0.1, windSpeed)
 				// map.r_wind[r] = 5*(1-(terrain.depthMap[i][j]-terrain.depthMap[k][l])/1000);
@@ -244,7 +245,7 @@ func (m *Geo) assignWindVectors() {
 				for _, nr := range m.SphereMesh.R_circulate_r(outRegs, r) {
 					// Magnitude will be positive if the neighbor is warmer than the current region, which will
 					// result in a wind vector pointing towards the neighbor.
-					magnitude := (m.GetRegTemperature(nr, maxElev) - m.GetRegTemperature(r, maxElev))
+					magnitude := (m.GetRegTemperature(nr) - m.GetRegTemperature(r))
 					vec := various.SetMagnitude2(m.DirVecFromToRegs(r, nr), magnitude)
 					acc = various.Add2(vec, acc)
 				}

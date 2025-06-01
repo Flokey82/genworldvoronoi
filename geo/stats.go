@@ -7,16 +7,10 @@ import (
 	"github.com/Flokey82/go_gens/gameconstants"
 )
 
-type ResStats struct {
-	ResMetal  [ResMaxMetals]int
-	ResGems   [ResMaxGems]int
-	ResStones [ResMaxStones]int
-	ResWood   [ResMaxWoods]int
-}
-
+// Stats holds aggregated statistics about a number of regions.
 type Stats struct {
 	NumRegions int
-	ResStats
+	Resouces   map[*Resource]int
 	TotalArea  float64
 	Biomes     map[int]int
 	Desert     int
@@ -32,51 +26,26 @@ type Stats struct {
 // NewStats returns a new Stats object.
 func NewStats() *Stats {
 	return &Stats{
-		Biomes: make(map[int]int),
+		Biomes:   make(map[int]int),
+		Resouces: make(map[*Resource]int),
 	}
 }
 
 func (m *Geo) GetStats(rr []int) *Stats {
-	// TODO:
-	// Calculate defensibility
-	// - Stone availability for better walls.
-	// - Wood availability for defensive structures.
-	// - Steepness of terrain
-	// - Rivers are hard to cross
-	// - Biomes navigatibility (swamp, ice, desert, forest)
-	// Calculate offensive potential
-	// - Metals can be used for weapons
-	// - (Wealth can be used for purchasing weapons or mercenaries)
-	// Calculate wealth
-	// - Gems and metals can be sold or traded
-	// - Metals can be used for weapons.
 	st := NewStats()
 	st.NumRegions = len(rr)
 
 	outRegs := make([]int, 0, 6)
 	biomeFunc := m.GetRegWhittakerModBiomeFunc()
+	for _, res := range m.Resources {
+		for _, r := range rr {
+			if m.Location[res][r] {
+				st.Resouces[res]++
+			}
+		}
+	}
 	for _, r := range rr {
-		st.TotalArea += m.GetRegArea(r)
-		for i := 0; i < ResMaxMetals; i++ {
-			if m.Metals[r]&(1<<i) != 0 {
-				st.ResMetal[i]++
-			}
-		}
-		for i := 0; i < ResMaxGems; i++ {
-			if m.Gems[r]&(1<<i) != 0 {
-				st.ResGems[i]++
-			}
-		}
-		for i := 0; i < ResMaxStones; i++ {
-			if m.Stones[r]&(1<<i) != 0 {
-				st.ResStones[i]++
-			}
-		}
-		for i := 0; i < ResMaxWoods; i++ {
-			if m.Wood[r]&(1<<i) != 0 {
-				st.ResWood[i]++
-			}
-		}
+		st.TotalArea += m.GetRegArea(r, outRegs)
 		b := biomeFunc(r)
 		st.Biomes[b]++
 
@@ -114,17 +83,8 @@ func (m *Geo) GetStats(rr []int) *Stats {
 
 func (s *Stats) Log() {
 	log.Printf("Total Area: %.2f km2", s.TotalArea*gameconstants.EarthSurface/gameconstants.SphereSurface)
-	for i := 0; i < ResMaxMetals; i++ {
-		log.Printf("Metal %s: %d (%.3f%%)", MetalToString(i), s.ResMetal[i], 100*float64(s.ResMetal[i])/float64(s.NumRegions))
-	}
-	for i := 0; i < ResMaxGems; i++ {
-		log.Printf("Gem %s: %d (%.3f%%)", GemToString(i), s.ResGems[i], 100*float64(s.ResGems[i])/float64(s.NumRegions))
-	}
-	for i := 0; i < ResMaxStones; i++ {
-		log.Printf("Stone %s: %d (%.3f%%)", StoneToString(i), s.ResStones[i], 100*float64(s.ResStones[i])/float64(s.NumRegions))
-	}
-	for i := 0; i < ResMaxWoods; i++ {
-		log.Printf("Wood %s: %d (%.3f%%)", WoodToString(i), s.ResWood[i], 100*float64(s.ResWood[i])/float64(s.NumRegions))
+	for res, n := range s.Resouces {
+		log.Printf("Resource: %s: %d (%.3f%%)", res.Name, n, 100*float64(n)/float64(s.NumRegions))
 	}
 	log.Printf("Desert: %.2f%%", 100*float64(s.Desert)/float64(s.NumRegions))
 	log.Printf("RainForest: %.2f%%", 100*float64(s.RainForest)/float64(s.NumRegions))

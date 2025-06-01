@@ -4,6 +4,8 @@ import (
 	"math"
 	"math/rand"
 	"sort"
+
+	"github.com/Flokey82/go_gens/utils"
 )
 
 // Disaster represents a Disaster that can occur in a region.
@@ -128,17 +130,18 @@ func (m *Geo) GetEarthquakeChance() []float64 {
 func (m *Geo) GetFloodChance() []float64 {
 	// Now get the chance of flood for each region.
 	floodChance := make([]float64, m.SphereMesh.NumRegions)
-	_, maxFlux := minMax(m.Flux)
+	flux := m.Flux.GetValues()
+	maxFlux := m.Flux.Max
 	steepness := m.GetSteepness()
 	for r := 0; r < m.SphereMesh.NumRegions; r++ {
 		// We use the flux of water and the steepness in the region
 		// to determine the chance of a flood.
 		// NOTE: This should also apply to lakes.
-		floodChance[r] = (1 - steepness[r]) * m.Flux[r] / maxFlux
+		floodChance[r] = (1 - steepness[r]) * flux[r] / maxFlux
 	}
 
 	// Normalize the flood chance.
-	_, maxFloodChance := minMax(floodChance)
+	maxFloodChance := utils.MaxArray(floodChance)
 	for r := 0; r < m.SphereMesh.NumRegions; r++ {
 		floodChance[r] /= maxFloodChance
 	}
@@ -155,7 +158,8 @@ func (m *Geo) GetRockSlideAvalancheChance() []float64 {
 
 func (m *Geo) getDownhillDisaster(origins map[int]bool, steepnessLimit float64) []float64 {
 	steepness := m.GetSteepness()
-	downhill := m.GetDownhill(true)
+	downhill := m.Downhill.GetValues()
+	elevs := m.Elevation.GetValues()
 
 	// Start at the origin regions and go downhill until the terrain is too
 	// flat or we reach the ocean.
@@ -168,7 +172,7 @@ func (m *Geo) getDownhillDisaster(origins map[int]bool, steepnessLimit float64) 
 		// Go downhill until the steepness is too low or we reach the ocean.
 		rdh := r
 		danger := 1.0
-		for rdh != -1 && steepness[rdh] > steepnessLimit && m.Elevation[rdh] > 0 {
+		for rdh != -1 && steepness[rdh] > steepnessLimit && elevs[rdh] > 0 {
 			// Add the danger of the region to the chance of being affected by a
 			// downhill disaster.
 			chance[rdh] += danger
@@ -185,7 +189,7 @@ func (m *Geo) getDisasterFunc() func(r int) []Disaster {
 
 	// distRegion := math.Sqrt(4 * math.Pi / float64(m.mesh.NumRegions))
 	// biomeFunc := m.getRegWhittakerModBiomeFunc()
-	_, maxElev := minMax(m.Elevation)
+
 	var volcanoes, mountains, faultlines []int
 	isBigRiver := make(map[int]bool)
 	isFireDanger := make(map[int]bool)
@@ -204,8 +208,8 @@ func (m *Geo) getDisasterFunc() func(r int) []Disaster {
 		}
 		// Determine if there is danger of fire by checking if the region is
 		// hot and relatively dry while still having vegetation.
-		temp := m.GetRegTemperature(r, maxElev)
-		if temp > 25 && m.Moisture[r] < 0.2 {
+		temp := m.GetRegTemperature(r)
+		if temp > 25 && m.Moisture.Values[r] < 0.2 {
 			isFireDanger[r] = true
 		}
 	}

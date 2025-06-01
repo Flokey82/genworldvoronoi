@@ -40,9 +40,9 @@ func GetMeanAnnualTemp(lat float64) float64 {
 const MaxAltitudeFactor = gameconstants.EarthMaxElevation // How tall is the tallest mountain with an elevation of 1.0?
 
 // GetRegTemperature returns the average yearly temperature of the given region at the surface.
-func (m *Geo) GetRegTemperature(r int, maxElev float64) float64 {
+func (m *Geo) GetRegTemperature(r int) float64 {
 	// TODO: Fix maxElev caching!!!
-	return GetMeanAnnualTemp(m.LatLon[r][0]) - GetTempFalloffFromAltitude(MaxAltitudeFactor*m.Elevation[r]/maxElev)
+	return GetMeanAnnualTemp(m.LatLon[r][0]) - GetTempFalloffFromAltitude(MaxAltitudeFactor*m.Elevation.Values[r]/m.Elevation.Max)
 }
 
 // GetTriTemperature returns the average yearly temperature of the given triangle at the surface.
@@ -52,9 +52,8 @@ func (m *Geo) GetTriTemperature(t int, maxElev float64) float64 {
 }
 
 func (m *Geo) initRegionAirTemperature() {
-	_, maxElev := minMax(m.Elevation)
 	for r := 0; r < m.SphereMesh.NumRegions; r++ {
-		m.AirTemperature[r] = m.GetRegTemperature(r, maxElev)
+		m.AirTemperature[r] = m.GetRegTemperature(r)
 	}
 }
 
@@ -140,27 +139,29 @@ func (m *Geo) assignRegionAirTemperature() {
 }
 
 func (m *Geo) initRegionWaterTemperature() {
-	_, maxElev := minMax(m.Elevation)
+	elevs := m.Elevation.GetValues()
 	for r := 0; r < m.SphereMesh.NumRegions; r++ {
-		if m.Elevation[r] <= 0 {
-			m.OceanTemperature[r] = m.GetRegTemperature(r, maxElev)
+		if elevs[r] <= 0 {
+			m.OceanTemperature[r] = m.GetRegTemperature(r)
 		}
 	}
 }
 
 func (m *Geo) transportRegionWaterTemperature() {
+	elevs := m.Elevation.GetValues()
+
 	// TODO: Deduplicate this code with assignRegionAirTemperature.
 	newTemperature := make([]float64, m.SphereMesh.NumRegions)
 	baseTemperature := make([]float64, m.SphereMesh.NumRegions)
 	for r := 0; r < m.SphereMesh.NumRegions; r++ {
-		if m.Elevation[r] > 0 {
+		if elevs[r] > 0 {
 			newTemperature[r] = 0.5
 		}
 	}
 
 	outregs := make([]int, 0, 8)
 	for r := 0; r < m.SphereMesh.NumRegions; r++ {
-		if m.Elevation[r] > 0 {
+		if elevs[r] > 0 {
 			continue
 		}
 
@@ -179,7 +180,7 @@ func (m *Geo) transportRegionWaterTemperature() {
 		neighborCount := 1
 		for i := 0; i < len(neighbors); i++ {
 			nr := neighbors[i]
-			if m.Elevation[nr] <= 0 {
+			if elevs[nr] <= 0 {
 				neighborAverage += newTemperature[nr]
 				neighborCount++
 			}
@@ -207,14 +208,14 @@ func (m *Geo) transportRegionWaterTemperature() {
 			movedCount[r]++
 
 			pr := m.getPreviousNeighbor(outregs, r, m.RegionToOceanVec[r])
-			if m.Elevation[pr] <= 0 {
+			if elevs[pr] <= 0 {
 				movedTemp[r] += m.OceanTemperature[pr]
 				movedCount[r]++
 			}
 
 			// add in pushed temp
 			nr := m.GetClosestNeighbor(outregs, r, m.RegionToOceanVec[r])
-			if nr == r || m.Elevation[nr] > 0 {
+			if nr == r || elevs[nr] > 0 {
 				continue
 			}
 			// const heldHeat = newTemperature[r] - baseTemperature[r]

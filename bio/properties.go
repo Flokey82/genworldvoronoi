@@ -14,6 +14,18 @@ type SpeciesProperties struct {
 	Locomotion Locomotion      // How the species moves. (TODO: Primary locomotion)
 }
 
+type SpeciesGroup struct {
+	hash int64
+	SpeciesFamily
+}
+
+func (s *SpeciesProperties) Group() SpeciesGroup {
+	return SpeciesGroup{
+		hash:          s.CompetitorHash(),
+		SpeciesFamily: s.Family,
+	}
+}
+
 // CompetitorHash returns a hash that can be used to compare two species and
 // determine if they are competitors.
 // This will be helpful when spreading the species and avoiding competing species.

@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/Flokey82/genworldvoronoi/various"
+	"github.com/Flokey82/go_gens/utils"
 )
 
 // Erode erodes all region by the given amount and returns the resulting heightmap.
@@ -17,17 +18,21 @@ func (m *Geo) Erode(amount float64) []float64 {
 	// Select the erosion method.
 	useAlternative := true
 
+	// Get current elevation values.
+	elev := m.Elevation.GetValues()
+
 	// Get downhill height diffs so we can ensure that we do not erode
 	// any more than that, which would produce sinks (which we try to avoid).
 	dhDiff := make([]float64, m.SphereMesh.NumRegions)
-	for r, dhr := range m.GetDownhill(false) {
+	dh := m.DownhillNoPool.GetValues()
+	for r, dhr := range dh {
 		// Skip all sinks which have a downhill value of -1
 		if dhr < 0 {
 			// NOTE: Sinks have no height diff, but in theory we could give it a
 			// negative height diff to fill the sinks during the erosion steps?
 			continue
 		}
-		dhDiff[r] = m.Elevation[r] - m.Elevation[dhr]
+		dhDiff[r] = elev[r] - elev[dhr]
 	}
 
 	// This will hold our new heightmap.
@@ -46,12 +51,12 @@ func (m *Geo) Erode(amount float64) []float64 {
 	}
 
 	// Get the maximum erosion rate, so we can normalize the erosion values.
-	_, maxr := minMax(er)
+	maxr := utils.MaxArray(er)
 
 	// Calculate the new heightmap by applying the erosion rates we have calculated.
 	for r, e := range er {
 		// We can at most erode amount*dhDiff[r].
-		newh[r] = m.Elevation[r] - amount*dhDiff[r]*(e/maxr)
+		newh[r] = elev[r] - amount*dhDiff[r]*(e/maxr)
 	}
 	return newh
 }
@@ -69,10 +74,8 @@ func (m *Geo) GetErosionRate() []float64 {
 	erodeOnlyAboveSealevel := true // Should we skip erosion below sea level?
 
 	// Get the flux values for all regions.
-	flux := m.getFlux(erodeOnlyAboveSealevel)
-
-	// Get max flux so we can normalize the flux values to 0.0 ... 1.0.
-	_, maxFlux := minMax(flux)
+	flux := m.Flux.GetValues()
+	maxFlux := m.Flux.Max
 	if maxFlux == 0 {
 		maxFlux = 1
 	}
@@ -83,8 +86,8 @@ func (m *Geo) GetErosionRate() []float64 {
 	// This will hold the erosion values for each region.
 	newh := make([]float64, m.SphereMesh.NumRegions)
 
-	// Get the max height value so we can normalize the elevation values.
-	_, maxH := minMax(m.Elevation) // TODO: Cache somewhere?
+	// Get current elevation values.
+	elev := m.Elevation.GetValues()
 
 	// erodeRegion sets the erosion rate for the given region and
 	// traverses the neighbor graph up to the remaining depth (rem).
@@ -92,7 +95,7 @@ func (m *Geo) GetErosionRate() []float64 {
 
 	erodeRegion = func(out_r []int, r, rem int, toErode float64) {
 		// If we have erosion below sea level, skip this region.
-		if erodeOnlyAboveSealevel && m.Elevation[r] < 0 {
+		if erodeOnlyAboveSealevel && elev[r] < 0 {
 			return
 		}
 
@@ -146,7 +149,7 @@ func (m *Geo) GetErosionRate() []float64 {
 		// If we have avg. temp. below 0, we need to imitate glacial erosion, which
 		// is carving "wider" valleys than hydraulic erosion.
 		// TODO: This would erode a wider area, but slower than hydraulic erosion.
-		if m.GetRegTemperature(r, maxH) < 0 {
+		if m.GetRegTemperature(r) < 0 {
 			erodeNbs = erodeNeighborsGlacier
 		}
 
@@ -184,12 +187,17 @@ func (m *Geo) GetErosionRate2() []float64 {
 	erodeOnlyAboveSealevel := true
 
 	// Get the water flux for each region.
-	flux := m.getFlux(erodeOnlyAboveSealevel)
+	flux := m.Flux.GetValues()
+	maxFlux := m.Flux.Max
 
-	// Get the maximum flux value so we can normalize the flux values
-	_, maxFlux := minMax(flux)
+	// Get current elevation values.
+	elev := m.Elevation.GetValues()
 
 	for r, fl := range flux {
+		// Skip all regions below sea level if we have set the flag.
+		if erodeOnlyAboveSealevel && elev[r] < 0 {
+			continue
+		}
 		// The steeper the incline, the more V-shaped the riverbed becomes,
 		// while a river on a low incline will carve a more U shaped riverbed.
 		//
@@ -238,7 +246,8 @@ func (m *Geo) GetErosionRate2() []float64 {
 		// If we have a downhill neighbor, use its lat lon coordinates
 		// for the arc segment distance.
 		dLatLon := rLatLon
-		if rdh := m.Downhill[r]; rdh >= 0 {
+		dh := m.Downhill.GetValues()
+		if rdh := dh[r]; rdh >= 0 {
 			dLatLon = m.LatLon[rdh]
 		}
 

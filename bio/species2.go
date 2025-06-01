@@ -1,140 +1,25 @@
 package bio
 
 import (
-	"container/heap"
 	"log"
 	"math"
 	"math/rand"
 
 	"github.com/Flokey82/genbiome"
-	"github.com/Flokey82/genworldvoronoi/geo"
-	"github.com/Flokey82/genworldvoronoi/various"
 )
-
-func (b *Bio) expandSpecies2() map[SpeciesFamily][]int {
-	// For now, let's just do this the dumb way.
-	// TODO: Species with different competition hashes should be able to coexist in
-	// the same region?
-	// We might need to create a full index of all regions for each unique
-	// competition hash.... or, which is more wasteful, per species.
-	var seedPoints []int
-	originToSpecFit := make(map[int]func(int) float64)
-	originToSecies := make(map[int]*Species)
-	for _, s := range b.Species {
-		seedPoints = append(seedPoints, s.Origin)
-		originToSpecFit[s.Origin] = b.getToleranceScoreFunc(s.SpeciesTolerances)
-		originToSecies[s.Origin] = s
-	}
-	var queue geo.AscPriorityQueue
-	heap.Init(&queue)
-	outReg := make([]int, 0, 8)
-
-	// Get maxFlux and maxElev for normalizing.
-	_, maxFlux := minMax(b.Flux)
-	_, maxElev := minMax(b.Elevation)
-
-	// TODO: Move this to a generic function.
-	terrainWeight := func(o, u, v int) float64 {
-		// Don't cross from water to land and vice versa.
-		if (b.Elevation[u] > 0) != (b.Elevation[v] > 0) {
-			return -1
-		}
-
-		// Calculate horizontal distance.
-		ulat := b.LatLon[u][0]
-		ulon := b.LatLon[u][1]
-		vlat := b.LatLon[v][0]
-		vlon := b.LatLon[v][1]
-		horiz := various.Haversine(ulat, ulon, vlat, vlon) / (2 * math.Pi)
-
-		// Calculate vertical distance.
-		vert := (b.Elevation[v] - b.Elevation[u]) / maxElev
-		if vert > 0 {
-			vert /= 10
-		}
-		diff := 1 + 0.25*math.Pow(vert/horiz, 2)
-
-		// NOTE: Flux should only apply to animals since plants and fungi
-		// don't need to worry about drowning.
-		diff += 100 * math.Sqrt(b.Flux[u]/maxFlux)
-		if b.Elevation[u] <= 0 {
-			diff = 100
-		}
-		return horiz * diff
-	}
-
-	weight := func(o, u, v int) float64 {
-		// Call species specific fitness function.
-		sFit := originToSpecFit[o](v)
-		if sFit < 0 {
-			return -1
-		}
-		// Call terrain specific fitness function.
-		tFit := terrainWeight(o, u, v)
-		if tFit < 0 {
-			return -1
-		}
-		return tFit * sFit
-	}
-
-	// 'terr' will hold a mapping of region to species.
-	// The territory ID is the region number of the species origin.
-	terr := make(map[SpeciesFamily][]int)
-	for i := 0; i < len(seedPoints); i++ {
-		s := originToSecies[seedPoints[i]]
-		if _, ok := terr[s.Family]; !ok {
-			terr[s.Family] = initRegionSlice(b.SphereMesh.NumRegions)
-		}
-		terr[s.Family][seedPoints[i]] = seedPoints[i]
-		for _, v := range b.SphereMesh.R_circulate_r(outReg, seedPoints[i]) {
-			newdist := weight(seedPoints[i], seedPoints[i], v)
-			if newdist < 0 {
-				continue
-			}
-			heap.Push(&queue, &geo.QueueEntry{
-				Score:       newdist,
-				Origin:      seedPoints[i],
-				Destination: v,
-			})
-		}
-	}
-
-	// Extend territories until the queue is empty.
-	for queue.Len() > 0 {
-		u := heap.Pop(&queue).(*geo.QueueEntry)
-		s := originToSecies[u.Origin]
-		if terr[s.Family][u.Destination] >= 0 {
-			continue
-		}
-		terr[s.Family][u.Destination] = u.Origin
-		for _, v := range b.SphereMesh.R_circulate_r(outReg, u.Destination) {
-			if terr[s.Family][v] >= 0 {
-				continue
-			}
-			newdist := weight(u.Origin, u.Destination, v)
-			if newdist < 0 {
-				continue
-			}
-			heap.Push(&queue, &geo.QueueEntry{
-				Score:       u.Score + newdist,
-				Origin:      u.Origin,
-				Destination: v,
-			})
-		}
-	}
-	return terr
-}
 
 func (b *Bio) placeAllSpecies(kingdom *BioLevel) {
 	// Place all species.
+	var numSpeciesPlaced int
 	for _, species := range kingdom.getAllByLevel(BioLevelSpecies) {
 		if species == nil {
 			log.Println("no species found for " + kingdom.Name)
 			continue
 		}
 		b.placeSpeciesFromLevel(species)
+		numSpeciesPlaced++
 	}
-	log.Println("Placed", len(b.Species), "species")
+	log.Println("Placed", numSpeciesPlaced, "species")
 }
 
 func (b *Bio) placeSpeciesFromLevel(level *BioLevel) {
@@ -151,12 +36,15 @@ func (b *Bio) placeSpeciesFromLevel(level *BioLevel) {
 		return score / float64(count+1)
 	}
 
-	// TODO: Use directly competing species as seeds to maximize
+	// Use directly competing species as seeds to maximize
 	// distance between species that compete for the same resources.
+	compHash := level.SpeciesProperties.CompetitorHash()
 	distSeedFunc := func() []int {
 		var res []int
-		for _, s := range b.Species {
-			res = append(res, s.Origin)
+		for _, s := range b.Species.Objects {
+			if s.SpeciesProperties.CompetitorHash() == compHash {
+				res = append(res, s.Origin)
+			}
 		}
 		return res
 	}
@@ -177,7 +65,7 @@ func (b *Bio) placeSpeciesFromLevel(level *BioLevel) {
 	log.Println("Placing species", level.Name, "at", newspecies, "with score", lastMax)
 	s := level.ToSpecies()
 	s.Origin = newspecies
-	b.Species = append(b.Species, s)
+	b.Species.PlaceObjectAt(s, newspecies)
 }
 
 const (
@@ -284,6 +172,7 @@ func (b *BioLevel) getAllByLevel(level int) []*BioLevel {
 
 func (b *BioLevel) ToSpecies() *Species {
 	sp := &Species{
+		ID:                getNextSpeciesID(),
 		Name:              b.Name,
 		SpeciesProperties: b.SpeciesProperties,
 		SpeciesTolerances: b.SpeciesTolerances,
@@ -293,6 +182,7 @@ func (b *BioLevel) ToSpecies() *Species {
 }
 
 var (
+	// Set up the kingdoms.
 	KingdomFauna = NewKingdom("Fauna")
 	KingdomFlora = NewKingdom("Flora",
 		BioLevelDigestion(DigestivePhotosynthetic))
@@ -300,8 +190,9 @@ var (
 		BioLevelDigestion(DigestiveDecomposer),
 		BioLevelHumidityRange(0.2, 1))
 
+	/* === Flora === */
 	// Trees.
-	FamilyTree = KingdomFauna.NewChild("Tree",
+	FamilyTree = KingdomFlora.NewChild("Tree",
 		BioLevelEcosphere(EcosphereTypeLand),
 		BioLevelSteepRange(0, 0.5),
 		BioLevelTempRange(0, 35),
@@ -363,9 +254,11 @@ var (
 		BioLevelTempRange(15, 26))
 
 	// Generic grasses.
-	GenusGrass       = FamilyGrass.NewChild("Grass")
+	GenusGrass = FamilyGrass.NewChild("Grass",
+		BioLevelTempRange(10, 24))
 	SpeciesGrass     = GenusGrass.NewChild("Grass")
-	SpeciesCrabGrass = GenusGrass.NewChild("Crab Grass")
+	SpeciesCrabGrass = GenusGrass.NewChild("Crab Grass",
+		BioLevelTempRange(15, 21))
 
 	// Herbs.
 	FamilyHerb = KingdomFlora.NewChild("Herb",
@@ -378,23 +271,34 @@ var (
 	// Leafy greens.
 	GenusLeafyGreen = FamilyFlower.NewChild("Leafy Green",
 		BioLevelAppendHereditary(BioPropertyEdibleLeafs))
-	SpeciesCabbage = GenusLeafyGreen.NewChild("Cabbage")
-	SpeciesLettuce = GenusLeafyGreen.NewChild("Lettuce")
-	SpeciesSpinach = GenusLeafyGreen.NewChild("Spinach")
+	SpeciesCabbage = GenusLeafyGreen.NewChild("Cabbage",
+		BioLevelTempRange(10, 25),
+		BioLevelRainRange(25, 35))
+	SpeciesLettuce = GenusLeafyGreen.NewChild("Lettuce",
+		BioLevelTempRange(15, 25),
+		BioLevelRainRange(25, 35))
+	SpeciesSpinach = GenusLeafyGreen.NewChild("Spinach",
+		BioLevelTempRange(15, 20),
+		BioLevelRainRange(25, 35))
 
 	// Generic flowers.
-	GenusFlower  = FamilyFlower.NewChild("Flower")
-	SpeciesRose  = GenusFlower.NewChild("Rose")
-	SpeciesTulip = GenusFlower.NewChild("Tulip")
-	SpeciesDaisy = GenusFlower.NewChild("Daisy")
+	GenusFlower = FamilyFlower.NewChild("Flower")
+	SpeciesRose = GenusFlower.NewChild("Rose",
+		BioLevelTempRange(18, 25))
+	SpeciesTulip = GenusFlower.NewChild("Tulip",
+		BioLevelTempRange(20, 35))
+	SpeciesDaisy = GenusFlower.NewChild("Daisy",
+		BioLevelTempRange(20, 35))
 
 	// Ferns.
 	FamilyFern = KingdomFlora.NewChild("Fern",
-		BioLevelEcosphere(EcosphereTypeLand|EcosphereTypeRiver))
+		BioLevelEcosphere(EcosphereTypeLand|EcosphereTypeRiver),
+		BioLevelHumidityRange(0.4, 0.9))
 
 	// Mosses.
 	FamilyMoss = KingdomFlora.NewChild("Moss",
-		BioLevelEcosphere(EcosphereTypeLand|EcosphereTypeRiver))
+		BioLevelEcosphere(EcosphereTypeLand|EcosphereTypeRiver),
+		BioLevelHumidityRange(0.4, 0.9))
 
 	// Vines.
 	FamilyVine = KingdomFlora.NewChild("Vine",
@@ -422,6 +326,7 @@ var (
 		BioLevelTempRange(10, 35),
 		BioLevelEcosphere(EcosphereTypeLand))
 
+	/* === Fauna === */
 	// Insects.
 	FamilyInsect = KingdomFauna.NewChild("Insect",
 		BioLevelEcosphere(EcosphereTypeLand|EcosphereTypeRiver),
@@ -528,24 +433,43 @@ var (
 	GenusSaltwaterFish = FamilyFish.NewChild("Saltwater Fish",
 		BioLevelEcosphere(EcosphereTypeOcean),
 		BioLevelDigestion(DigestiveSystemCarnivore))
-	SpeciesShark   = GenusSaltwaterFish.NewChild("Shark")
-	SpeciesTuna    = GenusSaltwaterFish.NewChild("Tuna")
-	SpeciesCod     = GenusSaltwaterFish.NewChild("Cod")
-	SpeciesHaddock = GenusSaltwaterFish.NewChild("Haddock")
-	SpeciesHerring = GenusSaltwaterFish.NewChild("Herring")
+	SpeciesShark = GenusSaltwaterFish.NewChild("Shark",
+		BioLevelSize(SpeciesSizeLarge))
+	SpeciesTuna = GenusSaltwaterFish.NewChild("Tuna",
+		BioLevelSize(SpeciesSizeLarge))
+	SpeciesCod = GenusSaltwaterFish.NewChild("Cod",
+		BioLevelSize(SpeciesSizeMedium))
+	SpeciesHaddock = GenusSaltwaterFish.NewChild("Haddock",
+		BioLevelSize(SpeciesSizeMedium))
+	SpeciesHerring = GenusSaltwaterFish.NewChild("Herring",
+		BioLevelSize(SpeciesSizeSmall))
+	SpeciesMackerel = GenusSaltwaterFish.NewChild("Mackerel",
+		BioLevelSize(SpeciesSizeSmall))
+	SpeciesSardine = GenusSaltwaterFish.NewChild("Sardine",
+		BioLevelSize(SpeciesSizeTiny))
+	SpeciesAnchovy = GenusSaltwaterFish.NewChild("Anchovy",
+		BioLevelSize(SpeciesSizeTiny))
 
 	GenusFreshwaterFish = FamilyFish.NewChild("Freshwater Fish",
 		BioLevelEcosphere(EcosphereTypeRiver|EcosphereTypeLake))
-	SpeciesTrout  = GenusFreshwaterFish.NewChild("Trout")
-	SpeciesSalmon = GenusFreshwaterFish.NewChild("Salmon")
-	SpeciesBass   = GenusFreshwaterFish.NewChild("Bass")
+	SpeciesTrout = GenusFreshwaterFish.NewChild("Trout",
+		BioLevelSize(SpeciesSizeMedium))
+	SpeciesSalmon = GenusFreshwaterFish.NewChild("Salmon",
+		BioLevelSize(SpeciesSizeMedium))
+	SpeciesBass = GenusFreshwaterFish.NewChild("Bass",
+		BioLevelSize(SpeciesSizeMedium))
+	SpeciesPike = GenusFreshwaterFish.NewChild("Pike",
+		BioLevelSize(SpeciesSizeMedium))
+	SpeciesPerch = GenusFreshwaterFish.NewChild("Perch",
+		BioLevelSize(SpeciesSizeSmall))
 
 	// Crustaceans.
 	FamilyCrustacean = KingdomFauna.NewChild("Crustacean",
 		BioLevelLocomotion(LocomotionWalk|LocomotionSwim))
 
 	// Crabs.
-	GenusCrab        = FamilyCrustacean.NewChild("Crab")
+	GenusCrab = FamilyCrustacean.NewChild("Crab",
+		BioLevelSize(SpeciesSizeSmall))
 	SpeciesRiverCrab = GenusCrab.NewChild("River Crab",
 		BioLevelEcosphere(EcosphereTypeRiver),
 		BioLevelElevRange(-0.01, 0.01),
@@ -559,6 +483,7 @@ var (
 	GenusShrimp = FamilyCrustacean.NewChild("Shrimp",
 		BioLevelEcosphere(EcosphereTypeOcean),
 		BioLevelTempRange(14, 29),
+		BioLevelSize(SpeciesSizeTiny),
 	)
 
 	// Lobsters.
@@ -566,10 +491,12 @@ var (
 	SpeciesCrayfish = GenusLobster.NewChild("Crayfish",
 		BioLevelEcosphere(EcosphereTypeRiver|EcosphereTypeLake),
 		BioLevelTempRange(18, 25),
+		BioLevelSize(SpeciesSizeSmall),
 	)
 	SpeciesLobster = GenusLobster.NewChild("Lobster",
 		BioLevelEcosphere(EcosphereTypeOcean),
 		BioLevelTempRange(16, 18),
+		BioLevelSize(SpeciesSizeMedium),
 	)
 
 	// Mollusks.
@@ -578,9 +505,13 @@ var (
 	// Clams.
 	GenusClam     = FamilyMollusk.NewChild("Clam")
 	SpeciesMussel = GenusClam.NewChild("Mussel",
-		BioLevelEcosphere(EcosphereTypeOcean|EcosphereTypeRiver|EcosphereTypeLake))
+		BioLevelEcosphere(EcosphereTypeOcean|EcosphereTypeRiver|EcosphereTypeLake),
+		BioLevelSize(SpeciesSizeSmall),
+	)
 	SpeciesOyster = GenusClam.NewChild("Oyster",
-		BioLevelEcosphere(EcosphereTypeOcean))
+		BioLevelEcosphere(EcosphereTypeOcean),
+		BioLevelSize(SpeciesSizeSmall),
+	)
 
 	// Snails.
 	GenusSnail = FamilyMollusk.NewChild("Snail",

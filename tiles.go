@@ -9,16 +9,16 @@ import (
 	"sort"
 
 	"github.com/Flokey82/genbiome"
-	"github.com/Flokey82/genworldvoronoi/bio"
 	"github.com/Flokey82/genworldvoronoi/geo"
 	"github.com/Flokey82/genworldvoronoi/various"
 	"github.com/Flokey82/geoquad"
-	"github.com/Flokey82/go_gens/gameconstants"
+	"github.com/Flokey82/go_gens/utils"
 	"github.com/Flokey82/go_gens/vectors"
 	"github.com/davvo/mercator"
 	"github.com/llgcode/draw2d/draw2dimg"
 	"github.com/mazznoer/colorgrad"
 
+	civ "github.com/Flokey82/genworldvoronoi/civ2"
 	geojson "github.com/paulmach/go.geojson"
 )
 
@@ -68,6 +68,8 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 	mesh := m.SphereMesh
 	step := 1
 
+	elevs := m.Elevation.GetValues()
+
 	var colorFunc func(int, float64) color.Color
 	switch displayMode {
 	case DisplayModeCityStates, DisplayModeEmpires, DisplayModeCultures, DisplayModeReligions, DisplayModeSpecies, DisplayModePlates:
@@ -76,40 +78,44 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 		var territory []int
 		var terrLen int
 		if displayMode == DisplayModeCityStates {
-			terr := m.CityStates
+			terr := m.CityStates.Objects
 			terrLen = len(terr)
 			for i, c := range terr {
 				terrToColor[c.ID] = i
 			}
-			territory = m.RegionToCityState
+			territory = m.CityStates.Regions
 		} else if displayMode == DisplayModeEmpires {
-			terr := m.Empires
+			terr := m.Empires.Objects
 			terrLen = len(terr)
 			for i, c := range terr {
 				terrToColor[c.ID] = i
 			}
-			territory = m.RegionToEmpire
+			territory = m.Empires.Regions
 		} else if displayMode == DisplayModeCultures {
-			terr := m.Cultures
+			terr := m.Cultures.Objects
 			terrLen = len(terr)
 			for i, c := range terr {
 				terrToColor[c.ID] = i
 			}
-			territory = m.RegionToCulture
+			territory = m.Cultures.Regions
 		} else if displayMode == DisplayModeReligions {
-			terr := m.Religions
+			terr := m.Religions.Objects
 			terrLen = len(terr)
 			for i, c := range terr {
 				terrToColor[c.ID] = i
 			}
-			territory = m.RegionToReligion
+			territory = m.Religions.Regions
 		} else if displayMode == DisplayModeSpecies {
-			terr := m.Species
-			terrLen = len(terr)
-			for i, c := range terr {
-				terrToColor[c.Origin] = i
+			territory = initRegionSlice(m.NumRegions)
+			for i, s := range m.Species.Objects {
+				for r := range territory {
+					if m.Species.ObjectToRegion[s.ID][r] {
+						territory[r] = s.ID
+						terrToColor[s.ID] = i
+					}
+				}
 			}
-			territory = m.SpeciesRegions
+			terrLen = len(m.Species.Objects)
 		} else {
 			terr := m.PlateRegs
 			terrLen = len(terr)
@@ -119,13 +125,14 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 			territory = m.RegionToPlate
 		}
 
-		min, max := minMax(m.Elevation)
-		_, maxMois := minMax(m.Moisture)
+		minElev, maxElev := m.Elevation.Min, m.Elevation.Max
+		moists := m.Moisture.GetValues()
+		maxMois := m.Moisture.Max
 		cols := colorGrad.Colors(uint(terrLen) + 1)
 		colorFunc = func(i int, n float64) color.Color {
 			// Calculate the color of the region.
-			elev := m.Elevation[i]
-			val := (elev - min) / (max - min)
+			elev := elevs[i]
+			val := (elev - minElev) / (maxElev - minElev)
 
 			// If we have a territory, return the color of the territory.
 			if territory[i] != -1 {
@@ -140,8 +147,8 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 
 			// Return the biome color for land.
 			rLat := m.LatLon[i][0]
-			valElev := elev / max
-			valMois := m.Moisture[i] / maxMois
+			valElev := elev / maxElev
+			valMois := moists[i] / maxMois
 			return geo.GetWhittakerModBiomeColor(rLat, valElev, valMois, math.Pow(val, 1/n))
 		}
 	case DisplayModeElevation, DisplayModeAirTemperature, DisplayModeOceanTemperature: // Temperatures and elevation.
@@ -160,17 +167,17 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 		}
 
 		if displayMode == DisplayModeElevation { // Elevation.
-			_, max := minMax(m.Elevation)
+			max := m.Elevation.Max
 
 			// Create the color function.
 			colorFunc = func(i int, n float64) color.Color {
 				// Calculate the color of the region.
-				val := m.Elevation[i] / max
+				val := elevs[i] / max
 				return genColor(cb.At(val), math.Pow(val, 1/n))
 			}
 		} else if displayMode == DisplayModeAirTemperature { // Air temperature.
 			temp := m.AirTemperature
-			minTemp, maxTemp := minMax(temp)
+			minTemp, maxTemp := utils.MinMax(temp)
 
 			// Create the color function.
 			colorFunc = func(i int, n float64) color.Color {
@@ -180,7 +187,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 			}
 		} else if displayMode == DisplayModeOceanTemperature { // Ocean temperature.
 			temp := m.OceanTemperature
-			minTemp, maxTemp := minMax(temp)
+			minTemp, maxTemp := utils.MinMax(temp)
 
 			// Create the color function.
 			colorFunc = func(i int, n float64) color.Color {
@@ -190,15 +197,15 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 			}
 		}
 	default:
-		vals := m.Elevation
+		vals := m.Elevation.GetValues()
 		if displayMode == DisplayModeOceanPressure {
 			vals = m.CalcCurrentPressure(m.RegionToOceanVec)
 		} else if displayMode == DisplayModeMoisture {
-			vals = m.Moisture
+			vals = m.Moisture.GetValues()
 		} else if displayMode == DisplayModeRainfall {
-			vals = m.Rainfall
+			vals = m.Rainfall.GetValues()
 		} else if displayMode == DisplayModeFlux {
-			vals = m.Flux
+			vals = m.Flux.GetValues()
 		} else if displayMode == DisplayModeCompression {
 			vals = m.Compression
 		} else if displayMode == DisplayModeEarthquake {
@@ -240,7 +247,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 			}
 		} else if displayMode == DisplayModeTribes { // Tribes.
 			vals = make([]float64, m.NumRegions)
-			for _, tribe := range m.Tribes {
+			for _, tribe := range m.Tribes.Objects {
 				vals[tribe.RegionID] = float64(tribe.Population)
 				if tribe.Path != nil {
 					for _, p := range tribe.Path.Steps {
@@ -250,13 +257,14 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 			}
 		}
 
-		// Calculate the min and max elevation.
-		_, max := minMax(m.Elevation)
-		_, maxMois := minMax(m.Moisture)
-		minVal, maxVal := minMax(vals)
+		// Calculate the min and maxElevs elevation.
+		maxElevs := m.Elevation.Max
+		moists := m.Moisture.GetValues()
+		maxMois := m.Moisture.Max
+		minVal, maxVal := utils.MinMax(vals)
 		colorFunc = func(i int, n float64) color.Color {
 			// Calculate the color of the region.
-			elev := m.Elevation[i]
+			elev := elevs[i]
 			val := (vals[i] - minVal) / (maxVal - minVal)
 
 			// Return blue for water (oceans and lakes).
@@ -266,8 +274,8 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 
 			// Return the biome color for land.
 			rLat := m.LatLon[i][0]
-			valElev := elev / max
-			valMois := m.Moisture[i] / maxMois
+			valElev := elev / maxElevs
+			valMois := moists[i] / maxMois
 			return geo.GetWhittakerModBiomeColor(rLat, valElev, valMois, math.Pow(val, 1/n))
 		}
 	}
@@ -512,8 +520,8 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 				r1 := regions[j]
 				r2 := regions[(j+1)%3]
 				// Get the 2 points of the triangle segment.
-				x1, y1, z1 := path[j][0], path[j][1], m.Elevation[r1]
-				x2, y2, z2 := path[(j+1)%3][0], path[(j+1)%3][1], m.Elevation[r2]
+				x1, y1, z1 := path[j][0], path[j][1], elevs[r1]
+				x2, y2, z2 := path[(j+1)%3][0], path[(j+1)%3][1], elevs[r2]
 
 				if z1 <= 0 {
 					regsBelowSeaLevel[j] = true
@@ -675,7 +683,8 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 	// We should filter this stuff before we generate the rivers.
 	if drawRivers {
 		rivers := m.GetRiversInLatLonBB(0.001/float64(int(1)<<zoom), la1Margin, lo1Margin, la2Margin, lo2Margin)
-		_, maxFlux := minMax(m.Flux)
+		flux := m.Flux.GetValues()
+		maxFlux := m.Flux.Max
 
 		// Set our stroke color to a nice river blue.
 		gc.SetStrokeColor(color.NRGBA{0, 0, 255, 255})
@@ -691,7 +700,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 			gc.MoveTo(x-dx, y-dy2)
 			for i, p := range river[1:] {
 				// Set the line width based on the flux of the river, averaged with the previous flux.
-				gc.SetLineWidth(4 * math.Sqrt((m.Flux[p]+m.Flux[river[i]])/(2*maxFlux)))
+				gc.SetLineWidth(4 * math.Sqrt((flux[p]+flux[river[i]])/(2*maxFlux)))
 
 				// Set the line width based on the flux of the river.
 				rLat, rLon = m.LatLon[p][0], m.LatLon[p][1]
@@ -722,8 +731,8 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 				// If both points are in a pool or below sea level, we end the path,
 				// move to the new point and start a new path.
 				// TODO: Calculate intercept of the river with the sea level.
-				if (m.Elevation[p] <= 0 || m.Waterpool[p] > 0 && drawLakes) &&
-					(m.Elevation[river[i]] <= 0 || m.Waterpool[river[i]] > 0 && drawLakes) {
+				if (elevs[p] <= 0 || m.Waterpool[p] > 0 && drawLakes) &&
+					(elevs[river[i]] <= 0 || m.Waterpool[river[i]] > 0 && drawLakes) {
 					// Draw from the last position to the midpoint.
 					// This will cause the river to end at the sea level.
 					gc.Stroke()
@@ -732,7 +741,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 					// Move to the new point and start a new path.
 					gc.BeginPath()
 					gc.MoveTo(x, y)
-				} else if m.Elevation[p] <= 0 || (m.Waterpool[p] > 0 && drawLakes) {
+				} else if elevs[p] <= 0 || (m.Waterpool[p] > 0 && drawLakes) {
 					// If we are below sea level, interpolate the point with the previous point.
 					// Draw from the last position to the midpoint.
 					// This will cause the river to end at the sea level.
@@ -741,7 +750,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 
 					// Move to the new point.
 					gc.MoveTo(x, y)
-				} else if m.Elevation[river[i]] <= 0 || (m.Waterpool[river[i]] > 0 && drawLakes) {
+				} else if elevs[river[i]] <= 0 || (m.Waterpool[river[i]] > 0 && drawLakes) {
 					// If the previous point was below sea level, interpolate the point with the next point.
 					// This will cause the river to start at the sea level.
 					lx, ly := gc.LastPoint()
@@ -764,7 +773,7 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 
 	if drawTradeRoutes {
 		// Get all the trade routes.
-		traderoutes := m.getTradeRoutesInLatLonBB(la1Margin, lo1Margin, la2Margin, lo2Margin)
+		traderoutes := m.GetTradeRoutesInLatLonBB(la1Margin, lo1Margin, la2Margin, lo2Margin)
 
 		// Set our stroke color to a nice traderoute red.
 		gc.SetStrokeColor(color.NRGBA{255, 0, 0, 255})
@@ -928,7 +937,7 @@ func limitLongitude(lo float64) float64 {
 }
 
 // GetCitiesInTile returns all cities within the given tile coordinates and zoom level.
-func (m *Map) GetCitiesInTile(x, y, zoom int) []*City {
+func (m *Map) GetCitiesInTile(x, y, zoom int) []*civ.City {
 	// Wrap the tile coordinates.
 	x, y = wrapTileCoordinates(x, y, zoom)
 
@@ -941,8 +950,8 @@ func (m *Map) GetCitiesInTile(x, y, zoom int) []*City {
 	la2, lo2 = wrapLatLon(la2, lo2)
 
 	// Get the cities within the tile.
-	var cities []*City
-	for _, c := range m.Cities {
+	var cities []*civ.City
+	for _, c := range m.Cities.Objects {
 		cLatLon := m.LatLon[c.ID]
 		// Check if we are within the tile with a small margin.
 		if la1 < cLatLon[0] && cLatLon[0] < la2 && lo1 < cLatLon[1] && cLatLon[1] < lo2 {
@@ -951,6 +960,32 @@ func (m *Map) GetCitiesInTile(x, y, zoom int) []*City {
 		cities = append(cities, c)
 	}
 	return cities
+}
+
+// GetSettlementsInTile returns all settlements within the given tile coordinates and zoom level.
+func (m *Map) GetSettlementsInTile(x, y, zoom int) []*civ.Settlement {
+	// Wrap the tile coordinates.
+	x, y = wrapTileCoordinates(x, y, zoom)
+
+	// Calculate the bounds of the tile.
+	tbb := newTileBoundingBox(x, y, zoom)
+	la1, lo1, la2, lo2 := tbb.toLatLon()
+
+	// Wrap the lat lon coordinates.
+	la1, lo1 = wrapLatLon(la1, lo1)
+	la2, lo2 = wrapLatLon(la2, lo2)
+
+	// Get the settlements within the tile.
+	var settlements []*civ.Settlement
+	for _, c := range m.Settlements.Objects {
+		cLatLon := m.LatLon[c.ID]
+		// Check if we are within the tile with a small margin.
+		if la1 < cLatLon[0] && cLatLon[0] < la2 && lo1 < cLatLon[1] && cLatLon[1] < lo2 {
+			continue
+		}
+		settlements = append(settlements, c)
+	}
+	return settlements
 }
 
 // GetGeoJSONCities returns all cities as GeoJSON within the given bounds and zoom level.
@@ -975,18 +1010,20 @@ func (m *Map) GetGeoJSONCities(la1, lo1, la2, lo2 float64, zoom int) ([]byte, er
 	lbb := latLonBounds{la1, lo1, la2, lo2}
 
 	// Get the last settled year.
-	_, maxSettled := minMax64(m.Settled)
-	distRegion := math.Sqrt(4 * math.Pi / float64(m.NumRegions))
+	maxSettled := utils.MaxArray(m.Settled)
 
 	biomeFunc := m.GetRegWhittakerModBiomeFunc()
-	_, maxElev := minMax(m.Elevation)
-	_, maxMois := minMax(m.Moisture)
+	// Get the max elevation values.
+	elev := m.Elevation.GetValues()
+	maxElev := m.Elevation.Max
+	moists := m.Moisture.GetValues()
+	maxMois := m.Moisture.Max
 
 	regPropertyFunc := m.GetRegPropertyFunc()
 
 	// Depending on the zoom level we want to show more or less cities.
-	sortedCities := make([]*City, len(m.Cities))
-	copy(sortedCities, m.Cities)
+	sortedCities := make([]*civ.City, len(m.Cities.Objects))
+	copy(sortedCities, m.Cities.Objects)
 
 	// Sort the cities by population (descending).
 	sort.Slice(sortedCities, func(i, j int) bool {
@@ -1024,7 +1061,6 @@ func (m *Map) GetGeoJSONCities(la1, lo1, la2, lo2 float64, zoom int) ([]byte, er
 		f := geojson.NewPointFeature([]float64{cLon, cLat})
 		f.SetProperty("id", c.ID)
 		f.SetProperty("name", c.Name)
-		f.SetProperty("type", c.Type)
 		f.SetProperty("culture", fmt.Sprintf("%s (%s)", c.Culture.Name, c.Culture.Type))
 		if r := m.GetReligion(c.ID); r != nil {
 			f.SetProperty("religion", r.Name)
@@ -1037,39 +1073,18 @@ func (m *Map) GetGeoJSONCities(la1, lo1, la2, lo2 float64, zoom int) ([]byte, er
 			f.SetProperty("citystate", cs.Capital.Name)
 		}
 		f.SetProperty("population", c.Population)
-		f.SetProperty("popgrowth", c.PopulationGrowthRate())
 		f.SetProperty("maxpop", c.MaxPopulation)
-		f.SetProperty("maxpoplimit", c.MaxPopulationLimit())
 		f.SetProperty("settled", maxSettled-c.Founded)
-		temperature := m.GetRegTemperature(c.ID, maxElev)
-		precip := geo.MaxPrecipitation * m.Moisture[c.ID] / maxMois
-		elev := geo.MaxAltitudeFactor * m.Elevation[c.ID] / maxElev
+		temperature := m.GetRegTemperature(c.ID)
+		precip := geo.MaxPrecipitation * moists[c.ID] / maxMois
+		elev := geo.MaxAltitudeFactor * elev[c.ID] / maxElev
 		f.SetProperty("biome", genbiome.WhittakerModBiomeToString(biomeFunc(c.ID))+
 			fmt.Sprintf(" (%.1f°C, %.1fdm, %.1fm)", temperature, precip, elev))
 		f.SetProperty("coordinates", fmt.Sprintf("lat %.2f, lon %.2f", cLat, cLon))
-		f.SetProperty("attractiveness", c.Attractiveness)
-		f.SetProperty("economic", c.PotentialEconomic)
-		f.SetProperty("agriculture", c.PotentialAgricultural)
-		f.SetProperty("trade", c.PotentialTrade)
-		f.SetProperty("resources", c.PotentialResources)
-		f.SetProperty("radius", (c.radius()+2*distRegion)*gameconstants.EarthCircumference/(2*math.Pi))
-		f.SetProperty("tradepartners", c.TradePartners)
-		f.SetProperty("flavortext", m.generateCityFlavorText(c, regPropertyFunc(c.ID)))
+		f.SetProperty("flavortext", m.GenerateCityFlavorText(c, regPropertyFunc(c.ID)))
 		var sName string
-		if m.SpeciesRegions[c.ID] >= 0 {
-			var s *bio.Species
-			for _, sp := range m.Species {
-				if sp.Origin == m.SpeciesRegions[c.ID] {
-					s = sp
-					break
-				}
-			}
-			if s != nil {
-				sName = s.Name
-				if sName == "" {
-					sName = s.String()
-				}
-			}
+		for _, sp := range m.Species.GetAt(c.ID) {
+			sName += sp.Name + ", "
 		}
 		f.SetProperty("species", sName)
 		var msgs []string
@@ -1087,34 +1102,9 @@ func (m *Map) GetGeoJSONCities(la1, lo1, la2, lo2 float64, zoom int) ([]byte, er
 
 		// Generate the list of local resources.
 		var resources []string
-		// Metals.
-		for i := 0; i < geo.ResMaxMetals; i++ {
-			if m.Metals[c.ID]&(1<<i) != 0 {
-				resources = append(resources, geo.MetalToString(i))
-			}
-		}
-		// Gems.
-		for i := 0; i < geo.ResMaxGems; i++ {
-			if m.Gems[c.ID]&(1<<i) != 0 {
-				resources = append(resources, geo.GemToString(i))
-			}
-		}
-		// Stones.
-		for i := 0; i < geo.ResMaxStones; i++ {
-			if m.Stones[c.ID]&(1<<i) != 0 {
-				resources = append(resources, geo.StoneToString(i))
-			}
-		}
-		// Woods.
-		for i := 0; i < geo.ResMaxWoods; i++ {
-			if m.Wood[c.ID]&(1<<i) != 0 {
-				resources = append(resources, geo.WoodToString(i))
-			}
-		}
-		// Various.
-		for i := 0; i < geo.ResMaxVarious; i++ {
-			if m.Various[c.ID]&(1<<i) != 0 {
-				resources = append(resources, geo.VariousToString(i))
+		for _, res := range m.Resources {
+			if m.Location[res][c.ID] {
+				resources = append(resources, res.Name)
 			}
 		}
 		f.SetProperty("reslist", resources)
@@ -1122,7 +1112,61 @@ func (m *Map) GetGeoJSONCities(la1, lo1, la2, lo2 float64, zoom int) ([]byte, er
 		geoJSON.AddFeature(f)
 	}
 
-	log.Printf("%d out of %d cities in tile", len(geoJSON.Features), len(m.Cities))
+	log.Printf("%d out of %d cities in tile", len(geoJSON.Features), len(m.Cities.Objects))
+
+	// Add settlements to the GeoJSON.
+	for _, s := range m.Settlements.Objects {
+		sLat := m.LatLon[s.ID][0]
+		sLon := m.LatLon[s.ID][1]
+
+		// Check if we are within the tile with a small margin.
+		if !lbb.InBounds(sLat, sLon) {
+			continue
+		}
+
+		// Add the settlement to the GeoJSON as a feature.
+		f := geojson.NewPointFeature([]float64{sLon, sLat})
+		f.SetProperty("id", s.ID)
+		f.SetProperty("name", s.Name+" (settlement)")
+		f.SetProperty("culture", fmt.Sprintf("%s (%s)", s.Culture.Name, s.Culture.Type))
+		if r := m.GetReligion(s.ID); r != nil {
+			f.SetProperty("religion", r.Name)
+			f.SetProperty("deity", r.Deity.FullName())
+		}
+		if e := m.GetEmpire(s.ID); e != nil {
+			f.SetProperty("empire", e.Name)
+		}
+		if cs := m.GetCityState(s.ID); cs != nil {
+			f.SetProperty("citystate", cs.Capital.Name)
+		}
+		f.SetProperty("population", s.Population)
+		//f.SetProperty("maxpop", s.MaxPopulation)
+		//f.SetProperty("settled", maxSettled-s.Founded)
+		temperature := m.GetRegTemperature(s.ID)
+		precip := geo.MaxPrecipitation * moists[s.ID] / maxMois
+		elev := geo.MaxAltitudeFactor * elev[s.ID] / maxElev
+		f.SetProperty("biome", genbiome.WhittakerModBiomeToString(biomeFunc(s.ID))+
+			fmt.Sprintf(" (%.1f°C, %.1fdm, %.1fm)", temperature, precip, elev))
+		f.SetProperty("coordinates", fmt.Sprintf("lat %.2f, lon %.2f", sLat, sLon))
+		//f.SetProperty("flavortext", m.GenerateCityFlavorText(s, regPropertyFunc(s.ID)))
+
+		var sName string
+		for _, sp := range m.Species.GetAt(s.ID) {
+			sName += sp.Name + ", "
+		}
+		f.SetProperty("species", sName)
+
+		// Generate the list of local resources.
+		var resources []string
+		for _, res := range m.Resources {
+			if m.Location[res][s.ID] {
+				resources = append(resources, res.Name)
+			}
+		}
+		f.SetProperty("reslist", resources)
+
+		geoJSON.AddFeature(f)
+	}
 
 	// Now encode the GeoJSON.
 	geoJSONBytes, err := geoJSON.MarshalJSON()
@@ -1138,17 +1182,17 @@ func (m *Map) GetGeoJSONBorders(la1, lo1, la2, lo2 float64, zoom, displayMode in
 	var borders [][]int
 	switch displayMode {
 	case 1:
-		borders = m.getCustomBorders(m.RegionToCityState)
+		borders = m.GetCustomBorders(m.CityStates.Regions)
 	case 2:
-		borders = m.getCustomBorders(m.RegionToCulture)
+		borders = m.GetCustomBorders(m.Cultures.Regions)
 	case 3:
-		borders = m.getCustomBorders(m.RegionToPlate)
+		borders = m.GetCustomBorders(m.RegionToPlate)
 	case 4:
-		borders = m.getCustomBorders(m.BiomeRegions)
+		borders = m.GetCustomBorders(m.BiomeRegions)
 	case 5:
 		// Nothing.
 	default:
-		borders = m.getCustomBorders(m.RegionToEmpire)
+		borders = m.GetCustomBorders(m.Empires.Regions)
 	}
 
 	// Get all borders and add them to the GeoJSON.

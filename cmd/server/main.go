@@ -64,6 +64,7 @@ func main() {
 	router.HandleFunc("/geojson_cities/{z}/{la1}/{lo1}/{la2}/{lo2}", geoJSONCitiesHandler)
 	router.HandleFunc("/geojson_borders/{z}/{la1}/{lo1}/{la2}/{lo2}", geoJSONBorderHandler)
 	router.HandleFunc("/set_hour_of_day/{t}", setHourOfDayHandler)
+	router.HandleFunc("/tick_century", tickCenturyHandler)
 	if useGlobe {
 		router.PathPrefix("/").Handler(http.FileServer(http.Dir("static_cesium")))
 	} else {
@@ -136,6 +137,13 @@ func geoJSONBorderHandler(res http.ResponseWriter, req *http.Request) {
 	res.Header().Set("Content-Type", "application/json")
 	res.Header().Set("Content-Length", strconv.Itoa(len(data)))
 	res.Write(data)
+}
+
+func tickCenturyHandler(res http.ResponseWriter, req *http.Request) {
+	for i := 0; i < 100; i++ {
+		worldmap.Tick()
+	}
+	log.Println("tickCenturyHandler")
 }
 
 func tileHandler(res http.ResponseWriter, req *http.Request) {

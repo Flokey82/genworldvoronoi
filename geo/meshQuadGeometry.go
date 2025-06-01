@@ -35,8 +35,8 @@ func (qg *QuadGeometry) setMap(mesh *spheremesh.TriangleMesh, m *Geo) {
 	// TODO: multiply all the r, t points by the elevation, taking V into account
 
 	p := 0
-	regElevation := m.Elevation
-	regMoisture := m.Moisture
+	regElevation := m.Elevation.GetValues()
+	regMoisture := m.Moisture.GetValues()
 	numRegions := mesh.NumRegions
 	for r := 0; r < numRegions; r++ {
 		tm[p] = regElevation[r]

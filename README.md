@@ -48,7 +48,11 @@ This thing needs a use, and I think the major drawback right now is the time tha
   * Industry and trade
     * Introduce industry
     * Introduce production / harvesting of goods
+      * Basic resources [DONE]
+      * Goods
     * Improve trade routes
+      * Allow merchants to travel between cities
+      * Allow for trade agreements
   * Cities
     * Better city fitness functions
     * Separate world generation better from everything else

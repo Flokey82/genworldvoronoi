@@ -36,10 +36,13 @@ func (s *SpeciesTolerances) String() string {
 }
 
 func (b *Bio) getTolerancesForRegionFunc() func(int) SpeciesTolerances {
-	minElev, maxElev := minMax(b.Elevation)
-	_, maxHum := minMax(b.Moisture)
-	_, maxRain := minMax(b.Rainfall)
 	steep := b.GetSteepness()
+	elevs := b.Elevation.GetValues()
+	minElev, maxElev := b.Elevation.Min, b.Elevation.Max
+	moists := b.Moisture.GetValues()
+	maxHum := b.Moisture.Max
+	rains := b.Rainfall.GetValues()
+	maxRain := b.Rainfall.Max
 	return func(r int) SpeciesTolerances {
 		s := SpeciesTolerances{
 			Ecosphere: b.GetEcosphere(r),
@@ -59,19 +62,19 @@ func (b *Bio) getTolerancesForRegionFunc() func(int) SpeciesTolerances {
 
 		// Prefered elevation range.
 		if s.Ecosphere == EcosphereTypeOcean {
-			s.ElevRange = minMaxRange(b.Elevation[r], minElev, 0, variation)
+			s.ElevRange = minMaxRange(elevs[r], minElev, 0, variation)
 		} else {
-			s.ElevRange = minMaxRange(b.Elevation[r], 0, maxElev, variation)
+			s.ElevRange = minMaxRange(elevs[r], 0, maxElev, variation)
 		}
 
 		// Preferred temperature range.
-		s.TempRange = minMaxRange(b.GetRegTemperature(r, maxElev), float64(geo.MinTemp), float64(geo.MaxTemp), variation)
+		s.TempRange = minMaxRange(b.GetRegTemperature(r), float64(geo.MinTemp), float64(geo.MaxTemp), variation)
 
 		// Preferred humidity range.
-		s.HumRange = minMaxRange(b.Moisture[r]/maxHum, 0, 1, variation)
+		s.HumRange = minMaxRange(moists[r]/maxHum, 0, 1, variation)
 
 		// Preferred rain range.
-		s.RainRange = minMaxRange(geo.MaxPrecipitation*b.Rainfall[r]/maxRain, 0, geo.MaxPrecipitation, variation)
+		s.RainRange = minMaxRange(geo.MaxPrecipitation*rains[r]/maxRain, 0, geo.MaxPrecipitation, variation)
 
 		// Preferred steepness range.
 		s.SteepRange = minMaxRange(steep[r], 0, 1, variation)
@@ -85,11 +88,13 @@ func (b *Bio) getTolerancesForRegionFunc() func(int) SpeciesTolerances {
 }
 
 func (b *Bio) getToleranceScoreFunc(s SpeciesTolerances) func(int) float64 {
-	_, maxElev := minMax(b.Elevation)
-	_, maxHum := minMax(b.Moisture)
-	_, maxRain := minMax(b.Rainfall)
 	bf := b.GetRegWhittakerModBiomeFunc()
 	steepness := b.GetSteepness()
+	elevs := b.Elevation.GetValues()
+	moists := b.Moisture.GetValues()
+	maxHum := b.Moisture.Max
+	rains := b.Rainfall.GetValues()
+	maxRain := b.Rainfall.Max
 	return func(r int) float64 { // Check what ecosphere we are in and if it matches the species.
 		if !s.Ecosphere.isSet(b.GetEcosphere(r)) {
 			return -1.0
@@ -104,7 +109,7 @@ func (b *Bio) getToleranceScoreFunc(s SpeciesTolerances) func(int) float64 {
 
 		// Check how much we diverge from the preferred temperature range.
 		if isRangeSet(s.TempRange) {
-			tempScore = getRangeFit(b.GetRegTemperature(r, maxElev), s.TempRange)
+			tempScore = getRangeFit(b.GetRegTemperature(r), s.TempRange)
 			if tempScore == -1 {
 				return -1
 			}
@@ -114,7 +119,7 @@ func (b *Bio) getToleranceScoreFunc(s SpeciesTolerances) func(int) float64 {
 
 		// Check how much we diverge from the preferred humidity range.
 		if isRangeSet(s.HumRange) {
-			humScore = getRangeFit(b.Moisture[r]/maxHum, s.HumRange)
+			humScore = getRangeFit(moists[r]/maxHum, s.HumRange)
 			if humScore == -1 {
 				return -1
 			}
@@ -124,7 +129,7 @@ func (b *Bio) getToleranceScoreFunc(s SpeciesTolerances) func(int) float64 {
 
 		// Check how much we diverge from the preferred rain range.
 		if isRangeSet(s.RainRange) {
-			rainScore = getRangeFit(geo.MaxPrecipitation*b.Rainfall[r]/maxRain, s.RainRange)
+			rainScore = getRangeFit(geo.MaxPrecipitation*rains[r]/maxRain, s.RainRange)
 			if rainScore == -1 {
 				return -1
 			}
@@ -134,7 +139,7 @@ func (b *Bio) getToleranceScoreFunc(s SpeciesTolerances) func(int) float64 {
 
 		// Check how much we diverge from the preferred elevation range.
 		if isRangeSet(s.ElevRange) {
-			elevScore = getRangeFit(b.Elevation[r], s.ElevRange)
+			elevScore = getRangeFit(elevs[r], s.ElevRange)
 			if elevScore == -1 {
 				return -1
 			}
@@ -179,7 +184,7 @@ func (e EcosphereType) isSet(t EcosphereType) bool {
 // GetEcosphere returns the ecosphere of the given region.
 func (b *Bio) GetEcosphere(r int) EcosphereType {
 	// Get the ecosphere we are in.
-	if b.Elevation[r] <= 0.0 {
+	if b.Elevation.Values[r] <= 0.0 {
 		return EcosphereTypeOcean
 	}
 	if b.IsRegRiver(r) {

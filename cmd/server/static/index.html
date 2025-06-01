@@ -171,19 +171,21 @@
             '<p><b>' + prop.flavortext + '</b></p>' +
             '<p>' +
             'Population: ' + prop.population + ' / ' + prop.maxpop +
-            ' (max ' + prop.maxpoplimit + ' growth ' + prop.popgrowth.toFixed(3) + ')<br/>' +
+            ' (max ' + prop.maxpoplimit + ' growth ' + (prop.popgrowth ? prop.popgrowth.toFixed(3) : 'N/A') + ')<br/>' +
             'Settled: ' + prop.settled + 'yrs ago<br/>' +
             'Culture: ' + prop.culture + '<br/>' +
             (prop.religion ? 'Religion: ' + prop.religion + '<br/>' : '') +
             (prop.deity ? 'Deity: ' + prop.deity + '<br/>' : '') +
             'Biome: ' + prop.biome + '<br/>' +
             'Coords: ' + prop.coordinates + '<br/>' +
-            'Attractiveness: ' + prop.attractiveness.toFixed(3) + '<br/>' +
-            'Economic: ' + prop.economic.toFixed(3) + ' / ' +
-            'Agriculture: ' + prop.agriculture.toFixed(3) + ' / ' +
-            'Trade: ' + prop.trade.toFixed(3) + ' / ' +
-            'Resources: ' + prop.resources.toFixed(3) + '<br/>' +
-            'Tradepartners: ' + prop.tradepartners + ' (Radius: ' + prop.radius.toFixed(3) + 'km)<br/>' +
+            'Attractiveness: ' + (prop.attractiveness ? prop.attractiveness.toFixed(3) : 'N/A') + '<br/>' +
+            'Economic: ' + (prop.economic ? prop.economic.toFixed(3) : 'N/A') + ' / ' +
+            'Agriculture: ' + (prop.agriculture ? prop.agriculture.toFixed(3) : 'N/A') + ' / ' +
+            'Trade: ' + (prop.trade ? prop.trade.toFixed(3) : 'N/A') + ' / ' +
+            'Resources: ' + (prop.resources ? prop.resources.toFixed(3) : 'N/A') + '<br/>' +
+            'Tradepartners: ' + prop.tradepartners + ' (Radius: ' + (prop.radius ? prop.radius.toFixed(3) : 'N/A') + 'km)<br/>' +
+            'Features: ' + prop.features + '<br/>' +
+            'Storage: ' + prop.storage + '<br/>' +
             'Species: ' + prop.species + '<br/>' +
             '</p>' +
             '<p>' +
@@ -299,6 +301,27 @@
       tl.redraw();
     });
     map.addControl(new tradeControl());
+
+    // Add our custom control for ticking a century.
+    var centuryControl = newCustomControl('C:0', 'Century', function (link) {
+      // Tick a century.
+      var xhr = new XMLHttpRequest();
+      xhr.open('GET', 'tick_century');
+      xhr.onload = function () {
+        if (xhr.status === 200) {
+          console.log('Success');
+          // Clear the tile cache.
+          tl._tileCache = {};
+          // Call the tile redraw function.
+          tl.redraw();
+          reloadJSONfunction();
+        } else {
+          console.log('Error: ' + xhr.status);
+        }
+      };
+      xhr.send();
+    });
+    map.addControl(new centuryControl());
 
     // Add our custom control for toggling lakes.
     /*

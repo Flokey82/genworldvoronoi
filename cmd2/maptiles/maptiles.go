@@ -9,7 +9,6 @@ import (
 	"math"
 
 	"github.com/Flokey82/genworldvoronoi"
-	"github.com/Flokey82/genworldvoronoi/geo"
 	"github.com/davvo/mercator"
 	"github.com/hajimehoshi/ebiten"
 	"github.com/hajimehoshi/ebiten/ebitenutil"
@@ -20,6 +19,8 @@ import (
 	"github.com/mazznoer/colorgrad"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
+
+	civ "github.com/Flokey82/genworldvoronoi/civ2"
 )
 
 const (
@@ -43,9 +44,11 @@ type Game struct {
 	w               *genworldvoronoi.Map
 	tileCache       map[[3]int]*ebiten.Image
 	tileHourCache   map[[4]int]*ebiten.Image
-	cityCache       map[[3]int][]*genworldvoronoi.City
+	cityCache       map[[3]int][]*civ.City
+	settlementCache map[[3]int][]*civ.Settlement
 	currentHour     int
 	showCities      bool
+	showSettlements bool
 	showSuitability bool
 	showRivers      bool
 	showCultures    bool
@@ -69,7 +72,7 @@ func NewGame(w *genworldvoronoi.Map) (*Game, error) {
 	}
 	const dpi = 72
 	mplusNormalFont, err := opentype.NewFace(tt, &opentype.FaceOptions{
-		Size:    14,
+		Size:    11,
 		DPI:     dpi,
 		Hinting: font.HintingVertical,
 	})
@@ -89,9 +92,11 @@ func NewGame(w *genworldvoronoi.Map) (*Game, error) {
 		w:               w,
 		tileCache:       make(map[[3]int]*ebiten.Image),
 		tileHourCache:   make(map[[4]int]*ebiten.Image),
-		cityCache:       make(map[[3]int][]*genworldvoronoi.City),
+		cityCache:       make(map[[3]int][]*civ.City),
+		settlementCache: make(map[[3]int][]*civ.Settlement),
 		currentHour:     6,
 		showCities:      true,
+		showSettlements: true,
 	}, nil
 }
 
@@ -120,14 +125,14 @@ func (g *Game) Update() error {
 	if inpututil.IsKeyJustPressed(ebiten.KeyR) {
 		g.showRivers = !g.showRivers
 		// Invalidate the tile cache.
-		g.invalidateTileCache()
+		g.invalidateCache()
 	}
 
 	// Check if we want to show cultures.
 	if inpututil.IsKeyJustPressed(ebiten.KeyB) {
 		g.showCultures = !g.showCultures
 		// Invalidate the tile cache.
-		g.invalidateTileCache()
+		g.invalidateCache()
 	}
 
 	// Check if we want to show tribes.
@@ -153,28 +158,28 @@ func (g *Game) Update() error {
 	if inpututil.IsKeyJustPressed(ebiten.KeyT) {
 		g.w.Civ.Tick()
 		// Invalidate the tile cache.
-		g.invalidateTileCache()
+		g.invalidateCache()
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyG) {
 		for i := 0; i < 100; i++ {
 			g.w.Civ.Tick()
 		}
 		// Invalidate the tile cache.
-		g.invalidateTileCache()
+		g.invalidateCache()
 	}
 	if inpututil.IsKeyJustPressed(ebiten.KeyK) {
 		for i := 0; i < 2000; i++ {
 			g.w.Civ.Tick()
 		}
 		// Invalidate the tile cache.
-		g.invalidateTileCache()
+		g.invalidateCache()
 	}
 
 	// Check if we want to show suitability.
 	if inpututil.IsKeyJustPressed(ebiten.KeyP) {
 		g.showSuitability = !g.showSuitability
 		// Invalidate the tile cache.
-		g.invalidateTileCache()
+		g.invalidateCache()
 	}
 
 	// Cycle through display modes.
@@ -183,7 +188,7 @@ func (g *Game) Update() error {
 		if g.displayMode >= len(displayModes) {
 			g.displayMode = 0
 		}
-		g.invalidateTileCache()
+		g.invalidateCache()
 	}
 
 	// Update target zoom level.
@@ -354,7 +359,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	maxTileX := int(math.Min(numTiles, math.Ceil(tx1)))
 	maxTileY := int(math.Min(numTiles, math.Ceil(ty1)))
 
-	var cities []*genworldvoronoi.City
+	var cities []*civ.City
+	var settlements []*civ.Settlement
 	for xt := minTileX; xt < maxTileX; xt++ {
 		for yt := minTileY; yt < maxTileY; yt++ {
 			x, y := float64(xt)*currTileSize, float64(yt)*currTileSize
@@ -394,6 +400,10 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			if g.showCities {
 				cities = append(cities, g.getTileCities(xt, yt, zoom)...)
 			}
+
+			if g.showSettlements {
+				settlements = append(settlements, g.getTileSettlements(xt, g.numTilesPerAxis-yt-1, zoom)...)
+			}
 		}
 	}
 
@@ -410,7 +420,25 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			drawX := (float64(x)-(g.camX))*scale + (cx)
 			drawY := (float64(y)+(g.camY))*scale + (cy)
 			// Draw the city label at the city's position.
-			g.drawLabel(screen, drawX, drawY, fmt.Sprintf("%s", city.Name), color.White)
+			g.drawLabel(screen, drawX, drawY, fmt.Sprintf("%s (%d)", city.Name, city.Population), color.White)
+		}
+	}
+
+	// Draw settlements.
+	if g.showSettlements {
+		colAmber := color.RGBA{255, 191, 0, 255}
+		for _, settlement := range settlements {
+			// Get actual world position of settlement.
+			cLatLon := g.w.LatLon[settlement.ID]
+			lat, lon := cLatLon[0], cLatLon[1]
+			x, y := mercator.LatLonToPixels(-lat, lon, zoom)
+			x = currTileSize * x / 256
+			y = currTileSize * y / 256
+			// Calculate the on-screen position of the city.
+			drawX := (float64(x)-(g.camX))*scale + (cx)
+			drawY := (float64(y)+(g.camY))*scale + (cy)
+			// Draw the city label at the city's position.
+			g.drawLabel(screen, drawX, drawY, fmt.Sprintf("%s (%d)", settlement.Name, settlement.Population), colAmber)
 		}
 	}
 
@@ -419,22 +447,21 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		// Generate color palette.
 		colorGrad := colorgrad.Rainbow()
 		// We just draw circles where the metal resources are.
-		colors := colorGrad.Colors(uint(geo.ResMaxMetals))
-		for r := 0; r < g.w.NumRegions; r++ {
-			if g.w.Resources.Metals[r] != 0 {
-				// Get actual world position of resource.
-				cLatLon := g.w.LatLon[r]
-				lat, lon := cLatLon[0], cLatLon[1]
-				x, y := mercator.LatLonToPixels(-lat, lon, zoom)
-				x = currTileSize * x / 256
-				y = currTileSize * y / 256
-				// Calculate the on-screen position of the resource.
-				drawX := (float64(x)-(g.camX))*scale + (cx)
-				drawY := (float64(y)+(g.camY))*scale + (cy)
-				for i := 0; i < geo.ResMaxMetals; i++ {
-					if g.w.Resources.Metals[r]&(1<<i) != 0 {
-						screen.Set(int(drawX), int(drawY), colors[i])
-					}
+		colors := colorGrad.Colors(uint(len(g.w.Resources)))
+		for i, res := range g.w.Resources {
+			for r := 0; r < g.w.NumRegions; r++ {
+				if g.w.Location[res][r] {
+					// Get actual world position of resource.
+					cLatLon := g.w.LatLon[r]
+					lat, lon := cLatLon[0], cLatLon[1]
+					x, y := mercator.LatLonToPixels(-lat, lon, zoom)
+					x = currTileSize * x / 256
+					y = currTileSize * y / 256
+					// Calculate the on-screen position of the resource.
+					drawX := (float64(x)-(g.camX))*scale + (cx)
+					drawY := (float64(y)+(g.camY))*scale + (cy)
+
+					screen.Set(int(drawX), int(drawY), colors[i])
 				}
 			}
 		}
@@ -442,7 +469,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	// Draw Tribes.
 	if g.showTribes {
-		for _, tribe := range g.w.Tribes {
+		for _, tribe := range g.w.Tribes.Objects {
 			// Get actual world position of tribe.
 			cLatLon := g.w.LatLon[tribe.RegionID]
 			lat, lon := cLatLon[0], cLatLon[1]
@@ -453,7 +480,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			drawX := (float64(x)-(g.camX))*scale + (cx)
 			drawY := (float64(y)+(g.camY))*scale + (cy)
 			// Draw the tribe label at the tribe's position.
-			g.drawLabel(screen, drawX, drawY, fmt.Sprintf("T %d", tribe.ID), color.RGBA{255, 0, 0, 255})
+			g.drawLabel(screen, drawX, drawY, fmt.Sprintf("T %s (%d)", tribe.Name(), tribe.Population), color.RGBA{255, 0, 0, 255})
 		}
 	}
 
@@ -461,11 +488,16 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	ebitenutil.DebugPrint(screen, fmt.Sprintf("KEYS WASD EC\nFPS  %0.0f\nTPS  %0.0f\nSCA  %0.2f\nPOS  %0.0f,%0.0f", ebiten.ActualFPS(), ebiten.ActualTPS(), g.camScale, g.camX, g.camY))
 }
 
+func (g *Game) invalidateCache() {
+	g.invalidateTileCache()
+	g.invalidateCityCache()
+}
+
 func (g *Game) invalidateTileCache() {
 	g.tileCache = make(map[[3]int]*ebiten.Image)
 }
 
-func (g *Game) getTileCities(x, y, zoom int) []*genworldvoronoi.City {
+func (g *Game) getTileCities(x, y, zoom int) []*civ.City {
 	// TODO: Find a way to update the cache on changes.
 
 	// Check if the tile is already in the cache.
@@ -480,8 +512,19 @@ func (g *Game) getTileCities(x, y, zoom int) []*genworldvoronoi.City {
 	return cities
 }
 
+func (g *Game) getTileSettlements(x, y, zoom int) []*civ.Settlement {
+	key := [3]int{x, y, zoom}
+	if settlements, ok := g.settlementCache[key]; ok {
+		return settlements
+	}
+	settlements := g.w.GetSettlementsInTile(x, g.numTilesPerAxis-y-1, zoom)
+	g.settlementCache[key] = settlements
+	return settlements
+}
+
 func (g *Game) invalidateCityCache() {
-	g.cityCache = make(map[[3]int][]*genworldvoronoi.City)
+	g.cityCache = make(map[[3]int][]*civ.City)
+	g.settlementCache = make(map[[3]int][]*civ.Settlement)
 }
 
 func (g *Game) getTileImageHour(x, y, zoom, hour int) *ebiten.Image {

@@ -13,26 +13,25 @@ import (
 type Bio struct {
 	*BioConfig
 	*geo.Geo
-	Species                []*Species              // All species on the map.
-	SpeciesFamilyToRegions map[SpeciesFamily][]int // Regions where each species is found.
-	SpeciesRegions         []int                   // Regions where each species is found.
-	GrowthDays             []int                   // Number of days within the growth period for each region.
-	GrowthInsolation       []float64               // Average insolation for each region during the growth period.
-	rand                   *rand.Rand              // Random number generator.
+	Species                *geo.MultiReferences[Species] // All species on the map.
+	SpeciesFamilyToRegions map[SpeciesFamily][]int       // Regions where each species is found.
+	GrowthDays             []int                         // Number of days within the growth period for each region.
+	GrowthInsolation       []float64                     // Average insolation for each region during the growth period.
+	rand                   *rand.Rand                    // Random number generator.
 }
 
-func NewBio(geo *geo.Geo, cfg *BioConfig) *Bio {
+func NewBio(g *geo.Geo, cfg *BioConfig) *Bio {
 	if cfg == nil {
 		cfg = NewBioConfig()
 	}
 	return &Bio{
 		BioConfig:              cfg,
-		Geo:                    geo,
-		GrowthDays:             make([]int, geo.SphereMesh.NumRegions),
-		GrowthInsolation:       make([]float64, geo.SphereMesh.NumRegions),
-		SpeciesRegions:         make([]int, geo.SphereMesh.NumRegions),
+		Geo:                    g,
+		GrowthDays:             make([]int, g.SphereMesh.NumRegions),
+		GrowthInsolation:       make([]float64, g.SphereMesh.NumRegions),
+		Species:                geo.NewMultiReferences[Species](g.SphereMesh.NumRegions),
 		SpeciesFamilyToRegions: make(map[SpeciesFamily][]int),
-		rand:                   rand.New(rand.NewSource(geo.Seed)),
+		rand:                   rand.New(rand.NewSource(g.Seed)),
 	}
 }
 
@@ -55,17 +54,16 @@ func (b *Bio) GenerateBiology() {
 	// total survivability).
 
 	// Generate the pre-defined species.
-	// b.placeAllSpecies(KingdomFauna)
-	// b.placeAllSpecies(KingdomFlora)
-	// b.placeAllSpecies(KingdomFungi)
-	b.placeAllSpecies(GenusCereal)
+	//b.placeAllSpecies(KingdomFauna)
+	//b.placeAllSpecies(KingdomFlora)
+	//b.placeAllSpecies(KingdomFungi)
+	b.placeAllSpecies(FamilyFish)
 
 	// Generate the species.
 	if b.EnableRandomSpecies {
 		b.genNRandomSpecies(b.NumSpecies)
 	}
-	b.SpeciesRegions = b.expandSpecies()
-	b.SpeciesFamilyToRegions = b.expandSpecies2()
+	b.expandSpecies()
 }
 
 // calcGrowthPeriod calculates the duration of the potential growth
@@ -87,6 +85,7 @@ func (b *Bio) calcGrowthPeriod() {
 }
 
 func (b *Bio) calcGrowthPeriodChunk(start, end int) {
+	rains := b.Rainfall.GetValues()
 	// Calculate the duration of the potential growth period for each region.
 	for r := start; r < end; r++ {
 		var growthDays int
@@ -100,7 +99,7 @@ func (b *Bio) calcGrowthPeriodChunk(start, end int) {
 			// is above 0. This is not correct, as we should be counting days
 			// where the average temperature is above a certain minimum.
 			// We should also take in account when there is precipitation.
-			if avg > 0 && b.Rainfall[r] > 0 {
+			if avg > 0 && rains[r] > 0 {
 				growthDays++
 				totalInsolation += geo.CalcSolarRadiation(b.LatLon[r][0], i)
 			}

@@ -9,6 +9,7 @@ import (
 	"github.com/Flokey82/genideas/genfibonaccisphere"
 	"github.com/Flokey82/genworldvoronoi/noise"
 	"github.com/Flokey82/genworldvoronoi/various"
+	"github.com/Flokey82/go_gens/utils"
 	"github.com/Flokey82/go_gens/vectors"
 )
 
@@ -356,7 +357,7 @@ func (m *BaseObject) PropagateCompression(compression map[int]float64) []float64
 	}
 
 	// Normalize the compression values.
-	minComp, maxComp := minMax(cmp)
+	minComp, maxComp := utils.MinMax(cmp)
 	for r := range cmp {
 		if cmp[r] > 0 {
 			cmp[r] /= maxComp
@@ -389,7 +390,7 @@ func (m *BaseObject) PropagateCompression(compression map[int]float64) []float64
 	}
 
 	// Normalize the compression values.
-	minComp, maxComp = minMax(cmp)
+	minComp, maxComp = utils.MinMax(cmp)
 	for r := range cmp {
 		if cmp[r] > 0 {
 			cmp[r] /= maxComp
@@ -464,6 +465,9 @@ func (m *Geo) assignRegionElevation() {
 	const epsilon = 1e-7
 	r_xyz := m.XYZ
 
+	// Initialize the elevation values.
+	elevs := make([]float64, m.SphereMesh.NumRegions)
+
 	// Exponent for interpolation.
 	// n = 1 is a linear interpolation
 	// n = 2 is a square interpolation
@@ -477,13 +481,13 @@ func (m *Geo) assignRegionElevation() {
 		c := math.Pow(rDistanceC[r], nc) + epsilon // Distance from coastline
 		if m.PlateIsOcean[m.RegionToPlate[r]] {
 			// Ocean plates are slightly lower than other plates.
-			m.Elevation[r] = -0.1
+			elevs[r] = -0.1
 		}
 		if math.IsInf(rDistanceA[r], 0) && math.IsInf(rDistanceB[r], 0) {
 			// If the distance from mountains and oceans is unset (infinity),
 			// we increase the elevation by 0.1 since we wouldn't be able to
 			// calculate the harmonic mean.
-			m.Elevation[r] += 0.1
+			elevs[r] += 0.1
 		} else {
 			// The height is calculated as weighted harmonic mean of the
 			// three distance values.
@@ -495,66 +499,45 @@ func (m *Geo) assignRegionElevation() {
 
 			// Apply a square falloff to the elevaltion values.
 			// f *= math.Abs(f)
-			m.Elevation[r] += f
+			elevs[r] += f
 		}
 	}
-
-	/*
-		// Add a cosine based on the distance to the closest mountain.
-		// This is to simulate the effect of the mountain ridges.
-		// NOTE: This looks very unnatural. :(
-		for r := 0; r < m.SphereMesh.NumRegions; r++ {
-			if m.Elevation[r] < 0 {
-				continue
-			}
-			// Get the distance to the closest mountain.
-			minDist := math.Inf(1)
-			for _, r2 := range m.mountain_r {
-				dist := m.GetDistance(r, r2)
-				if dist < minDist {
-					minDist = dist
-				}
-			}
-
-			// Add a cosine based on the distance to the closest mountain.
-			v := (math.Cos(minDist*math.Pi*128) + 1) / 2
-			randAmount := m.noise.Eval3(r_xyz[3*r], r_xyz[3*r+1], r_xyz[3*r+2])
-			m.Elevation[r] *= 0.5 + (0.5 * (1 - randAmount)) + 0.5*v*v*randAmount
-		}
-	*/
 
 	// Apply noise to the elevation values.
 	if m.GeoConfig.MultiplyNoise {
 		for r := 0; r < m.SphereMesh.NumRegions; r++ {
-			m.Elevation[r] *= m.noise.Eval3(r_xyz[3*r], r_xyz[3*r+1], r_xyz[3*r+2])
+			elevs[r] *= m.noise.Eval3(r_xyz[3*r], r_xyz[3*r+1], r_xyz[3*r+2])
 		}
 	} else {
 		for r := 0; r < m.SphereMesh.NumRegions; r++ {
-			m.Elevation[r] += m.noise.Eval3(r_xyz[3*r], r_xyz[3*r+1], r_xyz[3*r+2])*2 - 1 // Noise from -1.0 to 1.0
+			elevs[r] += m.noise.Eval3(r_xyz[3*r], r_xyz[3*r+1], r_xyz[3*r+2])*2 - 1 // Noise from -1.0 to 1.0
 		}
 	}
 
 	// Normalize the elevation values to the range -1.0 - 1.0
 	// TODO: Protect against division by zero.
 	if m.GeoConfig.NormalizeElevation {
-		minElevation, maxElevation := minMax(m.Elevation)
+		minElevation, maxElevation := utils.MinMax(elevs)
 		for r := 0; r < m.SphereMesh.NumRegions; r++ {
-			if m.Elevation[r] < 0 {
-				m.Elevation[r] /= math.Abs(minElevation)
+			if elevs[r] < 0 {
+				elevs[r] /= math.Abs(minElevation)
 			} else {
-				m.Elevation[r] /= maxElevation
+				elevs[r] /= maxElevation
 			}
 		}
 	}
 
 	// Apply a square falloff to the elevation values above sea level.
 	if m.GeoConfig.TectonicFalloff {
-		for r := range m.Elevation {
-			if m.Elevation[r] > 0 {
-				m.Elevation[r] *= m.Elevation[r]
+		for r := range elevs {
+			if elevs[r] > 0 {
+				elevs[r] *= elevs[r]
 			}
 		}
 	}
+
+	// Take a note that the elevation has been changed.
+	m.Elevation.SetValues(elevs)
 }
 
 // GetTectonicActivity returns the tectonic activity for all regions at the given
@@ -603,9 +586,7 @@ func (m *Geo) GetTectonicActivity(year, day, hour int) []float64 {
 		z := vec[2]
 
 		noiseValueA := getNoiseValue(x+sinVal+sinVal/2, y+cosVal, z+sinVal+cosVal)
-
 		noiseValueB := getNoiseValue(y+sinVal+cosVal, z+sinVal, x+cosVal+cosVal/3)
-
 		noiseValueC := getNoiseValue(z+cosVal, x+sinVal+cosVal, y+sinVal)
 
 		// Get the tectonic pressure for the region.
@@ -613,7 +594,7 @@ func (m *Geo) GetTectonicActivity(year, day, hour int) []float64 {
 	}
 
 	// Normalize the pressure values.
-	minPressure, maxPressure := minMax(pressure)
+	minPressure, maxPressure := utils.MinMax(pressure)
 	for r := 0; r < m.SphereMesh.NumRegions; r++ {
 		if pressure[r] < 0 {
 			pressure[r] /= minPressure // This will turn the value positive.
