@@ -1,6 +1,6 @@
 package geo
 
-import "github.com/Flokey82/genworldvoronoi/spheremesh"
+import "github.com/Flokey82/spheremesh"
 
 type QuadGeometry struct {
 	indexes []int     // indices for indexed drawing mode

@@ -8,10 +8,10 @@ import (
 	"sort"
 
 	"github.com/Flokey82/genworldvoronoi/noise"
-	"github.com/Flokey82/genworldvoronoi/spheremesh"
 	"github.com/Flokey82/genworldvoronoi/various"
 	"github.com/Flokey82/geoquad"
 	"github.com/Flokey82/go_gens/vectors"
+	"github.com/Flokey82/spheremesh"
 )
 
 type BaseObject struct {
