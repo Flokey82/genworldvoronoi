@@ -8,7 +8,7 @@ import (
 
 	"github.com/Flokey82/genworldvoronoi"
 	"github.com/Flokey82/genworldvoronoi/cmd2/maptiles"
-	"github.com/hajimehoshi/ebiten"
+	"github.com/hajimehoshi/ebiten/v2"
 )
 
 var (

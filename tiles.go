@@ -154,12 +154,12 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 	case DisplayModeElevation, DisplayModeAirTemperature, DisplayModeOceanTemperature: // Temperatures and elevation.
 		// Create a blue to red color gradient.
 		colorGrad := colorgrad.NewGradient()
-		colorGrad.Colors(
-			color.RGBA{0, 0, 255, 255},
-			color.RGBA{0, 255, 255, 255},
-			color.RGBA{0, 255, 0, 255},
-			color.RGBA{255, 255, 0, 255},
-			color.RGBA{255, 0, 0, 255},
+		colorGrad.HtmlColors(
+			"#0000ff",
+			"#00ffff",
+			"#00ff00",
+			"#ffff00",
+			"#ff0000",
 		)
 		cb, err := colorGrad.Build()
 		if err != nil {

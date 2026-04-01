@@ -6,7 +6,6 @@ import (
 
 	"github.com/Flokey82/genbiome"
 	"github.com/Flokey82/genworldvoronoi/civ"
-	"github.com/Flokey82/go_gens/genlanguage"
 )
 
 var tribeID = 0
@@ -18,36 +17,16 @@ func nextTribeID() int {
 
 // Tribe represents a tribe in the simulation.
 type Tribe struct {
-	ID         int
+	BaseEntity
 	RegionID   int
-	Population int
 	Aggressive bool
 	Path       *civ.Path
-	Culture    *Culture
 	Settling   bool
 	Origin     *City // TODO: Improve this.
-	*Storage
 }
 
-func (m *Civ) NewTribe(region, population int) *Tribe {
-	tribeID := nextTribeID()
-	return &Tribe{
-		ID:         tribeID,
-		RegionID:   region,
-		Population: population,
-		Aggressive: rand.Float64() < 0.5,
-		Culture:    m.newCulture(region, genlanguage.GenLanguage(int64(tribeID)), m.cultureFunc(region)),
-		Storage:    NewStorage(),
-	}
-}
 
-// GetID returns the ID of the tribe.
-func (t Tribe) GetID() int {
-	return t.ID
-}
-
-// Name returns the name of the tribe.
-func (t Tribe) Name() string {
+func (t *Tribe) Name() string {
 	if t.Origin != nil {
 		return fmt.Sprintf("T %d (%s)", t.ID, t.Origin.Name)
 	}
@@ -59,11 +38,18 @@ func (t *Tribe) ToSettlement(n int) *Settlement {
 	n = min(n, t.Population)
 	// Update culture based on region.
 	s := &Settlement{
-		ID:         t.RegionID,
-		Name:       t.Culture.Language.MakeCityName(),
-		Population: n,
-		Culture:    t.Culture, // TODO: Switch to sedentary culture?
-		Storage:    t.Storage,
+		BaseEntity: BaseEntity{
+			ID:              t.RegionID,
+			Name:            t.Culture.Language.MakeCityName(),
+			Population:      n,
+			Culture:         t.Culture, // TODO: Switch to sedentary culture?
+			Type:            civ.ObjectTypeSettlement,
+			Storage:         t.Storage,
+			GoverningPeople: newGoverningPeople(),
+			Infrastructure:    t.Infrastructure,
+			ConstructionQueue: t.ConstructionQueue,
+			Military:          t.Military,
+		},
 	}
 	// TODO: Add the settlement to the region.
 
@@ -76,42 +62,25 @@ func (t *Tribe) ToSettlement(n int) *Settlement {
 // Grow the population.
 func (t *Tribe) Grow(nDays int) {
 	const growthRate = 0.001 // 0.1% growth per year.
-	if growth := calcPopulationGrowth(t.Population, growthRate, nDays); growth >= 1 {
-		t.Population += int(growth)
-	} else if rand.Float64() < growth {
-		t.Population++
-	}
-}
-
-// Fight another tribe. Returns true if the tribe won the fight.
-func (t *Tribe) Fight(other *Tribe) bool {
-	lossesT, lossesO := calcCombat(t.Population, other.Population)
-	t.Population -= lossesT
-	other.Population -= lossesO
-
-	// Return true if we have more population left.
-	return t.Population > other.Population
+	t.BaseEntity.Grow(nDays, growthRate)
 }
 
 // Split the tribe into two tribes.
 func (t *Tribe) Split(m *Civ, pop int) *Tribe {
 	pop = min(pop, t.Population)
 	t.Population -= pop
-	c := t.Culture // Fork the language? Change the culture?
+
+	c := t.Culture
 	if rand.Float64() < 0.5 {
-		// Randomly change the culture.
-		if c = m.GetCulture(t.RegionID); c == nil {
-			c = m.newCulture(t.RegionID, genlanguage.GenLanguage(int64(t.ID)), m.cultureFunc(t.RegionID))
+		if nc := m.GetCulture(t.RegionID); nc != nil {
+			c = nc
 		}
 	}
-	return &Tribe{
-		ID:         nextTribeID(),
-		RegionID:   t.RegionID,
-		Population: pop,
-		Culture:    c,
-		Aggressive: t.Aggressive,
-		Storage:    NewStorage(),
-	}
+
+	t2 := m.NewTribe(t.RegionID, pop)
+	t2.Aggressive = t.Aggressive
+	t2.Culture = c
+	return t2
 }
 
 func (t *Tribe) SetPath(path *civ.Path) {

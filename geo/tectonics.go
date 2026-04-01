@@ -53,7 +53,7 @@ func (m *Geo) generatePlates() {
 	// from the queue removes an element from the beginning by
 	// increasing queue_out.
 
-	mode := tecTypeRandom
+	mode := tecTypeNoise
 
 	switch mode {
 	case tecTypeFibonacci:

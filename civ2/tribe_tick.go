@@ -40,17 +40,27 @@ func (m *Civ) tickTribes(nDays int) {
 	log.Printf("Tribes: %d", len(m.Tribes.Objects))
 
 	// Now the year should commence.
-	// TODO: Do whatever the tribe is doing all year round.
+	// For each tribe, handle growth, economy, and diplomacy.
+	for _, t := range m.Tribes.Objects {
+		if t.Population <= 0 {
+			continue
+		}
+		// Grow the population.
+		t.Grow(nDays)
 
-	// Then we grow the tribes for the year.
-	m.growTribes(nDays)
+		// Centralized economic tick.
+		m.tickEconomyBase(t, nDays)
+
+		// Tick diplomatic relations.
+		m.tickDiplomacyBase(t, nDays)
+
+		// Tick leadership.
+		m.tickLeadership(t, nDays)
+	}
 
 	// Update the resource exhaustion for each region that
 	// the tribes have caused.
 	m.updateResourceExhaustion()
-
-	// Harvest resources.
-	m.harvestResourcesTribes(nDays)
 
 	// Migrate the tribes to a new region.
 	m.migrateTribes(nDays)
@@ -80,23 +90,6 @@ func (m *Civ) cleanupTribes() {
 	}
 }
 
-// growTribes grows the population of each tribe.
-func (m *Civ) growTribes(nDays int) {
-	for _, t := range m.Tribes.Objects {
-		t.Grow(nDays)
-	}
-}
-
-// harvestResourcesTribes harvests resources for each tribe.
-func (m *Civ) harvestResourcesTribes(nDays int) {
-	for _, t := range m.Tribes.Objects {
-		// Harvest resources.
-		if t.Population > 0 {
-			// Harvest resources.
-			// m.harvestResources(t.Storage, t.RegionID, nDays)
-		}
-	}
-}
 
 // Update the resource exhaustion for each region.
 func (m *Civ) updateResourceExhaustion() {
@@ -164,6 +157,7 @@ func (m *Civ) completeSettle(t *Tribe) {
 		m.Tribes.RemoveObject(t)
 	} else {
 		settlement := t.ToSettlement(t.Population)
+		settlement.GoverningPeople = newGoverningPeople()
 		m.Settlements.PlaceObjectAt(settlement, t.RegionID)
 		log.Printf("tribe %d has settled in region %d", t.ID, t.RegionID)
 
@@ -423,7 +417,7 @@ func (m *Civ) migrateTribes(nDays int) {
 				for _, at := range aggressiveTribes {
 					if winner == nil {
 						winner = at
-					} else if at.Fight(winner) {
+					} else if m.resolveCombat(at, winner) {
 						// The winner becomes the new winner, the previous winner
 						// will be relocated.
 						nextRelocate = append(nextRelocate, winner)

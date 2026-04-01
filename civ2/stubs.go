@@ -3,20 +3,8 @@ package civ2
 import (
 	"math"
 
-	"github.com/Flokey82/genworldvoronoi/civ"
 	"github.com/Flokey82/genworldvoronoi/geo"
 )
-
-type Religion = civ.Religion
-
-func (m *Civ) GetReligion(id int) *Religion {
-	for _, c := range m.Religions.Objects {
-		if c.ID == id {
-			return c
-		}
-	}
-	return nil
-}
 
 func (m *Civ) GetTradeRoutes() ([][]int, [][]int) {
 	return nil, nil

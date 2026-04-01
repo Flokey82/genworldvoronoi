@@ -5,6 +5,19 @@ import (
 	"github.com/Flokey82/genworldvoronoi/geo"
 )
 
+const (
+	HistoryEventConstruction = "construction"
+	HistoryEventDisaster     = "disaster"
+	HistoryEventLeadership   = "leadership"
+	HistoryEventFounding     = "founding"
+	HistoryEventTakeover     = "takeover"
+	HistoryEventUprising     = "uprising"
+	HistoryEventElection     = "election"
+	HistoryEventFaction      = "faction"
+	HistoryEventDiplomacy    = "diplomacy"
+	HistoryEventMilitary     = "military"
+)
+
 type Civ struct {
 	*geo.Geo
 	SoilExhaustion []float64
@@ -26,6 +39,12 @@ type Civ struct {
 	NumCities     int // Number of generated cities (regions)
 	NumCityStates int // Number of generated city states
 	navCache      *civ.NavCache
+	nextPersonID  int
+	nextFactionID int
+	People        []*Person // People in the world
+	TradeRoutes   []*TradeRoute
+	Relationships map[civ.ObjectReference]map[civ.ObjectReference]int
+	disasterFunc  func(int) geo.GeoDisasterChance
 
 	*civ.History
 }
@@ -45,6 +64,9 @@ func NewCiv(g *geo.Geo) *Civ {
 		Settled:        make([]int64, g.SphereMesh.NumRegions),
 		Suitability:    make([]float64, g.SphereMesh.NumRegions),
 		History:        civ.NewHistory(g.Calendar),
+		TradeRoutes:    []*TradeRoute{},
+		Relationships:  make(map[civ.ObjectReference]map[civ.ObjectReference]int),
+		disasterFunc:   g.GetGeoDisasterFunc(),
 	}
 	c.navCache = civ.NewNavCache(g, func(from, to *civ.NavTile, cost float64) (float64, bool) {
 		if c.Tribes.GetIDAt(to.ID) != -1 {
@@ -77,8 +99,7 @@ func (m *Civ) GenerateCivilization() {
 
 	for _, bestRegion := range bestRegions {
 		// Start with one tribe.
-		t := m.NewTribe(bestRegion, initialPopulation)
-		m.Tribes.PlaceObjectAt(t, bestRegion)
+		m.NewTribe(bestRegion, initialPopulation)
 	}
 }
 
@@ -100,6 +121,51 @@ func (m *Civ) Tick() {
 	// Update the empires.
 	m.tickEmpires(nDays)
 
-	// Update the cultures.
+	// Update religions.
+	m.tickReligions(nDays)
+
+	// Update cultures.
 	m.tickCultures(nDays)
+
+	// Update people.
+	m.tickPeople(nDays)
+
+	// Update trade.
+	m.tickTrade(nDays)
+}
+
+func (m *Civ) getNextPersonID() int {
+	m.nextPersonID++
+	return m.nextPersonID
+}
+
+func (m *Civ) getNextFactionID() int {
+	m.nextFactionID++
+	return m.nextFactionID
+}
+
+// getTerritoryNeighbors returns a list of territories neighboring the
+// territory with the ID 'terrID' based on the provided slice of len NumRegions
+// which maps the index (region id) to their respective territory ID.
+// 'regions' is the list of regions controlled by the territory.
+func (m *Civ) getTerritoryNeighbors(terrID int, regions []int, r_terr []int) []int {
+	var res []int
+	seenTerritories := make(map[int]bool)
+	outReg := make([]int, 0, 8)
+	for _, r := range regions {
+		for _, nb := range m.SphereMesh.R_circulate_r(outReg, r) {
+			// Determine territory ID.
+			nbTerrID := r_terr[nb]
+			if nbTerrID < 0 || nbTerrID == terrID || seenTerritories[nbTerrID] {
+				continue
+			}
+			seenTerritories[nbTerrID] = true
+			res = append(res, nbTerrID)
+		}
+	}
+	return res
+}
+
+func (m *Civ) hasResourceAny(r int, rType geo.ResourceType) bool {
+	return m.ResourceLocations.HasType(r, rType)
 }

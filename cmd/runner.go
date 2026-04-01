@@ -27,7 +27,7 @@ func main() {
 	cfg.NumPoints = 400000
 	cfg.EnableCityAging = false
 
-	sp, err := genworldvoronoi.NewMapFromConfig(1234, cfg)
+	sp, err := genworldvoronoi.NewMapFromConfig(12345, cfg)
 	if err != nil {
 		log.Fatal(err)
 	}

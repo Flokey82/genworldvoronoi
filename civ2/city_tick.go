@@ -28,14 +28,26 @@ func (m *Civ) tickCities(nDays int) {
 
 		// Grow the population.
 		c.Grow(nDays)
+		
+		// Centralized economic tick.
+		m.tickEconomyBase(c, nDays)
 
-		// Collect resources.
-		// m.harvestResources(c.Storage, c.ID, nDays)
-		// Calculate what resources we need to consume.
-		// If we have a deficit, we need to import it, so we need to find a city that produces it.
+		// Handle trade discovery periodically.
+		if rand.Intn(100) < 10 {
+			// Find a nearby city to trade with.
+			for _, oc := range m.Cities.Objects {
+				if oc.ID != c.ID {
+					m.EstablishTradeRoute(c, oc)
+					break // Only one attempt per tick
+				}
+			}
+		}
 
-		// Do we produce trade goods upfront or do we take
-		// orders and produce them for the next tick?
+		// Tick diplomatic relations.
+		m.tickDiplomacyBase(c, nDays)
+
+		// Tick leadership.
+		m.tickLeadership(c, nDays)
 
 		// There is a chance that the city will be abandoned by a part of the population.
 		if rand.Intn(2000)*nDays < 5 {
@@ -60,32 +72,6 @@ func (m *Civ) tickCities(nDays int) {
 	}
 }
 
-func (m *Civ) foundCityState(c *City, rNbs []int) {
-	// We might create our own city state.
-	// Conditions:
-	// - Population > threshold
-	// - At least one neighbour that is not part of a city state
-	//   and has a settlement (TODO: Diplomacy, cities as well)
-	hasNbSettlement := make([]int, 0, 8)
-	for _, nb := range m.R_circulate_r(rNbs, c.ID) {
-		if s := m.Settlements.GetAt(nb); s != nil && m.CityStates.GetAt(nb) == nil {
-			hasNbSettlement = append(hasNbSettlement, nb)
-		}
-	}
-	if len(hasNbSettlement) > 0 {
-		cs := &CityState{
-			ID:      c.ID,
-			Capital: c,
-			Culture: c.Culture,
-			Founded: m.Geo.Calendar.GetYear(),
-		}
-		m.CityStates.PlaceObjectAt(cs, cs.ID)
-		for _, nb := range hasNbSettlement {
-			m.CityStates.PlaceObjectAt(cs, nb)
-		}
-		log.Printf("City %d has become a city state", c.ID)
-	}
-}
 
 func (m *Civ) findColonyRegion(c *City, navCache *civ.NavCache) bool {
 	// Find a suitable region within a certain radius.

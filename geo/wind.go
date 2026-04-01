@@ -13,7 +13,7 @@ import (
 func getGlobalWindVector(lat float64) [2]float64 {
 	// Based on latitude, we calculate the wind vector angle.
 	var degree float64
-	if latAbs := math.Abs(lat); latAbs <= 30 {
+	if latAbs := math.Abs(lat); latAbs >= 0 && latAbs <= 30 {
 		// +30° ... 0°, 0° ... -30° -> Primitive Hadley Cell.
 		// In a Hadley cell, we turn the wind vector until we are exactly parallel with the equator once we reach 0° Lat.
 		// TODO: This is probably not perfectly parallel at the equator.
@@ -23,7 +23,7 @@ func getGlobalWindVector(lat float64) [2]float64 {
 		} else {
 			degree = 180 - change // Southern hemisphere.
 		}
-	} else if latAbs <= 60 {
+	} else if latAbs > 30 && latAbs <= 60 {
 		// +60° ... +30°, -30° ... -60° -> Primitive Mid Latitude Cell.
 		// In a mid latitude cell, we turn the wind vector until we are exactly parallel with the 60° Lat.
 		// TODO: This is probably not a full 90° turn. Fix this

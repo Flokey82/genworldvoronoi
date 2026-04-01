@@ -2,7 +2,10 @@ package civ2
 
 import (
 	"log"
+	"math"
 	"math/rand"
+
+	"github.com/Flokey82/genworldvoronoi/civ"
 )
 
 func (m *Civ) tickSettlements(nDays int) {
@@ -26,26 +29,37 @@ func (m *Civ) tickSettlements(nDays int) {
 			}
 		}
 
-		// Collect resources.
-		// m.harvestResources(s.Storage, s.ID, nDays)
+		// Centralized economic tick.
+		m.tickEconomyBase(s, nDays)
 
-		// Spend resources.
+		// Tick diplomatic relations.
+		m.tickDiplomacyBase(s, nDays)
 
-		// Find settlements within a certain distance.
-		// We can trade with them.
+		// Tick leadership.
+		m.tickLeadership(s, nDays)
 
-		// Find cities within a certain distance.
-		// We can associate with them to gain some benefits.
+		// Handle trade discovery periodically.
+		if rand.Intn(100) < 5 {
+			// Find a nearby city or settlement to trade with.
+			for _, oc := range m.Cities.Objects {
+				if oc.ID != s.ID {
+					m.EstablishTradeRoute(s, oc)
+					break // Only one attempt per tick
+				}
+			}
+		}
 
 		// There is a chance that the settlement will be abandoned.
-		// TODO: This should be triggered by a series of unfortunate events.
-		if rand.Intn(500)*nDays < 5 {
+		// A 0.2% chance per year (at nDays=365).
+		if rand.Float64() < (1.0 - math.Pow(1.0-0.002/365.0, float64(nDays))) {
 			t := s.ToTribe(s.Population)
 			m.Tribes.PlaceObjectAt(t, t.RegionID)
+			t.AddRegion(t.RegionID)
 			log.Printf("Settlement %d has been abandoned and tribe %d has been created", s.ID, t.ID)
 
 			// Rename the settlement.
 			s.Name += " (abandoned)"
+			s.RemoveRegion(s.ID)
 		}
 
 		// If we are large and wealthy enough, we will transform into a city.
@@ -55,22 +69,28 @@ func (m *Civ) tickSettlements(nDays int) {
 	}
 }
 
-func (m *Civ) tickDiplomacySettlement(s *Settlement, nDays int) {
-	// TODO: Implement diplomacy.
-}
 
 func (m *Civ) foundCity(s *Settlement) {
 	c := &City{
-		ID:         s.ID,
-		Name:       s.Name,
-		Population: s.Population,
-		Culture:    s.Culture,
-		Founded:    m.Geo.Calendar.GetYear(),
-		Storage:    s.Storage,
+		BaseEntity: BaseEntity{
+			ID:              s.ID,
+			Name:            s.Name,
+			Population:      s.Population,
+			Culture:         s.Culture,
+			Type:            civ.ObjectTypeCity,
+			Storage:         s.Storage,
+			GoverningPeople: newGoverningPeople(),
+			Infrastructure:    s.Infrastructure,
+			ConstructionQueue: s.ConstructionQueue,
+			Military:          s.Military,
+		},
+		Founded: m.Geo.Calendar.GetYear(),
 	}
 	m.Cities.PlaceObjectAt(c, c.ID)
+	c.AddRegion(c.ID)
 	log.Printf("Settlement %d has become a city", s.ID)
 
 	// Remove the settlement.
 	m.Settlements.RemoveObject(s)
+	s.RemoveRegion(s.ID)
 }

@@ -1,43 +1,20 @@
 package civ2
 
 import (
-	"math/rand"
-
 	"github.com/Flokey82/genworldvoronoi/civ"
 )
 
 // City represents a city in the world.
 type City struct {
-	ID            int      // Region where the city is located
-	Population    int      // Current population of the city
-	MaxPopulation int      // Maximum population of the city
-	Culture       *Culture // Culture of the city region
-	Name          string   // Name of the city
-	Founded       int64    // Year when the city was founded
-	*Storage
-}
-
-// GetID returns the ID of the city.
-func (c City) GetID() int {
-	return c.ID
-}
-
-// Ref returns the object reference of the city.
-func (c *City) Ref() civ.ObjectReference {
-	return civ.ObjectReference{
-		ID:   c.ID,
-		Type: civ.ObjectTypeCity,
-	}
+	BaseEntity
+	MaxPopulation int   // Maximum population of the city
+	Founded       int64 // Year when the city was founded
 }
 
 // Grow the population.
 func (c *City) Grow(nDays int) {
 	const growthRate = 0.005 // 0.5% growth per year.
-	if growth := calcPopulationGrowth(c.Population, growthRate, nDays); growth > 1 {
-		c.Population += int(growth)
-	} else if rand.Float64() < growth {
-		c.Population++
-	}
+	c.BaseEntity.Grow(nDays, growthRate)
 }
 
 func (m *Civ) GetCity(id int) *City {
@@ -47,17 +24,20 @@ func (m *Civ) GetCity(id int) *City {
 func cityToTribe(c *City, n int) *Tribe {
 	n = min(n, c.Population)
 	t := &Tribe{
-		ID:         nextTribeID(),
-		RegionID:   c.ID,
-		Population: n,
-		Culture:    c.Culture,
+		BaseEntity: BaseEntity{
+			ID:              nextTribeID(),
+			Population:      n,
+			Culture:         c.Culture,
+			Type:            civ.ObjectTypeTribe,
+			Storage:         c.Storage,
+			GoverningPeople: c.GoverningPeople,
+			Infrastructure:    NewInfrastructure(),
+			ConstructionQueue: NewConstructionQueue(),
+			Military:          c.Military,
+		},
+		RegionID: c.ID,
 	}
-
-	if n == c.Population {
-		t.Storage = c.Storage
-	} else {
-		t.Storage = NewStorage()
-	}
+	t.Storage = NewStorage()
 
 	// Abandon the city.
 	c.Population = max(0, c.Population-n)
@@ -76,4 +56,19 @@ func (m *Civ) getCitiesWithin(r int, distance float64) []*City {
 		}
 	}
 	return cities
+}
+
+
+func (c *City) compare(m *Civ, other *City) float64 {
+	if c == nil || other == nil {
+		return -1.0
+	}
+	if c == other {
+		return 1.0
+	}
+
+	cultureValue := c.Culture.compare(other.Culture)
+	religionValue := m.GetReligion(c.ID).compare(m.GetReligion(other.ID))
+
+	return (cultureValue + religionValue) / 2
 }

@@ -34,6 +34,7 @@ const (
 	ObjectTypeFaction
 	ObjectTypeLeadership
 	ObjectTypeArtifact
+	ObjectTypeSettlement
 )
 
 type ObjectReference struct {

@@ -44,3 +44,19 @@ func (m *Civ) GetCulture(id int) *Culture {
 	}
 	return nil
 }
+
+func (c *Culture) compare(other *Culture) float64 {
+	if c == nil || other == nil {
+		return -1.0
+	}
+	if c == other {
+		return 1.0
+	}
+
+	value := 0.0
+	if c.Type == other.Type {
+		value += 0.5
+	}
+	// TODO: Weight by skills compatibility
+	return value
+}

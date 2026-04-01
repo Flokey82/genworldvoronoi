@@ -79,6 +79,116 @@ func unshiftIndexPath(path []int, p int) []int {
 	return res
 }
 
+// MergeDirectedSegments takes a slice of directed edges (from -> to) and returns
+// ordered paths following the direction of flow (upstream -> downstream).
+// It preserves edge direction, starts traces at nodes with no incoming edges,
+// and handles remaining edges (including cycles) as best-effort paths.
+func MergeDirectedSegments(segs [][2]int) [][]int {
+	// Build outgoing adjacency and incoming counts.
+	out := make(map[int][]int)
+	inCnt := make(map[int]int)
+	nodes := make(map[int]bool)
+	for _, s := range segs {
+		a, b := s[0], s[1]
+		out[a] = append(out[a], b)
+		inCnt[b]++
+		nodes[a] = true
+		nodes[b] = true
+	}
+
+	// Track visited directed edges to avoid duplicating paths.
+	visited := make(map[int]map[int]bool)
+	markVisited := func(a, b int) {
+		if visited[a] == nil {
+			visited[a] = make(map[int]bool)
+		}
+		visited[a][b] = true
+	}
+	isVisited := func(a, b int) bool {
+		if visited[a] == nil {
+			return false
+		}
+		return visited[a][b]
+	}
+
+	var paths [][]int
+
+	// 1) Start traces at nodes with no incoming edges (true sources).
+	for n := range nodes {
+		if inCnt[n] != 0 {
+			continue
+		}
+		outs := out[n]
+		if len(outs) == 0 {
+			continue
+		}
+		for _, nb := range outs {
+			if isVisited(n, nb) {
+				continue
+			}
+			path := []int{n, nb}
+			markVisited(n, nb)
+			cur := nb
+			seen := map[int]bool{n: true, nb: true}
+			for {
+				nbs := out[cur]
+				if len(nbs) != 1 {
+					break
+				}
+				nx := nbs[0]
+				if isVisited(cur, nx) {
+					break
+				}
+				if seen[nx] {
+					// cycle detected; append and stop
+					path = append(path, nx)
+					markVisited(cur, nx)
+					break
+				}
+				path = append(path, nx)
+				markVisited(cur, nx)
+				seen[nx] = true
+				cur = nx
+			}
+			paths = append(paths, path)
+		}
+	}
+
+	// 2) Handle any remaining unvisited edges (cycles, components without sources).
+	for _, s := range segs {
+		a, b := s[0], s[1]
+		if isVisited(a, b) {
+			continue
+		}
+		path := []int{a, b}
+		markVisited(a, b)
+		cur := b
+		seen := map[int]bool{a: true, b: true}
+		for {
+			nbs := out[cur]
+			if len(nbs) != 1 {
+				break
+			}
+			nx := nbs[0]
+			if isVisited(cur, nx) {
+				break
+			}
+			if seen[nx] {
+				path = append(path, nx)
+				markVisited(cur, nx)
+				break
+			}
+			path = append(path, nx)
+			markVisited(cur, nx)
+			seen[nx] = true
+			cur = nx
+		}
+		paths = append(paths, path)
+	}
+
+	return paths
+}
+
 // ConvToMap converts a slice of ints into a map of ints to bools.
 func ConvToMap(in []int) map[int]bool {
 	res := make(map[int]bool)

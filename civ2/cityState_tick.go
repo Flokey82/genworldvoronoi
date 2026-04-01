@@ -3,6 +3,8 @@ package civ2
 import (
 	"log"
 	"sort"
+
+	"github.com/Flokey82/genworldvoronoi/civ"
 )
 
 func (m *Civ) tickCityStates(nDays int) {
@@ -14,6 +16,15 @@ func (m *Civ) tickCityStates(nDays int) {
 		}
 
 		log.Printf("City state %d", cs.ID)
+		
+		// Centralized economic tick.
+		m.tickEconomyBase(cs, nDays)
+
+		// Tick diplomatic relations.
+		m.tickDiplomacyBase(cs, nDays)
+
+		// Tick leadership.
+		m.tickLeadership(cs, nDays)
 
 		// We might expand or contract our influence.
 		m.expandCityState(cs, rNbs)
@@ -26,24 +37,16 @@ func (m *Civ) tickCityStates(nDays int) {
 }
 
 func (m *Civ) expandCityState(cs *CityState, rNbs []int) {
-	// We might expand or contract our influence.
-	// Look at surrounding settlements and cities that would be willing to join us
-	// Check what regions we control.
-	var controlledRegions []int
-	seenRegions := make(map[int]bool)
-	for r, id := range m.CityStates.Regions {
-		if id == cs.ID {
-			// We control this region, so we check the neighbours if we can expand.
-			controlledRegions = append(controlledRegions, r)
-			seenRegions[r] = true
-		}
-	}
-
 	// Check the neighbours of the controlled regions.
 	var numNewRegions int
 	var limitExpansionToSettled bool
 	var possibleDestinations []int
-	for _, r := range controlledRegions {
+	seenRegions := make(map[int]bool)
+	for _, r := range cs.Regions {
+		seenRegions[r] = true
+	}
+
+	for _, r := range cs.Regions {
 		for _, nb := range m.R_circulate_r(rNbs, r) {
 			if m.Elevation.Values[nb] < 0 {
 				// We cannot expand to water.
@@ -61,7 +64,6 @@ func (m *Civ) expandCityState(cs *CityState, rNbs []int) {
 			}
 			// We found a settlement or a city, so we can expand.
 			// Check if the settlement is willing to join us.
-			seenRegions[nb] = true
 			possibleDestinations = append(possibleDestinations, nb)
 			numNewRegions++
 		}
@@ -71,7 +73,7 @@ func (m *Civ) expandCityState(cs *CityState, rNbs []int) {
 	}
 	const limitExpansion = 5
 	// Sort candidates by distance.
-	distances := make([]float64, m.NumRegions)
+	distances := make(map[int]float64)
 	for _, r := range possibleDestinations {
 		distances[r] = m.GetDistance(cs.Capital.ID, r)
 	}
@@ -84,24 +86,31 @@ func (m *Civ) expandCityState(cs *CityState, rNbs []int) {
 			break
 		}
 		m.CityStates.PlaceObjectAt(cs, r)
+		cs.AddRegion(r)
 	}
 }
 
 func (m *Civ) foundEmpire(cs *CityState) {
 	e := &Empire{
-		ID:      cs.ID,
+		BaseEntity: BaseEntity{
+			ID:                cs.ID,
+			Name:              "Empire of " + cs.Capital.Name,
+			Culture:           cs.Culture,
+			Type:              civ.ObjectTypeEmpire,
+			Storage:           NewStorage(),
+			GoverningPeople:   newGoverningPeople(),
+			Infrastructure:    NewInfrastructure(),
+			ConstructionQueue: NewConstructionQueue(),
+			Military:          cs.Military,
+		},
 		Capital: cs.Capital,
-		Culture: cs.Culture,
 		Founded: m.Geo.Calendar.GetYear(),
 	}
 
-	// Place the empire in the world.
+	// Place the empire in the world and sync regions.
 	m.Empires.PlaceObjectAt(e, e.ID)
-
-	// The empire will control the regions of the city state.
-	for r, id := range m.CityStates.Regions {
-		if id == cs.ID {
-			m.Empires.PlaceObjectAt(e, r)
-		}
+	for _, r := range cs.Regions {
+		m.Empires.PlaceObjectAt(e, r)
+		e.AddRegion(r)
 	}
 }

@@ -1,41 +1,35 @@
 package civ2
 
 import (
-	"math/rand"
+	"github.com/Flokey82/genworldvoronoi/civ"
 )
 
 type Settlement struct {
-	ID         int
-	Name       string
-	Population int
-	Culture    *Culture
-	*Storage
-}
-
-// GetID returns the ID of the settlement.
-func (s Settlement) GetID() int {
-	return s.ID
+	BaseEntity
 }
 
 // Grow the population.
 func (s *Settlement) Grow(nDays int) {
 	const growthRate = 0.005 // 0.5% growth per year.
-	if growth := calcPopulationGrowth(s.Population, growthRate, nDays); growth > 1 {
-		s.Population += int(growth)
-	} else if rand.Float64() < growth {
-		s.Population++
-	}
+	s.BaseEntity.Grow(nDays, growthRate)
 }
 
 // ToTribe causes the settlement to be (partially) abandoned and a new tribe to be created.
 func (s *Settlement) ToTribe(n int) *Tribe {
 	n = min(n, s.Population)
 	t := &Tribe{
-		ID:         nextTribeID(),
-		RegionID:   s.ID,
-		Population: n,
-		Culture:    s.Culture, // Switch to nomadic?
-		Storage:    s.Storage, // TODO: We can't take everything with us.
+		BaseEntity: BaseEntity{
+			ID:              nextTribeID(),
+			Population:      n,
+			Culture:         s.Culture, // Switch to nomadic?
+			Type:            civ.ObjectTypeTribe,
+			Storage:         s.Storage, // TODO: We can't take everything with us.
+			GoverningPeople: s.GoverningPeople,
+			Infrastructure:    NewInfrastructure(),
+			ConstructionQueue: NewConstructionQueue(),
+			Military:          s.Military,
+		},
+		RegionID: s.ID,
 	}
 
 	// Abandon the settlement.
@@ -57,3 +51,4 @@ func (m *Civ) getSettlementsWithin(regionID int, distance float64) []*Settlement
 	}
 	return settlements
 }
+

@@ -1,104 +1,99 @@
-# genworldvoronoi: Graph based planetary map generator
+# genworldvoronoi: Graph-based Planetary Map Generator
 
-It simulates (somewhat) global winds and attempts to calculate precipitation and temperature for more intricate simulations in the future.
-It features SVG, PNG, and Wavefront OBJ output.
+`genworldvoronoi` is a sophisticated world generation engine written in Go. It uses Voronoi diagrams and graph-based simulations to create detailed planetary maps with realistic geography, climate, and civilization history.
 
-This is based on https://www.redblobgames.com/x/1843-planet-generation/ and a port of https://github.com/redblobgames/1843-planet-generation to Go. 
+This project is inspired by [Red Blob Games' planet generation](https://www.redblobgames.com/x/1843-planet-generation/), [SimpleHydrology](https://github.com/weigert/SimpleHydrology), and [mewo2's terrain](https://github.com/mewo2/terrain).
 
-I draw further inspiration from various other projects such as https://github.com/weigert/SimpleHydrology and https://github.com/mewo2/terrain
+## 🌍 Features
 
-... if you haven't noticed yet, this is a placeholder for when I feel less lazy and add more information :D
+### 🏔️ Geology & Topography
+- **Tectonic Plates**: Simulates plate movement, subduction, and mountain building.
+- **Erosion**: Implements both hydraulic and thermal erosion for realistic terrain carving.
+- **Hydrology**: Realistic river systems, lakes, and drainage basins.
+- **Volcanism**: Placement of volcanoes based on tectonic activity.
 
-# Dev notes
+### 🌤️ Climate & Atmosphere
+- **Global Winds**: Simulates prevailing winds and their effect on moisture distribution.
+- **Temperature & Precipitation**: Calculates seasonal variations based on latitude, elevation, and distance from the ocean.
+- **Biomes**: Sophisticated biome determination based on Whittaker diagrams (Rainforest, Tundra, Desert, etc.).
 
-This thing needs a use, and I think the major drawback right now is the time that it takes to generate a reasonably complex planet with enough detail to be interesting. So here are tne following important points that need to be addressed:
+### 👥 Civilization Simulation (Civ2)
+The `civ2` package provides a deep simulation of historical development:
+- **Settlements**: Founding, growth, and abandonment of cities and villages.
+- **Societies**: Tribes evolving into city-states and powerful empires.
+- **Diplomacy & War**: Dynamic relations between entities, including war declarations and peace treaties.
+- **Trade & Economy**: Resource production, harvesting, and trade routes.
+- **History Logging**: Comprehensive logging of world events to generate a "written history" of the world.
 
-* Generation speed
-  * Use concurrency where sensible
-  * Introduce a cache for fitness functions
-* Export / import of generated data
-  * Separate generation steps into
-    * Geology, Climate
-    * Biology, Species, Survivability
-    * Civilization, Cities, Empires
-  * Binary format for writing to / reading from disk
-* Simulation
-  * Seasons, Weather, Disasters
-  * Biology, Species, Migrations
-  * Population Growth, Migrations
-  * Wars, Diplomacy
-  * Founding, Development, Abandonment, Fall of Cities, Empires, Religions
-  * Written History, Legends
-  
-## TODO
+### 📦 Export & Visualization
+- **Formats**: PNG, SVG, Wavefront OBJ (3D), WebP, and GeoJSON.
+- **Interactive Apps**: Includes an Ebiten-based map viewer and a Leaflet-based tile server.
 
-* Use cached temperature instead of getRegTemperature every single time
-* Climate
-  * Add desert oases that are fed from underground aquifers. Look at these examples: https://www.google.com/maps/d/viewer?mid=1BvY10l3yzWt48IwCXqDcyeuawpA&hl=en&ll=26.715853962142784%2C28.408963168787885&z=6
-  * Climate seems too wet at times (too many wetlands?)
-  * Seasonal forests should not be at the equator, where there are no seasons.
-* Elevation
-  * Move away from linear interpolation
-  * Add improved noise
-* Winds
-  * Push temperature around [DONE]
-  * Push dry air around, not just humid air
-  * Re-evaluate rainfall and moisture distribution
-* Civilization
-  * Industry and trade
-    * Introduce industry
-    * Introduce production / harvesting of goods
-      * Basic resources [DONE]
-      * Goods
-    * Improve trade routes
-      * Allow merchants to travel between cities
-      * Allow for trade agreements
-  * Cities
-    * Better city fitness functions
-    * Separate world generation better from everything else
-    * Assign goods and resources to cities (for trade)
-  * Empires
-    * Introduce empires with capitals [DONE]
-    * Provide simpler means to query information on an empire
-  * Cultures
-    * Add fitness function for "natural" population density estimates
-* Resources
-  * Improve resource distribution
-    * Fitness functions
-    * Amount / quality / discoverability?
-  * Add more resource types
-* Species
-  * Allow for overlapping populations
-  * Allow for species migration
+---
 
-Here some old pictures what it does...
+## 🚀 Getting Started
 
-## SVG export with rivers, capital city placement and stuff.
-![alt text](https://raw.githubusercontent.com/Flokey82/genworldvoronoi/master/images/svg.png "Screenshot of SVG!")
+### Prerequisites
+- [Go 1.21+](https://golang.org/dl/)
+- For the interactive viewer: [Ebiten dependencies](https://ebitengine.org/en/documents/install.html) (C compiler and graphics drivers).
 
-## Leaflet server (and sad flavor text).
-![alt text](https://raw.githubusercontent.com/Flokey82/genworldvoronoi/master/images/leaflet.png "Flavortext Maps!")
+### Installation
+```bash
+git clone https://github.com/Flokey82/genworldvoronoi.git
+cd genworldvoronoi
+go mod download
+```
 
-## Poor man's relief map.
-![alt text](https://raw.githubusercontent.com/Flokey82/genworldvoronoi/master/images/relief.png "Relief Maps!")
+---
 
-## Slightly wealthier man's relief map.
-![alt text](https://raw.githubusercontent.com/Flokey82/genworldvoronoi/master/images/relief_2.png "Relief Maps!")
+## 🛠️ Running the Tools
 
-## Does political maps.
-![alt text](https://raw.githubusercontent.com/Flokey82/genworldvoronoi/master/images/political.png "Political Maps!")
+### 1. Map Exporter (CLI)
+Generates a world and exports it to several formats (test.png, test.svg, test.obj, etc.).
+```bash
+go run cmd/runner.go
+```
 
-## Simulates climate (-ish)
-![alt text](https://raw.githubusercontent.com/Flokey82/genworldvoronoi/master/images/climate.png "Screenshot of Biomes!")
+### 2. Interactive Map Viewer
+A real-time interactive viewer with different visualization modes.
+```bash
+go run cmd2/runner.go
+```
 
-## Simulates seasons (-ish)
-![alt text](https://raw.githubusercontent.com/Flokey82/genworldvoronoi/master/images/seasons.webp "Screenshot of Seasons!")
+### 3. Leaflet Tile Server
+Serves the generated map as a web-based tile service (accessible at `http://localhost:3333`).
+```bash
+cd cmd/server
+go run .
+```
+*Note: Requires `static` and `static_cesium` directories to be present.*
 
-## Exports to Wavefront OBJ
-![alt text](https://raw.githubusercontent.com/Flokey82/genworldvoronoi/master/images/obj.png "Screenshot of OBJ Export in Blender!")
+---
 
-## Webglearth sample
-![alt text](https://raw.githubusercontent.com/Flokey82/genworldvoronoi/master/images/webglobe.png "Screenshot of Webglearth!")
+## 🖼️ Screenshots
 
-## Cesium sample
-![alt text](https://raw.githubusercontent.com/Flokey82/genworldvoronoi/master/images/cesium.png "Screenshot of Cesium!")
+### SVG Export
+![SVG Export](https://raw.githubusercontent.com/Flokey82/genworldvoronoi/master/images/svg.png)
+
+### Political Maps
+![Political Maps](https://raw.githubusercontent.com/Flokey82/genworldvoronoi/master/images/political.png)
+
+### Biomes & Climate
+![Biomes](https://raw.githubusercontent.com/Flokey82/genworldvoronoi/master/images/climate.png)
+
+### 3D Export (Blender)
+![OBJ Export](https://raw.githubusercontent.com/Flokey82/genworldvoronoi/master/images/obj.png)
+
+---
+
+## 📜 Dev Notes & TODO
+Many of the original goals have been implemented in the `civ2` package, including:
+- [x] Concurrency improvements
+- [x] Separation of Geology/Climate/Biology/Civilization layers
+- [x] Advanced Diplomacy and War mechanics
+- [x] Basic Trade and Resource systems
+
+Current focus areas:
+- Improving performance for high-resolution maps (400k+ points).
+- Enhancing seasonal variation logic.
+- Refining trade route optimization.

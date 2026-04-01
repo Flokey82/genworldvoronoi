@@ -45,7 +45,29 @@ func LatLonFromVec3(position vectors.Vec3, sphereRadius float64) (float64, float
 // account for the fact that the distance between degrees of longitude
 // decreases as the latitude increases.
 func AddVecToLatLong(lat, lon float64, vec [2]float64) (float64, float64) {
-	return lat + vec[1], lon + vec[0]/math.Cos(DegToRad(lat+vec[1]))
+	return WrapLatLon(lat+vec[1], lon+vec[0]/math.Cos(DegToRad(lat+vec[1])))
+}
+
+// WrapLatLon ensures that latitude is within -90 to 90 degrees and longitude is within -180 to 180 degrees.
+func WrapLatLon(lat, lon float64) (float64, float64) {
+	// Wrap latitude to be within -90 to 90 degrees.
+	if lat > 90 {
+		lat = 180 - lat
+		lon += 180
+	} else if lat < -90 {
+		lat = -180 - lat
+		lon += 180
+	}
+
+	// Wrap longitude to be within -180 to 180 degrees.
+	for lon > 180 {
+		lon -= 360
+	}
+	for lon < -180 {
+		lon += 360
+	}
+
+	return lat, lon
 }
 
 // CalcVecFromLatLong calculates the vector between two lat/long pairs.
