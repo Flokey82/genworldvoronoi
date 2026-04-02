@@ -139,8 +139,8 @@ func (m *Civ) recalcCityStatesTerritoriesBounded() {
 	}
 }
 
-func (m *Civ) legacyExpandCityState(cs *CityState, rNbs []int) {
-	// Check the neighbours of the controlled regions.
+func (m *Civ) legacyExpandCityState(cs *CityState, rNbs []int) bool {
+	// ... logic
 	var numNewRegions int
 	var limitExpansionToSettled bool
 	var possibleDestinations []int
@@ -166,24 +166,24 @@ func (m *Civ) legacyExpandCityState(cs *CityState, rNbs []int) {
 				continue
 			}
 			// We found a settlement or a city, so we can expand.
-			// Check if the settlement is willing to join us.
 			possibleDestinations = append(possibleDestinations, nb)
 			numNewRegions++
 		}
 	}
-	if numNewRegions > 0 {
-		log.Printf("City state %d has expanded to %d new regions", cs.ID, numNewRegions)
+
+	if numNewRegions == 0 {
+		return false
 	}
+	
 	const limitExpansion = 5
-	// Sort candidates by distance.
 	distances := make(map[int]float64)
 	for _, r := range possibleDestinations {
 		distances[r] = m.GetDistance(cs.Capital.ID, r)
 	}
-	// Sort the possible destinations by distance.
 	sort.Slice(possibleDestinations, func(i, j int) bool {
 		return distances[possibleDestinations[i]] < distances[possibleDestinations[j]]
 	})
+
 	for i, r := range possibleDestinations {
 		if i >= limitExpansion {
 			break
@@ -191,6 +191,7 @@ func (m *Civ) legacyExpandCityState(cs *CityState, rNbs []int) {
 		m.CityStates.PlaceObjectAt(cs, r)
 		cs.AddRegion(r)
 	}
+	return true
 }
 
 func (m *Civ) foundEmpire(cs *CityState) {

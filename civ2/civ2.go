@@ -177,14 +177,26 @@ func (m *Civ) GenerateCivilization() {
 		}
 		m.expandCultures(seeds)
 
-		// Iteratively expand city states out to neighbors limit times
+		// Iteratively expand city states out to neighbors until blocked
 		rNbs := make([]int, 0, 10)
-		for _, cs := range m.CityStates.Objects {
-			m.legacyExpandCityState(cs, rNbs)
+		for {
+			expanded := false
+			for _, cs := range m.CityStates.Objects {
+				if m.legacyExpandCityState(cs, rNbs) {
+					expanded = true
+				}
+			}
+			if !expanded {
+				break
+			}
 		}
 
 		// Force Empire expansion out via sweeping up City States
 		m.legacyExpandEmpires()
+
+		// Lastly, flood-fill religions since their bounds depend on Culture/State borders
+		m.ExpandReligions()
+
 		log.Printf("Legacy Seeding Mode: Flood-fill completed.")
 	}
 
