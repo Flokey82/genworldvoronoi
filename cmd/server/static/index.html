@@ -1,466 +1,466 @@
-<html>
-
+<!DOCTYPE html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GenWorldVoronoi | Explorer</title>
+  
+  <!-- Leaflet & Vendor Styles -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.3/leaflet.css" />
   <link rel="stylesheet" href="vendor/leaflet-measure/leaflet-measure.css" />
-  <style>
-    html,
-    body,
-    #map {
-      width: 100%;
-      height: 100%;
-      padding: 0;
-      margin: 0;
-    }
-
-    #map {
-      width: 100%;
-      height: 100%;
-    }
-
-    div.text-labels {
-      font-size: 1em;
-      font-weight: bold;
-      color: #fff;
-      text-shadow: 0 0 3px #000;
-      width: auto;
-    }
-
-    div.text-labels.grey {
-      color: #ccc;
-      opacity: 0.5;
-    }
-
-    div.text-labels span {
-      white-space: nowrap;
-    }
-  </style>
+  
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="style.css" />
 </head>
-
 <body>
-  <div id="map"></div>
+  <div id="app">
+    <!-- Sidebar -->
+    <aside id="sidebar" class="glass-panel">
+      <header>
+        <h1><i data-lucide="globe"></i> GenWorld</h1>
+      </header>
+      
+      <!-- Map Display Mode -->
+      <div class="sidebar-section">
+        <h2>Map Mode</h2>
+        <select id="displayModeSelect" class="styled-select">
+          <!-- Options populated by JS -->
+        </select>
+      </div>
+      
+      <!-- Layer Toggles -->
+      <div class="sidebar-section">
+        <h2>Layers</h2>
+        <div class="control-grid">
+          <button id="btn-rivers" class="btn-toggle" title="Toggle Rivers">
+            <i data-lucide="waves"></i> Rivers
+          </button>
+          <button id="btn-trade" class="btn-toggle" title="Toggle Trade Routes">
+            <i data-lucide="route"></i> Trade
+          </button>
+          <button id="btn-shadows" class="btn-toggle" title="Toggle Shadows">
+            <i data-lucide="layers"></i> Shadows
+          </button>
+          <button id="btn-aspect" class="btn-toggle" title="Toggle Aspect Shading">
+            <i data-lucide="sun"></i> Aspect
+          </button>
+          <button id="btn-tribes" class="btn-toggle active" title="Toggle Tribes">
+            <i data-lucide="users"></i> Tribes
+          </button>
+        </div>
+        
+        <div class="sidebar-section" style="margin-top: 1rem;">
+          <h3>Borders</h3>
+          <select id="borderSelect" class="styled-select">
+            <!-- Options populated by JS -->
+          </select>
+        </div>
+
+        <div class="sidebar-section" style="margin-top: 1rem;">
+          <h3>Vectors</h3>
+          <select id="vectorSelect" class="styled-select">
+            <!-- Options populated by JS -->
+          </select>
+        </div>
+      </div>
+      
+      <!-- Simulation Controls -->
+      <div class="sidebar-section">
+        <h2>Simulation</h2>
+        <div class="simulation-controls">
+          <div class="control-grid">
+            <button id="btn-tick-year" class="btn-secondary">
+              <i data-lucide="calendar"></i> Year
+            </button>
+            <button id="btn-tick-century" class="btn-secondary">
+              <i data-lucide="fast-forward"></i> Century
+            </button>
+          </div>
+          <button id="btn-play-pause" class="btn-play">
+            <i data-lucide="play" id="play-icon"></i> <span id="play-text">Play Simulation</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Time of Day -->
+      <div class="sidebar-section">
+        <h2>Time of Day</h2>
+        <div style="display: flex; align-items: center; gap: 1rem;">
+          <input type="range" id="timeOfDayRange" min="0" max="23.99" step="0.1" value="12" style="flex-grow: 1;">
+          <span id="timeOfDayLabel" style="min-width: 40px; font-variant-numeric: tabular-nums;">12:00</span>
+        </div>
+      </div>
+      
+      <!-- Legend -->
+      <div id="legend-section" class="sidebar-section">
+        <h2>Legend</h2>
+        <div id="legend-container" class="legend-grid">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+      
+      <!-- Help -->
+      <div class="sidebar-section">
+        <h2>Help</h2>
+        <div style="font-size: 0.75rem; color: var(--text-muted); line-height: 1.5;">
+          <p>• Click on cities to see details.</p>
+          <p>• Use the measure tool (top left) for distances.</p>
+          <p>• Shortcuts: [D] Display Mode, [B] Borders, [W] Vectors, [R] Rivers, [S] Shadows, [A] Aspect.</p>
+        </div>
+      </div>
+    </aside>
+    
+    <!-- Map Container -->
+    <main id="map"></main>
+    
+    <!-- Info Panel -->
+    <section id="info-panel" class="glass-panel">
+      <div class="info-header">
+        <h3 id="info-title">City Name</h3>
+        <button id="btn-close-info" class="btn-close">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+      <div id="info-body" class="info-content">
+        <!-- Populated by JS -->
+      </div>
+    </section>
+  </div>
+
+  <!-- Scripts -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.3/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-hash/0.2.1/leaflet-hash.min.js"></script>
   <script src="vendor/leaflet-measure/leaflet-measure.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
   <script type="text/javascript">
-
-    var displayMode = 0;
-    var displayModeMax = 24;
-    var displayModeNames = [
-      'Terrain',
-      'OceanPressure',
-      'Moisture',
-      'Rainfall',
-      'Flux',
-      'PlateCompression',
-      'Earthquakes',
-      'Volcanism',
-      'Rockslide',
-      'Flood',
-      'ErosionA',
-      'ErosionB',
-      'Steepness',
-      'Slope',
-      'CityStates',
-      'Empires',
-      'Cultures',
-      'Religions',
-      'Species',
-      'Plates',
-      'Elevation',
-      'Temperature',
-      'OceanTemp',
-      'Insolation',
+    // --- Constants & State ---
+    const displayModeNames = [
+      'Terrain', 'OceanPressure', 'Moisture', 'Rainfall', 'Flux',
+      'PlateCompression', 'Earthquakes', 'Volcanism', 'Rockslide', 'Flood',
+      'ErosionA', 'ErosionB', 'Steepness', 'Slope', 'CityStates',
+      'Empires', 'Cultures', 'Religions', 'Species', 'Plates',
+      'Elevation', 'Temperature', 'OceanTemp', 'Insolation', 'Population'
     ];
-    var drawVectorMode = 0;
-    var drawVectorModeMax = 4;
-    var drawVectorModeNames = [
-      'None',
-      'Wind',
-      'LocalWind',
-      'Currents',
-    ];
-    var drawRivers = false;
-    var drawTradeRoutes = false;
-    var drawLakes = false;
-    var drawShadows = false;
-    var drawAspectShadows = false;
+    
+    const drawVectorModeNames = ['None', 'Wind', 'LocalWind', 'Currents'];
+    const displayModeBordersNames = ['Empires', 'CityStates', 'Cultures', 'Plates', 'Biomes', 'None'];
 
-    var displayModeBorders = 5;
-    var displayModeBordersMax = 6;
-    var displayModeBordersNames = [
-      'Empires',
-      'CityStates',
-      'Cultures',
-      'Plates',
-      'Biomes',
-      'None',
+    let state = {
+      displayMode: 0,
+      drawVectorMode: 0,
+      drawRivers: false,
+      drawTradeRoutes: false,
+      drawLakes: false,
+      drawShadows: false,
+      drawAspectShadows: false,
+      drawTribes: true,
+      displayModeBorders: 5,
+      timeOfDay: 12,
+      isSimulating: false,
+      simInterval: null
+    };
+
+    // --- Biome Legend Data ---
+    const biomeLegend = [
+      { name: 'Tropical Rainforest', color: '#004d00' },
+      { name: 'Tropical Savannah', color: '#77dd77' },
+      { name: 'Subtropical Desert', color: '#e2725b' },
+      { name: 'Temperate Rainforest', color: '#316650' },
+      { name: 'Temperate Forest', color: '#448c48' },
+      { name: 'Shrubland', color: '#b2ac88' },
+      { name: 'Temperate Grassland', color: '#96ad73' },
+      { name: 'Boreal Forest', color: '#006262' },
+      { name: 'Tundra', color: '#99badd' },
+      { name: 'Ice', color: '#ffffff' }
     ];
 
-    var map = L.map('map', {
+    // --- Initialization ---
+    const map = L.map('map', {
       crs: L.CRS.EPSG3857,
+      zoomControl: true
     }).setView([0, 0], 1);
 
     new L.Hash(map);
 
-    var tl = L.tileLayer('tiles/{z}/{x}/{y}?d={d}&vectors={vectors}&rivers={rivers}&trade={trade}&lakes={lakes}&shadows={shadows}&aspectshadows={aspectshadows}', {
-      attribution: '&copy;',
-      maxZoom: 20,
-      minZoom: 1,
-      tms: true,
-      d: function () {
-        return displayMode;
-      },
-      vectors: function () {
-        return drawVectorMode;
-      },
-      rivers: function () {
-        return drawRivers;
-      },
-      trade: function () {
-        return drawTradeRoutes;
-      },
-      lakes: function () {
-        return drawLakes;
-      },
-      shadows: function () {
-        return drawShadows;
-      },
-      aspectshadows: function () {
-        return drawAspectShadows;
-      },
+    const tl = L.tileLayer('tiles/{z}/{x}/{y}?d={d}&vectors={vectors}&rivers={rivers}&trade={trade}&lakes={lakes}&shadows={shadows}&aspectshadows={aspectshadows}', {
+      attribution: '&copy; GenWorld',
+      maxZoom: 20, minZoom: 1, tms: true,
+      d: () => state.displayMode,
+      vectors: () => state.drawVectorMode,
+      rivers: () => state.drawRivers,
+      trade: () => state.drawTradeRoutes,
+      lakes: () => state.drawLakes,
+      shadows: () => state.drawShadows,
+      aspectshadows: () => state.drawAspectShadows
     }).addTo(map);
 
+    const geojsonLayer = L.geoJSON().addTo(map);
 
-    var layerGroup = L.layerGroup().addTo(map);
-
-    var geojsonLayer = L.geoJSON().addTo(map);
-    geojsonLayer.addTo(map);
-
-    var loadGeoJSON = function (url, options) {
-      var xhr = new XMLHttpRequest();
-      xhr.open('GET', url);
-      xhr.onload = function () {
-        if (xhr.status === 200) {
-          var geojson = JSON.parse(xhr.responseText);
-          L.geoJSON(geojson, options).addTo(geojsonLayer);
-        } else {
-          console.log('Error: ' + xhr.status);
-        }
-      };
-      xhr.send();
-    };
-
-    // Load the geojson layer when we load a tile
-    function reloadJSONfunction() {
-      // First clear the geojson layer
-      geojsonLayer.clearLayers();
-      var bounds = map.getBounds();
-      var zoom = map.getZoom();
-      var params = zoom + '/' + bounds.getNorth() + '/' + bounds.getWest() + '/' + bounds.getSouth() + '/' + bounds.getEast();
-
-      // Load city markers.
-      loadGeoJSON('geojson_cities/' + params, {
-        onEachFeature: function (feature, layer) {
-          var prop = feature.properties;
-          layer.bindPopup(
-            '<span style="font-size:8px;">' +
-            '<b>' + prop.name + '</b> (' + prop.type + ')<br/>' +
-            (prop.citystate ? 'Citystate: ' + prop.citystate + '<br/>' : '') +
-            (prop.empire ? 'Empire: ' + prop.empire + '<br/>' : '') +
-            '<p><b>' + prop.flavortext + '</b></p>' +
-            '<p>' +
-            'Population: ' + prop.population + ' / ' + prop.maxpop +
-            ' (max ' + prop.maxpoplimit + ' growth ' + (prop.popgrowth ? prop.popgrowth.toFixed(3) : 'N/A') + ')<br/>' +
-            'Settled: ' + prop.settled + 'yrs ago<br/>' +
-            'Culture: ' + prop.culture + '<br/>' +
-            (prop.religion ? 'Religion: ' + prop.religion + '<br/>' : '') +
-            (prop.deity ? 'Deity: ' + prop.deity + '<br/>' : '') +
-            'Biome: ' + prop.biome + '<br/>' +
-            'Coords: ' + prop.coordinates + '<br/>' +
-            'Attractiveness: ' + (prop.attractiveness ? prop.attractiveness.toFixed(3) : 'N/A') + '<br/>' +
-            'Economic: ' + (prop.economic ? prop.economic.toFixed(3) : 'N/A') + ' / ' +
-            'Agriculture: ' + (prop.agriculture ? prop.agriculture.toFixed(3) : 'N/A') + ' / ' +
-            'Trade: ' + (prop.trade ? prop.trade.toFixed(3) : 'N/A') + ' / ' +
-            'Resources: ' + (prop.resources ? prop.resources.toFixed(3) : 'N/A') + '<br/>' +
-            'Tradepartners: ' + prop.tradepartners + ' (Radius: ' + (prop.radius ? prop.radius.toFixed(3) : 'N/A') + 'km)<br/>' +
-            'Features: ' + prop.features + '<br/>' +
-            'Storage: ' + prop.storage + '<br/>' +
-            'Species: ' + prop.species + '<br/>' +
-            '</p>' +
-            '<p>' +
-            '<b>Resources:</b><br/>' +
-            '<span style="font-size:7px;">' + (prop.reslist || []).join('<br/>') + '</span>' +
-            '</p>' +
-            '<p>' +
-            '<b>History:</b> (last 10)<br/>' +
-            '<span style="font-size:7px;">' + (prop.history || []).join('<br/>') + '</span>' +
-            '</p></span>');
-        },
-        pointToLayer: function (feature, latlng) {
-          var prop = feature.properties;
-          return L.marker(latlng, {
-            icon: L.divIcon({
-              className: 'text-labels' + (prop.population > 0 ? '' : ' grey'),   // Set class for CSS styling
-              html: '<span>&#x2022;' + feature.properties.name + (prop.population > 0 ? '' : ' (ruins)') + '</span>'
-            }),
-            zIndexOffset: 1000     // Make appear above other map features
-          })
-        }
+    // --- UI population ---
+    function initUI() {
+      const modeSelect = document.getElementById('displayModeSelect');
+      displayModeNames.forEach((name, i) => {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.innerText = name;
+        modeSelect.appendChild(opt);
       });
 
-      // Load all borders.
-      loadGeoJSON('geojson_borders/' + params + '?d=' + displayModeBorders, {
-        style: function (feature) {
-          return {
-            color: 'black',
-            opacity: 0.5,
-          };
-        },
-        onEachFeature: function (feature, layer) {
-          layer.bindPopup('ID: ' + feature.id);
-        }
+      const borderSelect = document.getElementById('borderSelect');
+      displayModeBordersNames.forEach((name, i) => {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.innerText = name;
+        if (i === state.displayModeBorders) opt.selected = true;
+        borderSelect.appendChild(opt);
       });
-    };
-    map.on('moveend', reloadJSONfunction);
 
-    function newCustomControl(startLabel, tooltip, onClick) {
-      var control = L.Control.extend({
-        options: {
-          position: 'topleft'
-        },
-        onAdd: function (map) {
-          var container = L.DomUtil.create('div', 'leaflet-bar leaflet-control leaflet-control-custom');
-          container.style.backgroundColor = 'white';
-          container.style.userSelect = 'none';
-          container.tooltip = tooltip;
-
-          var link = document.createElement('a');
-          link.innerText = startLabel;
-          link.style.cursor = 'pointer';
-          link.tooltip = tooltip;
-
-          container.appendChild(link);
-          container.onclick = function () {
-            onClick(link);
-          };
-          return container;
-        },
+      const vectorSelect = document.getElementById('vectorSelect');
+      drawVectorModeNames.forEach((name, i) => {
+        const opt = document.createElement('option');
+        opt.value = i;
+        opt.innerText = name;
+        vectorSelect.appendChild(opt);
       });
-      return control;
+
+      populateLegend();
+      lucide.createIcons();
     }
 
-    // Add our custom control for cycling borders.
-    var borderControl = newCustomControl('B:' + displayModeBordersNames[displayModeBorders], 'Borders', function (link) {
-      // Loop though all display modes.
-      displayModeBorders = (displayModeBorders + 1) % displayModeBordersMax;
-      link.innerText = 'B:' + displayModeBordersNames[displayModeBorders];
+    function populateLegend() {
+      const container = document.getElementById('legend-container');
+      container.innerHTML = '';
+      biomeLegend.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'legend-item';
+        div.innerHTML = `<div class="legend-color" style="background: ${item.color}"></div><span>${item.name}</span>`;
+        container.appendChild(div);
+      });
+    }
+
+    // --- Handlers ---
+    function updateMap() {
       tl.redraw();
-      reloadJSONfunction();
-    });
+      reloadGeoJSON();
+    }
 
-    map.addControl(new borderControl());
+    function reloadGeoJSON() {
+      geojsonLayer.clearLayers();
+      const bounds = map.getBounds();
+      const zoom = map.getZoom();
+      const params = `${zoom}/${bounds.getNorth()}/${bounds.getWest()}/${bounds.getSouth()}/${bounds.getEast()}`;
 
-    // Add our custom control for cycling vectors.
-    var vectorControl = newCustomControl('W:' + drawVectorModeNames[drawVectorMode], 'Vectors', function (link) {
-      // Cycle vector display.
-      drawVectorMode = (drawVectorMode + 1) % drawVectorModeMax;
-      link.innerText = 'W:' + drawVectorModeNames[drawVectorMode];
-      tl.redraw();
-    });
-    map.addControl(new vectorControl());
+      // Cities & Tribes
+      fetch(`geojson_cities/${params}`)
+        .then(r => r.json())
+        .then(data => {
+          L.geoJSON(data, {
+            filter: (feature) => {
+              if (feature.properties.type === 'tribe') return state.drawTribes;
+              return true;
+            },
+            onEachFeature: (feature, layer) => {
+              layer.on('click', (e) => {
+                L.DomEvent.stopPropagation(e);
+                showInfoPanel(feature.properties);
+              });
+            },
+            pointToLayer: (feature, latlng) => {
+              const isTribe = feature.properties.type === 'tribe';
+              const label = isTribe ? `[T] ${feature.properties.name}` : feature.properties.name;
+              const color = isTribe ? '#f59e0b' : (feature.properties.population > 0 ? '#3b82f6' : '#94a3b8');
+              
+              return L.marker(latlng, {
+                icon: L.divIcon({
+                  className: 'text-labels' + (feature.properties.population > 0 || isTribe ? '' : ' grey'),
+                  html: `<span style="color: ${color}">&#x2022; ${label}</span>`
+                })
+              });
+            }
+          }).addTo(geojsonLayer);
+        });
 
-    // Add our custom control for toggling rivers.
-    var riverControl = newCustomControl('R:' + drawRivers, 'Rivers', function (link) {
-      // Toggle river display.
-      drawRivers = !drawRivers;
-      link.innerText = 'R:' + drawRivers;
+      // Borders
+      fetch(`geojson_borders/${params}?d=${state.displayModeBorders}`)
+        .then(r => r.json())
+        .then(data => {
+          L.geoJSON(data, {
+            style: { color: 'white', opacity: 0.3, weight: 1 }
+          }).addTo(geojsonLayer);
+        });
+    }
 
-      // Make bold if enabled.
-      if (drawRivers) {
-        link.style.fontWeight = 'bold';
+    function showInfoPanel(props) {
+      document.getElementById('info-title').innerText = props.name;
+      const body = document.getElementById('info-body');
+      
+      const isTribe = props.type === 'tribe';
+      
+      let html = `
+        <div class="info-row"><span class="info-label">Type:</span><span>${isTribe ? 'Nomadic Tribe' : props.type}</span></div>
+        <div class="info-row"><span class="info-label">Culture:</span><span>${props.culture}</span></div>
+        <div class="info-row"><span class="info-label">Population:</span><span>${props.population.toLocaleString()}</span></div>
+        <div class="info-row"><span class="info-label">Biome:</span><span>${props.biome}</span></div>
+      `;
+
+      if (isTribe) {
+        html += `
+          <div class="info-row"><span class="info-label">Behavior:</span><span>${props.aggressive ? 'Aggressive' : 'Peaceful'}</span></div>
+          <div class="info-row"><span class="info-label">Status:</span><span>${props.settling ? 'Settling' : 'Nomadic'}</span></div>
+        `;
       } else {
-        link.style.fontWeight = 'normal';
+        html += `
+          <div class="info-row"><span class="info-label">Settled:</span><span>${props.settled}y ago</span></div>
+          
+          <div class="info-section">
+            <h4>Economics</h4>
+            <div class="info-row"><span class="info-label">Agriculture:</span><span>${props.agriculture?.toFixed(2) || '0.00'}</span></div>
+            <div class="info-row"><span class="info-label">Trade:</span><span>${props.trade?.toFixed(2) || '0.00'}</span></div>
+            <div class="info-row"><span class="info-label">Resources:</span><span>${props.resources?.toFixed(2) || '0.00'}</span></div>
+          </div>
+          
+          <div class="info-section">
+            <h4>History</h4>
+            <div class="info-list">
+              ${(props.history || []).map(h => `<div>• ${h}</div>`).join('')}
+            </div>
+          </div>
+
+          <div class="info-section">
+            <h4>Resources Inventory</h4>
+            <div class="info-list">
+              ${(props.reslist || []).map(r => `<div>• ${r}</div>`).join('')}
+            </div>
+          </div>
+        `;
       }
-      tl.redraw();
-    });
-    map.addControl(new riverControl());
+      body.innerHTML = html;
+      document.getElementById('info-panel').classList.add('visible');
+    }
 
-    // Add our custom control for toggling trade routes.
-    var tradeControl = newCustomControl('T:' + drawTradeRoutes, 'Traderoutes', function (link) {
-      // Toggle trade display.
-      drawTradeRoutes = !drawTradeRoutes;
-      link.innerText = 'T:' + drawTradeRoutes;
-
-      // Make bold if enabled.
-      if (drawTradeRoutes) {
-        link.style.fontWeight = 'bold';
-      } else {
-        link.style.fontWeight = 'normal';
-      }
-      tl.redraw();
-    });
-    map.addControl(new tradeControl());
-
-    // Add our custom control for ticking a century.
-    var centuryControl = newCustomControl('C:0', 'Century', function (link) {
-      // Tick a century.
-      var xhr = new XMLHttpRequest();
-      xhr.open('GET', 'tick_century');
-      xhr.onload = function () {
-        if (xhr.status === 200) {
-          console.log('Success');
-          // Clear the tile cache.
-          tl._tileCache = {};
-          // Call the tile redraw function.
-          tl.redraw();
-          reloadJSONfunction();
-        } else {
-          console.log('Error: ' + xhr.status);
-        }
-      };
-      xhr.send();
-    });
-    map.addControl(new centuryControl());
-
-    // Add our custom control for toggling lakes.
-    /*
-    var lakeControl = newCustomControl('L:' + drawLakes, 'Lakes', function (link) {
-      // Toggle lake display.
-      drawLakes = !drawLakes;
-      link.innerText = 'L:' + drawLakes;
-
-      // Make bold if enabled.
-      if (drawLakes) {
-        link.style.fontWeight = 'bold';
-      } else {
-        link.style.fontWeight = 'normal';
-      }
-      tl.redraw();
-    });
-    map.addControl(new lakeControl());
-    */
-
-    // Add our custom control for toggling shadows.
-    var shadowControl = newCustomControl('S:' + drawShadows, 'Shadows', function (link) {
-      // Toggle shadow display.
-      drawShadows = !drawShadows;
-      link.innerText = 'S:' + drawShadows;
-
-      // Make bold if enabled.
-      if (drawShadows) {
-        link.style.fontWeight = 'bold';
-      } else {
-        link.style.fontWeight = 'normal';
-      }
-      tl.redraw();
-    });
-    map.addControl(new shadowControl());
-
-    // Add our custom control for toggling aspect shadows.
-    var aspectshadowControl = newCustomControl('A:' + drawAspectShadows, 'Aspect Shadows', function (link) {
-      // Toggle trishadow display.
-      drawAspectShadows = !drawAspectShadows;
-      link.innerText = 'A:' + drawAspectShadows;
-
-      // Make bold if enabled.
-      if (drawAspectShadows) {
-        link.style.fontWeight = 'bold';
-      } else {
-        link.style.fontWeight = 'normal';
-      }
-      tl.redraw();
-    });
-    map.addControl(new aspectshadowControl());
-
-    L.Control.Measure.include({
-      // set icon on the capture marker
-      _setCaptureMarkerIcon: function () {
-        // disable autopan
-        this._captureMarker.options.autoPanOnFocus = false;
-
-        // default function
-        this._captureMarker.setIcon(
-          L.divIcon({
-            iconSize: this._map.getSize().multiplyBy(2)
-          })
-        );
-      },
-    });
-
-    var options = {
-      position: 'topleft',
-      unit: 'metric',
-      activeColor: '#ABE67E',
-      completedColor: '#C8F2BE',
-      primaryLengthUnit: 'kilometers',
-      secondaryLengthUnit: 'miles',
-      primaryAreaUnit: 'sqkilometers',
-      secondaryAreaUnit: 'sqmiles',
-      units: {
-        sqkilometers: {
-          factor: 1e-6, // Required. Factor to apply when converting to this unit. Length in meters or area in sq meters will be multiplied by this factor.
-          display: 'Sq. Kilometers', // Required. How to display in results, like.. "300 Meters (0.3 My New Unit)".
-          decimals: 2 // Number of decimals to round results when using this unit. `0` is the default value if not specified.
-        },
-      },
+    // --- Event Listeners ---
+    document.getElementById('displayModeSelect').onchange = (e) => {
+      state.displayMode = e.target.value;
+      updateMap();
     };
-    var measureControl = new L.Control.Measure(options);
-    measureControl.addTo(map);
 
-    // Add our custom control for selecting display modes.
-    var displayModeSelect = L.control({ position: 'topright' });
-    displayModeSelect.onAdd = function (map) {
-      var div = L.DomUtil.create('div', 'info legend');
-      var optionString = displayModeNames.map(function (name, index) {
-        if (index == displayMode) {
-          return '<option value="' + index + '" selected>' + name + '</option>';
-        }
-        return '<option value="' + index + '">' + name + '</option>';
-      }).join('');
-      div.innerHTML = '<select>' + optionString + '</select>';
-      div.firstChild.onmousedown = div.firstChild.ondblclick = L.DomEvent.stopPropagation;
-      div.firstChild.onchange = function () {
-        var e = div.firstChild;
-        var value = e.options[e.selectedIndex].value;
-        console.log(value);
-        displayMode = value;
-        tl.redraw();
-      };
-      return div;
+    document.getElementById('borderSelect').onchange = (e) => {
+      state.displayModeBorders = e.target.value;
+      updateMap();
     };
-    displayModeSelect.addTo(map);
 
-    // Add a custom control for entering the time of day as a floating point number.
-    var timeOfDayControl = L.control({ position: 'bottomright' });
-    timeOfDayControl.onAdd = function (map) {
-      var div = L.DomUtil.create('div', 'info legend');
-      div.innerHTML = '<input type="number" step="0.01" min="0" max="24" value="12" style="width: 50px;">';
-      div.firstChild.onmousedown = div.firstChild.ondblclick = L.DomEvent.stopPropagation;
-      div.firstChild.onchange = function () {
-        var e = div.firstChild;
-        var value = e.value;
-        console.log(value);
-        // Set the time of day by calling "/set_hour_of_day/{t}" on the tile server.
-        var xhr = new XMLHttpRequest();
-        xhr.open('GET', 'set_hour_of_day/' + value);
-        xhr.onload = function () {
-          if (xhr.status === 200) {
-            console.log('Success');
-            // Clear the tile cache.
-            tl._tileCache = {};
-            // Call the tile redraw function.
-            tl.redraw();
-          } else {
-            console.log('Error: ' + xhr.status);
-          }
-        };
-        xhr.send();
-      };
-      return div;
+    document.getElementById('vectorSelect').onchange = (e) => {
+      state.drawVectorMode = e.target.value;
+      updateMap();
     };
-    timeOfDayControl.addTo(map);
+
+    document.getElementById('btn-rivers').onclick = (e) => {
+      state.drawRivers = !state.drawRivers;
+      e.target.closest('button').classList.toggle('active', state.drawRivers);
+      updateMap();
+    };
+
+    document.getElementById('btn-trade').onclick = (e) => {
+      state.drawTradeRoutes = !state.drawTradeRoutes;
+      e.target.closest('button').classList.toggle('active', state.drawTradeRoutes);
+      updateMap();
+    };
+
+    document.getElementById('btn-shadows').onclick = (e) => {
+      state.drawShadows = !state.drawShadows;
+      e.target.closest('button').classList.toggle('active', state.drawShadows);
+      updateMap();
+    };
+
+    document.getElementById('btn-aspect').onclick = (e) => {
+      state.drawAspectShadows = !state.drawAspectShadows;
+      e.target.closest('button').classList.toggle('active', state.drawAspectShadows);
+      updateMap();
+    };
+
+    document.getElementById('btn-tribes').onclick = (e) => {
+      state.drawTribes = !state.drawTribes;
+      e.target.closest('button').classList.toggle('active', state.drawTribes);
+      reloadGeoJSON();
+    };
+
+    document.getElementById('btn-tick-year').onclick = () => {
+      fetch('tick_year').then(() => updateMap());
+    };
+
+    document.getElementById('btn-tick-century').onclick = () => {
+      fetch('tick_century').then(() => updateMap());
+    };
+
+    document.getElementById('btn-play-pause').onclick = () => {
+      state.isSimulating = !state.isSimulating;
+      const btn = document.getElementById('btn-play-pause');
+      const icon = document.getElementById('play-icon');
+      const text = document.getElementById('play-text');
+      
+      if (state.isSimulating) {
+        btn.classList.add('active');
+        icon.setAttribute('data-lucide', 'pause');
+        text.innerText = 'Pause Simulation';
+        state.simInterval = setInterval(() => {
+          fetch('tick_century').then(() => updateMap());
+        }, 3000);
+      } else {
+        btn.classList.remove('active');
+        icon.setAttribute('data-lucide', 'play');
+        text.innerText = 'Play Simulation';
+        clearInterval(state.simInterval);
+      }
+      lucide.createIcons();
+    };
+
+    document.getElementById('timeOfDayRange').oninput = (e) => {
+      const val = parseFloat(e.target.value);
+      state.timeOfDay = val;
+      const hours = Math.floor(val);
+      const minutes = Math.floor((val % 1) * 60).toString().padStart(2, '0');
+      document.getElementById('timeOfDayLabel').innerText = `${hours}:${minutes}`;
+    };
+
+    document.getElementById('timeOfDayRange').onchange = (e) => {
+      fetch(`set_hour_of_day/${e.target.value}`).then(() => updateMap());
+    };
+
+    document.getElementById('btn-close-info').onclick = () => {
+      document.getElementById('info-panel').classList.remove('visible');
+    };
+
+    map.on('moveend', reloadGeoJSON);
+    map.on('click', () => {
+      document.getElementById('info-panel').classList.remove('visible');
+    });
+
+    // Keyboard Shortcuts
+    window.onkeydown = (e) => {
+      const k = e.key.toLowerCase();
+      if (k === 'd') {
+        state.displayMode = (parseInt(state.displayMode) + 1) % displayModeNames.length;
+        document.getElementById('displayModeSelect').value = state.displayMode;
+        updateMap();
+      } else if (k === 'b') {
+        state.displayModeBorders = (parseInt(state.displayModeBorders) + 1) % displayModeBordersNames.length;
+        document.getElementById('borderSelect').value = state.displayModeBorders;
+        updateMap();
+      } else if (k === 'r') document.getElementById('btn-rivers').click();
+      else if (k === 't') document.getElementById('btn-trade').click();
+      else if (k === 's') document.getElementById('btn-shadows').click();
+      else if (k === 'a') document.getElementById('btn-aspect').click();
+    }
+
+    initUI();
+    reloadGeoJSON();
+
+    // Measure tool integration
+    const measureOptions = {
+      position: 'topleft', unit: 'metric', activeColor: '#3b82f6', completedColor: '#60a5fa'
+    };
+    new L.Control.Measure(measureOptions).addTo(map);
   </script>
 </body>
-
 </html>

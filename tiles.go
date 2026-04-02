@@ -872,11 +872,12 @@ type latLonBounds struct {
 // NOTE: We need to take in account that the bounds might have wrapped around the world.
 func (b latLonBounds) InBounds(la, lo float64) bool {
 	if b.la1 < b.la2 {
-		// We wrapped around north or south.
-		if la > b.la1 && la < b.la2 {
+		// Normal case: la1 is south of la2.
+		if la < b.la1 || la > b.la2 {
 			return false
 		}
 	} else {
+		// la1 is north of la2 (e.g. Mercator where y1 < y2).
 		if la > b.la1 || la < b.la2 {
 			return false
 		}
@@ -949,12 +950,11 @@ func (m *Map) GetCitiesInTile(x, y, zoom int) []*civ.City {
 	la1, lo1 = wrapLatLon(la1, lo1)
 	la2, lo2 = wrapLatLon(la2, lo2)
 
-	// Get the cities within the tile.
+	lbb := latLonBounds{la1, lo1, la2, lo2}
 	var cities []*civ.City
 	for _, c := range m.Cities.Objects {
 		cLatLon := m.LatLon[c.ID]
-		// Check if we are within the tile with a small margin.
-		if la1 < cLatLon[0] && cLatLon[0] < la2 && lo1 < cLatLon[1] && cLatLon[1] < lo2 {
+		if !lbb.InBounds(cLatLon[0], cLatLon[1]) {
 			continue
 		}
 		cities = append(cities, c)
@@ -975,12 +975,11 @@ func (m *Map) GetSettlementsInTile(x, y, zoom int) []*civ.Settlement {
 	la1, lo1 = wrapLatLon(la1, lo1)
 	la2, lo2 = wrapLatLon(la2, lo2)
 
-	// Get the settlements within the tile.
+	lbb := latLonBounds{la1, lo1, la2, lo2}
 	var settlements []*civ.Settlement
 	for _, c := range m.Settlements.Objects {
 		cLatLon := m.LatLon[c.ID]
-		// Check if we are within the tile with a small margin.
-		if la1 < cLatLon[0] && cLatLon[0] < la2 && lo1 < cLatLon[1] && cLatLon[1] < lo2 {
+		if !lbb.InBounds(cLatLon[0], cLatLon[1]) {
 			continue
 		}
 		settlements = append(settlements, c)
@@ -1039,7 +1038,8 @@ func (m *Map) GetGeoJSONCities(la1, lo1, la2, lo2 float64, zoom int) ([]byte, er
 		showNumCities = 10 * (1 << uint(zoom))
 	}
 
-	log.Println("Showing", showNumCities, "cities at zoom level", zoom)
+	log.Printf("Showing up to %d cities at zoom level %d", showNumCities, zoom)
+	var numCitiesInTile int
 
 	// Loop through all the cities and check if they are within the tile.
 	// TODO: Just show the largest cities for lower zoom levels.
@@ -1109,7 +1109,10 @@ func (m *Map) GetGeoJSONCities(la1, lo1, la2, lo2 float64, zoom int) ([]byte, er
 		f.SetProperty("reslist", resources)
 
 		geoJSON.AddFeature(f)
+		numCitiesInTile++
 	}
+
+	var numSettlementsInTile int
 
 	log.Printf("%d out of %d cities in tile", len(geoJSON.Features), len(m.Cities.Objects))
 
@@ -1165,7 +1168,44 @@ func (m *Map) GetGeoJSONCities(la1, lo1, la2, lo2 float64, zoom int) ([]byte, er
 		f.SetProperty("reslist", resources)
 
 		geoJSON.AddFeature(f)
+		numSettlementsInTile++
 	}
+
+	var numTribesInTile int
+	// Add tribes to the GeoJSON.
+	for _, t := range m.Tribes.Objects {
+		tLat := m.LatLon[t.RegionID][0]
+		tLon := m.LatLon[t.RegionID][1]
+
+		// Check if we are within the tile with a small margin.
+		if !lbb.InBounds(tLat, tLon) {
+			continue
+		}
+
+		// Add the tribe to the GeoJSON as a feature.
+		f := geojson.NewPointFeature([]float64{tLon, tLat})
+		f.SetProperty("id", t.ID)
+		f.SetProperty("name", t.Name())
+		f.SetProperty("type", "tribe")
+		f.SetProperty("culture", fmt.Sprintf("%s (%s)", t.Culture.Name, t.Culture.Type))
+		f.SetProperty("population", t.Population)
+		f.SetProperty("aggressive", t.Aggressive)
+		f.SetProperty("settling", t.Settling)
+
+		temperature := m.GetRegTemperature(t.RegionID)
+		precip := geo.MaxPrecipitation * moists[t.RegionID] / maxMois
+		elev := geo.MaxAltitudeFactor * elev[t.RegionID] / maxElev
+		f.SetProperty("biome", genbiome.WhittakerModBiomeToString(biomeFunc(t.RegionID))+
+			fmt.Sprintf(" (%.1f°C, %.1fdm, %.1fm)", temperature, precip, elev))
+		f.SetProperty("coordinates", fmt.Sprintf("lat %.2f, lon %.2f", tLat, tLon))
+
+		geoJSON.AddFeature(f)
+		numTribesInTile++
+	}
+
+	log.Printf("%d features (%d cities, %d settlements, %d tribes) found among %d total cities, %d total settlements, and %d total tribes", 
+		len(geoJSON.Features), numCitiesInTile, numSettlementsInTile, numTribesInTile, 
+		len(m.Cities.Objects), len(m.Settlements.Objects), len(m.Tribes.Objects))
 
 	// Now encode the GeoJSON.
 	geoJSONBytes, err := geoJSON.MarshalJSON()

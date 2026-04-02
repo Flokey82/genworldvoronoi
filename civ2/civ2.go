@@ -3,6 +3,7 @@ package civ2
 import (
 	"github.com/Flokey82/genworldvoronoi/civ"
 	"github.com/Flokey82/genworldvoronoi/geo"
+	"github.com/Flokey82/go_gens/genlanguage"
 )
 
 const (
@@ -102,10 +103,47 @@ func (m *Civ) GenerateCivilization() {
 
 	// Initial population.
 	const initialPopulation = 100
+	const initialCityPopulation = 1000
+	const initialSettlementPopulation = 500
 
+	// 1. Pre-seed cities if requested.
+	if m.NumCities > 0 {
+		cityRegions := m.pickNCradlesOfCivilization(m.NumCities, useBiomes)
+		for _, r := range cityRegions {
+			// Find a culture for the city or create a new one.
+			lang := genlanguage.GenLanguage(int64(m.getNextFactionID()))
+			culture := m.newCulture(r, lang, m.cultureFunc(r))
+			m.NewCity(r, initialCityPopulation, culture)
+		}
+	}
+
+	// 2. Pre-seed settlements if requested.
+	if m.NumCityStates > 0 {
+		settlementRegions := m.pickNCradlesOfCivilization(m.NumCityStates, useBiomes)
+		for _, r := range settlementRegions {
+			if m.Cities.GetAt(r) != nil {
+				continue // Already a city.
+			}
+			lang := genlanguage.GenLanguage(int64(m.getNextFactionID()))
+			culture := m.newCulture(r, lang, m.cultureFunc(r))
+			m.NewSettlement(r, initialSettlementPopulation, culture)
+		}
+	}
+
+	// 3. Start with some nomadic tribes.
+	bestRegions = m.pickNCradlesOfCivilization(numTribes, useBiomes)
 	for _, bestRegion := range bestRegions {
+		if m.Cities.GetAt(bestRegion) != nil || m.Settlements.GetAt(bestRegion) != nil {
+			continue // Already a city or settlement.
+		}
 		// Start with one tribe.
 		m.NewTribe(bestRegion, initialPopulation)
+	}
+
+	// 4. Tick the simulation 200 years to allow the world to evolve.
+	for i := 0; i < 200; i++ {
+		m.Tick()
+		m.Geo.Calendar.TickYear()
 	}
 }
 
