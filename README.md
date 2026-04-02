@@ -18,7 +18,11 @@ This project is inspired by [Red Blob Games' planet generation](https://www.redb
 - **Biomes**: Sophisticated biome determination based on Whittaker diagrams (Rainforest, Tundra, Desert, etc.).
 
 ### 👥 Civilization Simulation (Civ2)
-The `civ2` package provides a deep simulation of historical development:
+The `civ2` package provides a deep simulation of historical development with two core togglable modes:
+- **Cradle of Civilization Mode**: The world starts completely empty (with only nomadic tribes). Civilizations, borders, and empires naturally emerge and expand geographically region-by-region proportional to population levels and geography.
+- **Legacy Seeding Mode**: Skips organic initial progression; statically pre-seeds the world with cities, cultures, and empires, flood-filling borders instantaneously over the entire map.
+
+Additional simulated systems:
 - **Settlements**: Founding, growth, and abandonment of cities and villages.
 - **Societies**: Tribes evolving into city-states and powerful empires.
 - **Diplomacy & War**: Dynamic relations between entities, including war declarations and peace treaties.

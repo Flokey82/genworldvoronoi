@@ -517,6 +517,18 @@ func (m *Civ) migrateTribes(nDays int) {
 		// Log the culture of the tribe.
 		log.Printf("Tribe %d: %s", t.ID, t.Culture.Type)
 
+		// Apply fatality chance during migration if the tribe has moved.
+		if t.RegionID != r && m.MigrationFatalityChance > 0 {
+			deaths := int(float64(t.Population) * m.MigrationFatalityChance)
+			if deaths > 0 || (deaths == 0 && rand.Float64() < m.MigrationFatalityChance) {
+				if deaths == 0 {
+					deaths = 1
+				}
+				t.Population -= deaths
+				log.Printf("tribe %d has lost %d people during migration (%d remaining)", t.ID, deaths, t.Population)
+			}
+		}
+
 		// Check if the new region can sustain the tribe.
 		// If not, we have to split the tribe. For now we kill part of the population.
 		if maxPop := float64(m.calcMaxPopPerRegion(r)); maxPop < float64(t.Population) {

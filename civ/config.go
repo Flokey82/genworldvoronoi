@@ -13,6 +13,7 @@ type CivConfig struct {
 	NumFarmingTowns          int  // Number of generated farming towns
 	NumTradingTowns          int  // Number of generated trading towns
 	NumDesertOasis           int  // Number of generated desert oases
+	NumTribes                int  // Number of generated tribes
 	EnableCityAging          bool // Enable city aging
 	EnableOrganizedReligions bool // Enable organized religion generation
 
@@ -22,6 +23,7 @@ type CivConfig struct {
 	MigrationToNClosestCities                     int     // Number of the N closest cities to migrate to (in case of disaster)
 	MigrationToNewSettlementWithinNRegions        int     // Depth of graph traversal for finding a suitable new settlement location.
 	MigrationFatalityChance                       float64 // Chance of death during migration per region traversed.
+	SeedEntities                            bool    // Enable legacy pre-seeding of cities, empires, etc. If false, turns on Cradle of Civilization mode.
 }
 
 // NewCivConfig returns a new config for civilization generation.
@@ -38,6 +40,7 @@ func NewCivConfig() *CivConfig {
 		NumFarmingTowns:          60,
 		NumTradingTowns:          10,
 		NumDesertOasis:           10,
+		NumTribes:                30,
 		EnableCityAging:          true,
 		EnableOrganizedReligions: true,
 		MigrationOverpopulationExcessPopulationFactor: 1.2,
@@ -45,5 +48,6 @@ func NewCivConfig() *CivConfig {
 		MigrationToNClosestCities:                     10,
 		MigrationToNewSettlementWithinNRegions:        10,
 		MigrationFatalityChance:                       0.02,
+		SeedEntities:                            true,
 	}
 }

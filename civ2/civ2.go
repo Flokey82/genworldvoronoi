@@ -1,6 +1,8 @@
 package civ2
 
 import (
+	"log"
+
 	"github.com/Flokey82/genworldvoronoi/civ"
 	"github.com/Flokey82/genworldvoronoi/geo"
 	"github.com/Flokey82/go_gens/genlanguage"
@@ -41,9 +43,7 @@ type Civ struct {
 	Population    []int
 	Settled       []int64
 	Suitability   []float64
-	NumEmpires    int // Number of generated territories
-	NumCities     int // Number of generated cities (regions)
-	NumCityStates int // Number of generated city states
+	*civ.CivConfig
 	navCache      *civ.NavCache
 	nextPersonID   int
 	nextFactionID  int
@@ -56,9 +56,13 @@ type Civ struct {
 	*civ.History
 }
 
-func NewCiv(g *geo.Geo) *Civ {
+func NewCiv(g *geo.Geo, cfg *civ.CivConfig) *Civ {
+	if cfg == nil {
+		cfg = civ.NewCivConfig()
+	}
 	c := &Civ{
 		Geo:            g,
+		CivConfig:      cfg,
 		SoilExhaustion: make([]float64, g.SphereMesh.NumRegions),
 		Tribes:         geo.NewSoloReferences[Tribe](g.SphereMesh.NumRegions),
 		Settlements:    geo.NewSoloReferences[Settlement](g.SphereMesh.NumRegions),
@@ -91,47 +95,101 @@ func (m *Civ) GenerateCivilization() {
 	m.climateFunc = m.GetFitnessClimate()
 	m.cultureFunc = civ.GetRegionCultureTypeFunc(m.Geo)
 
-	const numTribes = 10
-
 	useBiomes := false
 
 	// Find the best places for the cradle of civilization.
 	// Since we only have one species for now (humans), we will just start
 	// with a 'steppe' region, and then expand from there incrementally.
 	// Now we pick a suitable region to start with (steppe/grassland).
-	bestRegions := m.pickNCradlesOfCivilization(numTribes, useBiomes)
+	bestRegions := m.pickNCradlesOfCivilization(m.NumTribes, useBiomes)
 
 	// Initial population.
 	const initialPopulation = 100
 	const initialCityPopulation = 1000
 	const initialSettlementPopulation = 500
 
-	// 1. Pre-seed cities if requested.
-	if m.NumCities > 0 {
-		cityRegions := m.pickNCradlesOfCivilization(m.NumCities, useBiomes)
-		for _, r := range cityRegions {
-			// Find a culture for the city or create a new one.
-			lang := genlanguage.GenLanguage(int64(m.getNextFactionID()))
-			culture := m.newCulture(r, lang, m.cultureFunc(r))
-			m.NewCity(r, initialCityPopulation, culture)
+	// Wrap all seeding and floodfill logic in the Legacy toggle.
+	if m.SeedEntities {
+		// 0. Pre-seed cultures if requested.
+		if m.NumCultures > 0 {
+			m.placeNCultures(m.NumCultures)
+			log.Printf("Placed %d cultures", len(m.Cultures.Objects))
 		}
-	}
 
-	// 2. Pre-seed settlements if requested.
-	if m.NumCityStates > 0 {
-		settlementRegions := m.pickNCradlesOfCivilization(m.NumCityStates, useBiomes)
-		for _, r := range settlementRegions {
-			if m.Cities.GetAt(r) != nil {
-				continue // Already a city.
+
+		if m.NumCities > 0 {
+			cityRegions := m.pickNCradlesOfCivilization(m.NumCities, useBiomes)
+			for _, r := range cityRegions {
+				// Find a culture for the city or create a new one.
+				culture := m.GetCulture(r)
+				if culture == nil {
+					lang := genlanguage.GenLanguage(int64(m.getNextFactionID()))
+					culture = m.newCulture(r, lang, m.cultureFunc(r))
+				}
+				m.NewCity(r, initialCityPopulation, culture)
 			}
-			lang := genlanguage.GenLanguage(int64(m.getNextFactionID()))
-			culture := m.newCulture(r, lang, m.cultureFunc(r))
-			m.NewSettlement(r, initialSettlementPopulation, culture)
+			log.Printf("Placed %d cities", len(m.Cities.Objects))
 		}
+
+		// 1b. Pre-seed specialized cities if requested.
+		m.placeSpecializedCities(initialCityPopulation)
+
+		// 2. Pre-seed empires if requested.
+		if m.NumEmpires > 0 {
+			// Pick existing cities as capitals for empires.
+			cities := m.Cities.Objects
+			for i := 0; i < m.NumEmpires && i < len(cities); i++ {
+				m.NewEmpire(cities[i])
+			}
+			log.Printf("Placed %d empires", len(m.Empires.Objects))
+		}
+
+		// 3. Pre-seed city states if requested.
+		if m.NumCityStates > 0 {
+			// Pick existing cities as capitals for city states.
+			cities := m.Cities.Objects
+			placed := 0
+			for _, c := range cities {
+				if placed >= m.NumCityStates {
+					break
+				}
+				if m.Empires.GetIDAt(c.ID) == -1 {
+					m.NewCityState(c)
+					placed++
+				}
+			}
+			log.Printf("Placed %d city states", len(m.CityStates.Objects))
+		}
+
+		// 3b. Pre-seed organized religions if requested.
+		if m.EnableOrganizedReligions && m.NumOrganizedReligions > 0 {
+			m.placeNOrganizedReligions(m.NumOrganizedReligions)
+			log.Printf("Placed %d organized religions", len(m.Religions.Objects))
+		}
+
+		// --- Legacy Mode: Flood fill all pre-seeded entities! ---
+		log.Printf("Legacy Seeding Mode: Flood-filling territories...")
+		
+		// Map cultures across regions immediately.
+		seeds := make([]int, 0, len(m.Cultures.Objects))
+		for _, c := range m.Cultures.Objects {
+			seeds = append(seeds, c.ID)
+		}
+		m.expandCultures(seeds)
+
+		// Iteratively expand city states out to neighbors limit times
+		rNbs := make([]int, 0, 10)
+		for _, cs := range m.CityStates.Objects {
+			m.legacyExpandCityState(cs, rNbs)
+		}
+
+		// Force Empire expansion out via sweeping up City States
+		m.legacyExpandEmpires()
+		log.Printf("Legacy Seeding Mode: Flood-fill completed.")
 	}
 
-	// 3. Start with some nomadic tribes.
-	bestRegions = m.pickNCradlesOfCivilization(numTribes, useBiomes)
+	// 4. Start with some nomadic tribes.
+	bestRegions = m.pickNCradlesOfCivilization(m.NumTribes, useBiomes)
 	for _, bestRegion := range bestRegions {
 		if m.Cities.GetAt(bestRegion) != nil || m.Settlements.GetAt(bestRegion) != nil {
 			continue // Already a city or settlement.
@@ -139,11 +197,15 @@ func (m *Civ) GenerateCivilization() {
 		// Start with one tribe.
 		m.NewTribe(bestRegion, initialPopulation)
 	}
+	log.Printf("Placed %d tribes", len(m.Tribes.Objects))
 
-	// 4. Tick the simulation 200 years to allow the world to evolve.
-	for i := 0; i < 200; i++ {
-		m.Tick()
-		m.Geo.Calendar.TickYear()
+	// 4. Tick the simulation 200 years to allow the world to evolve organically (Cradle Mode only).
+	if !m.SeedEntities {
+		log.Printf("Cradle Mode: Ticking simulation 200 years for organic growth...")
+		for i := 0; i < 200; i++ {
+			m.Tick()
+			m.Geo.Calendar.TickYear()
+		}
 	}
 }
 

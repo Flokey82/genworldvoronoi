@@ -3,6 +3,7 @@ package civ2
 import (
 	"log"
 
+	"github.com/Flokey82/genbiome"
 	"github.com/Flokey82/genworldvoronoi/geo"
 )
 
@@ -10,30 +11,18 @@ func (m *Civ) tickCultures(nDays int) {
 	// Clean up the cultures.
 	m.Cultures.Clean()
 
-	// TODO: Clear the culture locations and reassign them based on settlement and city locations.
-	// This way cultures withdraw when regions / cities / settlements are abandoned.
+	// Clear the culture locations.
 	m.Cultures.ResetRegions()
 
-	// Now loop over all tribes, settlements, cities, anything with an assigned culture
-	// and assign the culture to the region.
-	for _, t := range m.Tribes.Objects {
-		if t.Population == 0 {
-			continue
-		}
-		m.Cultures.PlaceObjectAt(t.Culture, t.RegionID)
+	// Gather seeds (where population centers are).
+	// We use the culture's origin ID as the seed point.
+	seeds := make([]int, 0, len(m.Cultures.Objects))
+	for _, c := range m.Cultures.Objects {
+		seeds = append(seeds, c.ID)
 	}
-	for _, s := range m.Settlements.Objects {
-		if s.Population == 0 {
-			continue
-		}
-		m.Cultures.PlaceObjectAt(s.Culture, s.ID)
-	}
-	for _, c := range m.Cities.Objects {
-		if c.Population == 0 {
-			continue
-		}
-		m.Cultures.PlaceObjectAt(c.Culture, c.ID)
-	}
+
+	// Expand cultures.
+	m.expandCultures(seeds)
 
 	for _, c := range m.Cultures.Objects {
 		m.tickCulture(c, nDays)
@@ -50,14 +39,43 @@ func (m *Civ) tickCultures(nDays int) {
 	}
 }
 
+func (m *Civ) expandCultures(seeds []int) {
+	// 1. Map culture origin ID to culture object.
+	idToCulture := make(map[int]*Culture)
+	for _, c := range m.Cultures.Objects {
+		idToCulture[c.ID] = c
+	}
+
+	// 2. Performance weights.
+	rCellType := m.GetRegCellTypes()
+	elevs := m.Elevation.GetValues()
+	maxElev := m.Elevation.Max
+
+	territoryWeightFunc := m.getTerritoryWeightFunc()
+	biomeWeight := m.getTerritoryBiomeWeightFunc()
+
+	// 3. Expand territories.
+	m.Cultures.Regions = m.regPlaceNTerritoriesCustom(m.Cultures.Regions, seeds, func(o, u, v int) float64 {
+		c := idToCulture[o]
+		if c == nil {
+			return -1
+		}
+
+		// Get the cost to expand to this biome.
+		gotBiome := m.GetAzgaarRegionBiome(v, elevs[v]/maxElev)
+		biomePenalty := biomeWeight(o, u, v) * float64(genbiome.AzgaarBiomeMovementCost[gotBiome]) / 100
+
+		// Check if we have a non-native biome, if so we apply an additional penalty.
+		biomePenalty *= c.Type.BiomeCost(gotBiome)
+
+		cellTypePenalty := c.Type.CellTypeCost(rCellType[v])
+		return biomePenalty + cellTypePenalty*territoryWeightFunc(o, u, v)/c.Type.Expansionism()
+	})
+}
+
 func (m *Civ) tickCulture(c *Culture, nDays int) {
 	// Develop the culture, depending on the location.
-	// TODO: Instead of expecting one specific region, the culture should be able to develop in multiple regions.
-	// For this we'd check all regions where the culture is present and calculate
-	// the average properties of the regions.
 	m.developSkills(c, m.getRegionStats(c), nDays)
-
-	// TODO: Expand the culture from population centers.
 }
 
 type regionStats struct {

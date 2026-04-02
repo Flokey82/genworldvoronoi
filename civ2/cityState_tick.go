@@ -1,14 +1,16 @@
 package civ2
 
 import (
+	"container/heap"
 	"log"
+	"math"
 	"sort"
 
 	"github.com/Flokey82/genworldvoronoi/civ"
+	"github.com/Flokey82/genworldvoronoi/geo"
 )
 
 func (m *Civ) tickCityStates(nDays int) {
-	rNbs := make([]int, 0, 10)
 	for _, cs := range m.CityStates.Objects {
 		// City states might collapse if they lose on influence.
 		if cs.Capital == nil || cs.Capital.Population == 0 {
@@ -27,16 +29,117 @@ func (m *Civ) tickCityStates(nDays int) {
 		m.tickLeadership(cs, nDays)
 
 		// We might expand or contract our influence.
-		m.expandCityState(cs, rNbs)
+		// (Expansion happens globally after this loop for all city states at once)
 
 		// We might found an empire.
 		if m.Empires.GetAt(cs.ID) == nil && cs.Capital.Population > 10000 {
 			m.foundEmpire(cs)
 		}
 	}
+	
+	// Recalculate territories globally to simulate border pressure and natural boundaries.
+	m.recalcCityStatesTerritoriesBounded()
 }
 
-func (m *Civ) expandCityState(cs *CityState, rNbs []int) {
+func (m *Civ) recalcCityStatesTerritoriesBounded() {
+	m.CityStates.ResetRegions()
+	for _, cs := range m.CityStates.Objects {
+		cs.Regions = cs.Regions[:0]
+	}
+
+	var queue geo.AscPriorityQueue
+	heap.Init(&queue)
+
+	// maxInfluence maps cs.ID to their max range
+	maxInfluence := make(map[int]float64)
+
+	for _, cs := range m.CityStates.Objects {
+		if cs.Capital == nil || cs.Capital.Population == 0 {
+			continue
+		}
+		// Calculate max range based on population
+		influence := float64(cs.Capital.Population) / 100.0 // tuning parameter
+		if influence < 1.0 {
+			influence = 1.0
+		}
+		maxInfluence[cs.ID] = influence
+
+		// Place capital
+		heap.Push(&queue, &geo.QueueEntry{
+			Score:       0,
+			Origin:      cs.ID,
+			Destination: cs.Capital.ID,
+		})
+	}
+
+	// Cost tracking
+	costCache := make([]float64, m.SphereMesh.NumRegions)
+	for i := range costCache {
+		costCache[i] = math.MaxFloat64
+	}
+
+	elevs := m.Elevation.GetValues()
+	maxElev := m.Elevation.Max
+	biomeWeight := m.getTerritoryBiomeWeightFunc()
+
+	var outReg []int
+	for queue.Len() > 0 {
+		current := heap.Pop(&queue).(*geo.QueueEntry)
+		
+		region := current.Destination
+		cost := current.Score
+		csID := current.Origin
+
+		if cost > maxInfluence[csID] {
+			continue
+		}
+
+		if cost >= costCache[region] {
+			continue
+		}
+		costCache[region] = cost
+
+		// Actually claim it
+		if m.CityStates.Regions[region] == -1 {
+			m.CityStates.SetIDAt(region, csID)
+			cs := m.CityStates.Get(csID)
+			if cs != nil {
+				cs.AddRegion(region)
+				m.CityStates.PlaceObjectAt(cs, region)
+			}
+		}
+
+		for _, nb := range m.SphereMesh.R_circulate_r(outReg, region) {
+			if elevs[nb] <= 0 {
+				continue // Organic expansion currently avoids water
+			}
+
+			// Base cost
+			stepCost := 1.0
+
+			// Elevation difference penalty
+			elevDiff := math.Abs(elevs[nb] - elevs[region])
+			elevCost := (elevDiff / maxElev) * 50.0 // steep mountains are hard to cross
+			stepCost += elevCost
+
+			// Biome transition cost
+			bCost := biomeWeight(csID, region, nb)
+			stepCost += bCost
+
+			nextCost := cost + stepCost
+
+			if nextCost <= maxInfluence[csID] && nextCost < costCache[nb] {
+				heap.Push(&queue, &geo.QueueEntry{
+					Score:       nextCost,
+					Origin:      csID,
+					Destination: nb,
+				})
+			}
+		}
+	}
+}
+
+func (m *Civ) legacyExpandCityState(cs *CityState, rNbs []int) {
 	// Check the neighbours of the controlled regions.
 	var numNewRegions int
 	var limitExpansionToSettled bool

@@ -393,12 +393,10 @@ func (m *Geo) GetRegionProx(r int) RegionProximity {
 	}
 }
 
-// NOTE: This won't be thread safe.
-var rNbs = make([]int, 0, 6)
 
 // Fake the lake proximity function.
 func (m *Geo) LakeProxFunc(r int) bool {
-	for _, nb := range m.R_circulate_r(rNbs, r) {
+	for _, nb := range m.R_circulate_r(nil, r) {
 		if m.IsRegLakeOrWaterBody(nb) && m.WaterbodySize[nb] > 5 {
 			return true
 		}
@@ -408,7 +406,7 @@ func (m *Geo) LakeProxFunc(r int) bool {
 
 // Fake the ocean proximity function.
 func (m *Geo) OceanProxFunc(r int) bool {
-	for _, nb := range m.R_circulate_r(rNbs, r) {
+	for _, nb := range m.R_circulate_r(nil, r) {
 		if m.Elevation.Values[nb] <= 0 && m.WaterbodySize[nb] > 5 {
 			return true
 		}

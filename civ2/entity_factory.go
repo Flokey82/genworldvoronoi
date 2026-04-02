@@ -69,9 +69,60 @@ func (m *Civ) NewCity(region int, population int, culture *Culture) *City {
 			Military:          NewMilitary(),
 		},
 		Founded: m.Geo.Calendar.GetYear(),
+		Type:    civ.CityTypeDefault,
 	}
 	m.Cities.PlaceObjectAt(c, region)
 	c.AddRegion(region)
 	m.History.AddEvent(HistoryEventFounding, fmt.Sprintf("The city of %s was founded.", c.Name), c.Ref())
 	return c
+}
+
+func (m *Civ) NewSpecializedCity(region int, population int, culture *Culture, cType civ.CityType) *City {
+	c := m.NewCity(region, population, culture)
+	c.Type = cType
+	return c
+}
+
+func (m *Civ) NewEmpire(c *City) *Empire {
+	e := &Empire{
+		BaseEntity: BaseEntity{
+			ID:              c.ID,
+			Name:            "Empire of " + c.Name,
+			Culture:         c.Culture,
+			Type:            civ.ObjectTypeEmpire,
+			Storage:         NewStorage(),
+			GoverningPeople: newGoverningPeople(),
+			Infrastructure:    NewInfrastructure(),
+			ConstructionQueue: NewConstructionQueue(),
+			Military:          c.Military,
+		},
+		Capital: c,
+		Founded: m.Geo.Calendar.GetYear(),
+	}
+	m.Empires.PlaceObjectAt(e, e.ID)
+	e.AddRegion(e.ID)
+	m.History.AddEvent(HistoryEventFounding, fmt.Sprintf("The Empire of %s was founded with %s as its capital.", c.Name, c.Name), e.Ref())
+	return e
+}
+
+func (m *Civ) NewCityState(c *City) *CityState {
+	cs := &CityState{
+		BaseEntity: BaseEntity{
+			ID:              c.ID,
+			Name:            "City State of " + c.Name,
+			Culture:         c.Culture,
+			Type:            civ.ObjectTypeCityState,
+			Storage:         NewStorage(),
+			GoverningPeople: newGoverningPeople(),
+			Infrastructure:    NewInfrastructure(),
+			ConstructionQueue: NewConstructionQueue(),
+			Military:          c.Military,
+		},
+		Capital: c,
+		Founded: m.Geo.Calendar.GetYear(),
+	}
+	m.CityStates.PlaceObjectAt(cs, cs.ID)
+	cs.AddRegion(cs.ID)
+	m.History.AddEvent(HistoryEventFounding, fmt.Sprintf("The City State of %s was founded.", c.Name), cs.Ref())
+	return cs
 }

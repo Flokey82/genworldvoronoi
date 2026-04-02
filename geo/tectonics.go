@@ -472,9 +472,9 @@ func (m *Geo) assignRegionElevation() {
 	// n = 1 is a linear interpolation
 	// n = 2 is a square interpolation
 	// n = 0.5 is a square root interpolation
-	na := 1.0 / 1.0
-	nb := 1.0 / 1.0
-	nc := 1.0 / 1.0
+	na := 1.0
+	nb := 1.0
+	nc := 1.0
 	for r := 0; r < m.SphereMesh.NumRegions; r++ {
 		a := math.Pow(rDistanceA[r], na) + epsilon // Distance from mountains
 		b := math.Pow(rDistanceB[r], nb) + epsilon // Distance from oceans

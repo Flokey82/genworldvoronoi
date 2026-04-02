@@ -7,8 +7,9 @@ import (
 // City represents a city in the world.
 type City struct {
 	BaseEntity
-	MaxPopulation int   // Maximum population of the city
-	Founded       int64 // Year when the city was founded
+	MaxPopulation int          // Maximum population of the city
+	Founded       int64        // Year when the city was founded
+	Type          civ.CityType // Type of city
 }
 
 // Grow the population.

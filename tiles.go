@@ -237,14 +237,10 @@ func (m *Map) GetTile(x, y, zoom, displayMode, vectorMode int, drawRivers, drawT
 			}
 		} else if displayMode == DisplayModeSuitability {
 			vals = make([]float64, m.NumRegions)
-			for i, sus := range m.Suitability {
-				vals[i] = sus
-			}
+			copy(vals, m.Suitability)
 		} else if displayMode == DisplayModeSoilExhaustion {
 			vals = make([]float64, m.NumRegions)
-			for i, sus := range m.SoilExhaustion {
-				vals[i] = sus
-			}
+			copy(vals, m.SoilExhaustion)
 		} else if displayMode == DisplayModeTribes { // Tribes.
 			vals = make([]float64, m.NumRegions)
 			for _, tribe := range m.Tribes.Objects {

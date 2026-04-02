@@ -37,7 +37,7 @@ func NewMapFromConfig(seed int64, cfg *Config) (*Map, error) {
 		Geo: geo,
 		Bio: bio.NewBio(geo, cfg.BioConfig),
 		//Civ: civ.NewCiv(geo, cfg.CivConfig),
-		Civ: civ2.NewCiv(geo),
+		Civ: civ2.NewCiv(geo, cfg.CivConfig),
 	}
 	m.generateMap()
 

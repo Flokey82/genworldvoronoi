@@ -756,9 +756,6 @@ func (m *BaseObject) GetSinks(skipSinksBelowSea, usePool bool) []int {
 // noise. It's very fast and less destructive than my other, home-grown algorithm.
 // Maybe it's worth to combine the two in some way?
 func (m *BaseObject) FillSinks(randEpsilon bool) []float64 {
-	// Reset the RNG.
-	m.ResetRand()
-
 	// Get elevation values.
 	currentHeight := m.Elevation.GetValues()
 	inf := math.Inf(0)
@@ -776,6 +773,9 @@ func (m *BaseObject) FillSinks(randEpsilon bool) []float64 {
 	}
 
 	// Loop until no more changes are made.
+	// Seed a local random number generator for thread safety and determinism.
+	rLocal := rand.New(rand.NewSource(m.Seed))
+
 	var epsilon float64
 	outReg := make([]int, 0, 8)
 	outPermRegs := make([]int, 0, len(currentHeight))
@@ -788,14 +788,14 @@ func (m *BaseObject) FillSinks(randEpsilon bool) []float64 {
 			// The idea is to make the algorithm less destructive and more
 			// natural looking.
 			//
-			// NOTE: I've decided to use m.rand.Float64() instead of noise.
-			epsilon = baseEpsilon * m.Rand.Float64()
+			// NOTE: I've decided to use rLocal.Float64() instead of noise.
+			epsilon = baseEpsilon * rLocal.Float64()
 		}
 		changed := false
 
 		// By shuffling the order in which we parse regions,
 		// we ensure a more natural look.
-		for _, r := range m.randPerm(outPermRegs, len(currentHeight)) {
+		for _, r := range m.randPerm(outPermRegs, len(currentHeight), rLocal) {
 			// Skip all regions that have the same elevation as in
 			// the current heightmap.
 			if newHeight[r] == currentHeight[r] {
@@ -861,8 +861,8 @@ func (m *BaseObject) AssignActualDistanceField(seedRegs []int, stopReg map[int]b
 	// between the regions.
 	closestSeed := make([]int, m.NumRegions)
 
-	// Reset the random number generator.
-	m.ResetRand()
+	// Seed a local random number generator for thread safety and determinism.
+	r := rand.New(rand.NewSource(m.Seed))
 
 	inf := math.Inf(0)
 
@@ -894,7 +894,7 @@ func (m *BaseObject) AssignActualDistanceField(seedRegs []int, stopReg map[int]b
 
 	// Random search adapted from breadth first search.
 	for queueOut := 0; queueOut < len(queue); queueOut++ {
-		pos := queueOut + m.Rand.Intn(len(queue)-queueOut)
+		pos := queueOut + r.Intn(len(queue)-queueOut)
 		currentReg := queue[pos]
 		queue[pos] = queue[queueOut]
 		for _, nbReg := range m.R_circulate_r(outRegs, currentReg) {
@@ -934,8 +934,8 @@ func (m *BaseObject) AssignActualDistanceField(seedRegs []int, stopReg map[int]b
 // It returns the distance to the closest seed region and the seed region itself for each region.
 // This uses haversine to calculate the distance between two points and the distance is the distance on a unit sphere.
 func (m *BaseObject) UpdateActualDistanceField(closestSeed []int, regDistance []float64, seedRegs []int, stopReg map[int]bool) ([]int, []float64) {
-	// Reset the random number generator.
-	m.ResetRand()
+	// Seed a local random number generator for thread safety and determinism.
+	r := rand.New(rand.NewSource(m.Seed))
 	queue := make([]int, len(seedRegs), m.NumRegions)
 
 	// TODO: Also check if a seed point has "disappeared" .If so, we
@@ -959,7 +959,7 @@ func (m *BaseObject) UpdateActualDistanceField(closestSeed []int, regDistance []
 
 	// Random search adapted from breadth first search.
 	for queueOut := 0; queueOut < len(queue); queueOut++ {
-		pos := queueOut + m.Rand.Intn(len(queue)-queueOut)
+		pos := queueOut + r.Intn(len(queue)-queueOut)
 		currentReg := queue[pos]
 		queue[pos] = queue[queueOut]
 		for _, nbReg := range m.R_circulate_r(outRegs, currentReg) {
@@ -997,8 +997,8 @@ func (m *BaseObject) UpdateActualDistanceField(closestSeed []int, regDistance []
 // AssignDistanceField calculates the graph distance from any point in seedRegs to all other points, but
 // don't go past any point in stopReg.
 func (m *BaseObject) AssignDistanceField(seedRegs []int, stopReg map[int]bool) []float64 {
-	// Reset the random number generator.
-	m.ResetRand()
+	// Seed a local random number generator for thread safety and determinism.
+	r := rand.New(rand.NewSource(m.Seed))
 
 	inf := math.Inf(0)
 	mesh := m.SphereMesh
@@ -1024,7 +1024,7 @@ func (m *BaseObject) AssignDistanceField(seedRegs []int, stopReg map[int]bool) [
 	// Random search adapted from breadth first search.
 	// TODO: Improve the queue. Currently this is growing unchecked.
 	for queueOut := 0; queueOut < len(queue); queueOut++ {
-		pos := queueOut + m.Rand.Intn(len(queue)-queueOut)
+		pos := queueOut + r.Intn(len(queue)-queueOut)
 		currentReg := queue[pos]
 		queue[pos] = queue[queueOut]
 		for _, nbReg := range mesh.R_circulate_r(outRegs, currentReg) {
@@ -1056,8 +1056,8 @@ func (m *BaseObject) AssignDistanceField(seedRegs []int, stopReg map[int]bool) [
 
 // UpdateDistanceField updates the graph distance field for the given regions, given the new seed points.
 func (m *BaseObject) UpdateDistanceField(regDistance []float64, seedRegs []int, stopReg map[int]bool) []float64 {
-	// Reset the random number generator.
-	m.ResetRand()
+	// Seed a local random number generator for thread safety and determinism.
+	r := rand.New(rand.NewSource(m.Seed))
 	mesh := m.SphereMesh
 	numRegions := mesh.NumRegions
 	queue := make([]int, len(seedRegs), numRegions)
@@ -1081,7 +1081,7 @@ func (m *BaseObject) UpdateDistanceField(regDistance []float64, seedRegs []int, 
 	// Random search adapted from breadth first search.
 	// TODO: Improve the queue. Currently this is growing unchecked.
 	for queueOut := 0; queueOut < len(queue); queueOut++ {
-		pos := queueOut + m.Rand.Intn(len(queue)-queueOut)
+		pos := queueOut + r.Intn(len(queue)-queueOut)
 		currentReg := queue[pos]
 		queue[pos] = queue[queueOut]
 		nextRegDistance := regDistance[currentReg] + 1
@@ -1322,8 +1322,8 @@ func (m *BaseObject) Interpolate(regions []int) (*Interpolated, error) {
 }
 
 // randPerm returns a random permutation of the given slice indices.
-// This works like rand.Perm, but it reuses the same slice.
-func (m *BaseObject) randPerm(perm []int, n int) []int {
+// This works like rand.Perm, but it reuses the same slice and is thread-safe.
+func (m *BaseObject) randPerm(perm []int, n int, r *rand.Rand) []int {
 	perm = perm[:min(cap(perm), n)]
 	if diff := len(perm) - n; diff < 0 {
 		perm = append(perm, make([]int, -diff)...)
@@ -1334,7 +1334,7 @@ func (m *BaseObject) randPerm(perm []int, n int) []int {
 	// the final state of r. So this change can't be made for compatibility
 	// reasons for Go 1.
 	for i := 0; i < n; i++ {
-		j := m.Rand.Intn(i + 1)
+		j := r.Intn(i + 1)
 		perm[i] = perm[j]
 		perm[j] = i
 	}

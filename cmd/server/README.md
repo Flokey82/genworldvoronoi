@@ -19,6 +19,11 @@ If you want to see the generated world on a 3D globe, use the `--use_globe` flag
 go run . --use_globe=true
 ```
 
+### 🕰️ Simulation Generation Modes
+When instantiating the simulation, the initial world's state is heavily influenced by the `SeedEntities` toggle in `civ.CivConfig`.
+- If `SeedEntities = false` (default "Cradle of Civilization"): The map begins mostly empty, and you can watch cities, states, and borders naturally grow, establish boundaries along natural geography, and clash over ticks.
+- If `SeedEntities = true` (Legacy Seeding): The map is pre-populated with established cultures, empires, and borders generated over the full landmass instantaneously via flood-filling algorithm upon startup.
+
 ## ⌨️ UI Controls
 
 When viewing the map in the browser, you can use the following keys to toggle visualizations:

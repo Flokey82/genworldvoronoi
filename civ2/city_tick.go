@@ -2,6 +2,7 @@ package civ2
 
 import (
 	"log"
+	"math"
 	"math/rand"
 
 	"github.com/Flokey82/genworldvoronoi/civ"
@@ -27,7 +28,9 @@ func (m *Civ) tickCities(nDays int) {
 		// - Trade with other
 
 		// Grow the population.
-		c.Grow(nDays)
+		if m.EnableCityAging {
+			c.Grow(nDays)
+		}
 		
 		// Centralized economic tick.
 		m.tickEconomyBase(c, nDays)
@@ -50,7 +53,24 @@ func (m *Civ) tickCities(nDays int) {
 		m.tickLeadership(c, nDays)
 
 		// There is a chance that the city will be abandoned by a part of the population.
-		if rand.Intn(2000)*nDays < 5 {
+		// If population exceeds carrying capacity, trigger migration.
+		maxPop := c.GetMaxPopulation()
+		if c.Population > maxPop {
+			excessPopulation := c.Population - maxPop
+
+			// Move portion of population based on MigrationOverpopulation factors.
+			migratePop := int(math.Max(
+				float64(excessPopulation)*m.MigrationOverpopulationExcessPopulationFactor,
+				float64(c.Population)*m.MigrationOverpopulationMinPopulationFactor,
+			))
+			migratePop = min(migratePop, c.Population)
+
+			if migratePop > 0 {
+				t := cityToTribe(c, migratePop)
+				m.Tribes.PlaceObjectAt(t, t.RegionID)
+				log.Printf("City %s has exceeded capacity (%d/%d): %d people migrated as tribe %d", c.Name, c.Population, maxPop, migratePop, t.ID)
+			}
+		} else if rand.Intn(2000)*nDays < 5 {
 			t := cityToTribe(c, c.Population/10)
 			m.Tribes.PlaceObjectAt(t, t.RegionID)
 			log.Printf("City %d has been (partially) abandoned and tribe %d has been created", c.ID, t.ID)
