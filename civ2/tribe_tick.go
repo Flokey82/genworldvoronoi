@@ -1,6 +1,7 @@
 package civ2
 
 import (
+	"fmt"
 	"log"
 	"math/rand"
 
@@ -137,7 +138,7 @@ func (m *Civ) completeSettle(t *Tribe) {
 		}
 		s.Population += t.Population
 		t.Population = 0
-		log.Printf("tribe %d has settled in region %d", t.ID, t.RegionID)
+		log.Printf("tribe %d has settled in region %d (merged with settlement)", t.ID, t.RegionID)
 
 		// Remove the tribe.
 		m.Tribes.RemoveObject(t)
@@ -151,15 +152,29 @@ func (m *Civ) completeSettle(t *Tribe) {
 		}
 		c.Population += t.Population
 		t.Population = 0
-		log.Printf("tribe %d has settled in region %d", t.ID, t.RegionID)
+		log.Printf("tribe %d has settled in region %d (merged with city)", t.ID, t.RegionID)
 
 		// Remove the tribe.
 		m.Tribes.RemoveObject(t)
 	} else {
+		// No settlement or city in the region.
+		// Create a new settlement.
 		settlement := t.ToSettlement(t.Population)
+		if t.Culture != nil {
+			// Calculate distance to origin.
+			dist := m.GetDistance(t.Culture.ID, t.RegionID) * unitDistToKm
+			if dist > 500.0 {
+				settlement.Culture = t.Culture.Fork(t.RegionID)
+				m.Cultures.PlaceObjectAt(settlement.Culture, t.RegionID)
+				log.Printf("tribe %d has forked its culture (dist %.2f km)", t.ID, dist)
+			} else {
+				settlement.Culture = t.Culture
+				log.Printf("tribe %d has retained its culture (dist %.2f km)", t.ID, dist)
+			}
+		}
 		settlement.GoverningPeople = newGoverningPeople()
 		m.Settlements.PlaceObjectAt(settlement, t.RegionID)
-		log.Printf("tribe %d has settled in region %d", t.ID, t.RegionID)
+		log.Printf("tribe %d has settled in region %d (new settlement)", t.ID, t.RegionID)
 
 		// Remove the tribe.
 		m.Tribes.RemoveObject(t)
@@ -341,10 +356,32 @@ func (m *Civ) migrateTribes(nDays int) {
 
 				// Check if the region is already settled or will be occupied by another tribe
 				// on the end of the turn.
-				// - If the settlement or city is abandoned, we should be able to move there anyway.
-				// - If the tribe is aggressive, we should be able to fight for the region.
 				if m.hasPopulatedSettlement(nextRegion) || m.hasPopulatedCity(nextRegion) ||
 					finalLocations[nextRegion] != nil {
+					
+					// If the tribe is aggressive, we might choose to fight for the region.
+					if t.Aggressive {
+						// Check if we are attacking a settlement or city.
+						var defender peopleThing
+						if s := m.Settlements.GetAt(nextRegion); s != nil && s.Population > 0 {
+							defender = s
+						} else if c := m.GetCity(nextRegion); c != nil && c.Population > 0 {
+							defender = c
+						}
+
+						if defender != nil {
+							// Attack the settlement/city.
+							if m.resolveCombat(t, defender) {
+								// We won! Choice between sacking and capturing.
+								m.handleTribeVictory(t, defender)
+							} else {
+								// We lost! Displacement.
+								m.handleTribeDisplacement(t)
+								nextRegion = t.RegionID // Stay put for now.
+							}
+						}
+					}
+
 					if t.Path.PeekDone() {
 						// This is our destination, but we can't settle here,
 						// so we have to find a new region to settle in.
@@ -417,14 +454,19 @@ func (m *Civ) migrateTribes(nDays int) {
 				for _, at := range aggressiveTribes {
 					if winner == nil {
 						winner = at
-					} else if m.resolveCombat(at, winner) {
-						// The winner becomes the new winner, the previous winner
-						// will be relocated.
-						nextRelocate = append(nextRelocate, winner)
-						winner = at
 					} else {
-						// The loser will be relocated.
-						nextRelocate = append(nextRelocate, at)
+						// Resolve combat.
+						if m.resolveCombat(at, winner) {
+							// The winner becomes the new winner, the previous winner
+							// will be relocated and displaced.
+							m.handleTribeDisplacement(winner)
+							nextRelocate = append(nextRelocate, winner)
+							winner = at
+						} else {
+							// The loser will be relocated and displaced.
+							m.handleTribeDisplacement(at)
+							nextRelocate = append(nextRelocate, at)
+						}
 					}
 				}
 				// The last winner will move to the region and the other tribes will
@@ -504,4 +546,61 @@ func (m *Civ) migrateTribes(nDays int) {
 			}
 		}
 	}
+}
+
+func (m *Civ) handleTribeVictory(t *Tribe, defender peopleThing) {
+	// Choice between Sacking (Looting) and Capturing (Occupation).
+	if rand.Float64() < 0.5 {
+		// Capture!
+		m.handleTribeCapture(t, defender)
+	} else {
+		// Sack!
+		m.handleTribeSacking(t, defender)
+	}
+}
+
+func (m *Civ) handleTribeCapture(t *Tribe, defender peopleThing) {
+	// Capture the settlement/city.
+	// The tribe becomes the new population / ruling class.
+	defender.SetPopulation(defender.GetPopulation() + t.Population)
+	t.Population = 0
+
+	// Infrastructure damage (30% loss).
+	if infra := defender.GetInfrastructure(); infra != nil && len(infra.Buildings) > 0 {
+		damaged := int(float64(len(infra.Buildings)) * 0.3)
+		if damaged > 0 {
+			infra.Buildings = infra.Buildings[:len(infra.Buildings)-damaged]
+		}
+	}
+
+	// Apply the tribe's culture to the settlement.
+	defender.SetCulture(t.Culture)
+
+	m.History.AddEvent("Capture", fmt.Sprintf("Tribe %d has captured %s and established itself as the new ruling class.", t.ID, defender.String()), t.Ref())
+}
+
+func (m *Civ) handleTribeSacking(t *Tribe, defender peopleThing) {
+	// Sack the settlement/city.
+	// Transfer some population (as slaves or new members).
+	capturedPop := int(float64(defender.GetPopulation()) * 0.2)
+	t.Population += capturedPop
+
+	// Depopulate the defender.
+	defender.SetPopulation(defender.GetPopulation() - capturedPop)
+
+	// If the defender is very low on population, it might be fully sacked.
+	if defender.GetPopulation() < 50 {
+		m.History.AddEvent("Sacking", fmt.Sprintf("Tribe %d has fully sacked %s.", t.ID, defender.String()), t.Ref())
+		defender.SetPopulation(0)
+	} else {
+		m.History.AddEvent("Sacking", fmt.Sprintf("Tribe %d has sacked %s.", t.ID, defender.String()), t.Ref())
+	}
+}
+
+func (m *Civ) handleTribeDisplacement(t *Tribe) {
+	// If the tribe is displaced, it loses some population and its path is disrupted.
+	losses := int(float64(t.Population) * 0.1)
+	t.Population -= losses
+	t.Path = nil // Dislodge the tribe.
+	m.History.AddEvent("Displacement", fmt.Sprintf("Tribe %d has been displaced and lost %d people.", t.ID, losses), t.Ref())
 }

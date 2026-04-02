@@ -1,0 +1,272 @@
+package civ2
+
+import (
+	"log"
+	"math/rand"
+	"strings"
+	"time"
+
+	"github.com/Flokey82/genworldvoronoi/civ"
+	"github.com/Flokey82/go_gens/genlanguage"
+	"github.com/Flokey82/go_gens/genstory"
+	"github.com/Flokey82/go_gens/genstory/genbooks"
+)
+
+var artifactTextGen = genstory.NewTextGenerator(rand.New(rand.NewSource(time.Now().UnixNano())))
+
+// Artifact represents an artifact that can be found in the world.
+type Artifact struct {
+	ID        int
+	Name      string // The name of the artifact
+	Condition *Condition
+}
+
+// NewArtifact creates a new artifact.
+func (m *Civ) NewArtifact(name string) *Artifact {
+	return &Artifact{
+		ID:   m.getNextArtifactID(),
+		Name: name,
+	}
+}
+
+// Ref returns the object reference of the artifact.
+func (a *Artifact) Ref() civ.ObjectReference {
+	return civ.ObjectReference{
+		ID:   a.ID,
+		Type: civ.ObjectTypeArtifact,
+	}
+}
+
+// NameWithArticle returns the name of the artifact with an article.
+func (a *Artifact) NameWithArticle() string {
+	// First we extract the first word.
+	firstWord := strings.Split(a.Name, " ")[0]
+
+	// Add the article.
+	return genlanguage.GetArticle(firstWord) + " " + a.Name
+}
+
+var (
+	bookTitleConfig            = genbooks.NewSimpleTitleConfig(genbooks.BookVariantTitles)
+	bookTitleConfigInstruction = genbooks.NewSimpleTitleConfig(genbooks.BookInstructionTitles)
+)
+
+// NewBook creates a new book.
+func (m *Civ) NewBook() *Artifact {
+	// Set the seed for the text generator.
+	id := m.getNextArtifactID()
+	artifactTextGen.Seed(int64(id))
+
+	// Generate the title.
+	title, err := artifactTextGen.GenerateFromConfig(nil, bookTitleConfig, nil)
+	if err != nil {
+		log.Println("error generating book title:", err)
+	}
+
+	return &Artifact{
+		ID:   id,
+		Name: "book: " + title.Text,
+	}
+}
+
+// NewBookInstruction creates a new book with instructions.
+func (m *Civ) NewBookInstruction(name string) *Artifact {
+	// Set the seed for the text generator.
+	id := m.getNextArtifactID()
+	artifactTextGen.Seed(int64(id))
+
+	// Generate the title.
+	title, err := artifactTextGen.GenerateFromConfig([]genstory.TokenReplacement{{
+		Token:       genbooks.TokenName,
+		Replacement: name,
+	}}, bookTitleConfigInstruction, nil)
+	if err != nil {
+		log.Println("error generating book title:", err)
+	}
+
+	return &Artifact{
+		ID:   id,
+		Name: title.Text,
+	}
+}
+
+var (
+	treasureNameRules = &genstory.Rules{
+		Expansions: map[string][]string{
+			"object": {
+				"box",
+				"doll",
+				"coin",
+				"amulet",
+				"necklace",
+				"ring",
+				"crown",
+				"statuette",
+				"mirror",
+				"book of [writing]",
+				"scroll",
+				"bundle of letters on [writing]",
+				"book",
+				"potion",
+				"key",
+				"diary",
+				"letter",
+				"drawing",
+				"shard",
+				"eye",
+				"locket",
+				"device",
+				"helmet",
+			},
+			"writing": {
+				"spells",
+				"runes",
+				"poems",
+				"poetry",
+				"fables",
+				"fairy tales",
+				"legends",
+				"prophecies",
+				"ballads",
+				"beasts",
+				"monsters",
+				"dragons",
+				"creatures",
+			},
+			"adjective": {
+				"shiny",
+				"old",
+				"mysterious",
+				"strange",
+				"ancient",
+				"magical",
+				"glowing",
+				"dull",
+				"rusty",
+			},
+			"feature": {
+				"[feature_adjective:a] [feature_type] [feature_location]",
+				"[feature_adjective:a] [feature_type]",
+				"[feature_type:a]",
+			},
+			"feature_type": {
+				"engraving",
+				"marking",
+				"inscription",
+				"symbol",
+				"rune",
+				"carving of [drawing_adjective:a] [drawing_subject]",
+				"etching of [drawing_adjective:a] [drawing_subject]",
+				"drawing of [drawing_adjective:a] [drawing_subject]",
+			},
+			"drawing_adjective": {
+				"beautiful",
+				"strange",
+				"ancient",
+				"mysterious",
+				"magical",
+				"glowing",
+				"young",
+				"old",
+				"ugly",
+				"misshapen",
+			},
+			"drawing_subject": {
+				"woman",
+				"girl",
+				"man",
+				"lady",
+				"king",
+				"queen",
+				"prince",
+				"princess",
+				"flower",
+				"tree",
+				"animal",
+				"monster",
+				"dragon",
+				"elf",
+				"dwarf",
+				"orc",
+				"troll",
+				"gnome",
+				"halfling",
+				"wizard",
+				"witch",
+				"mage",
+				"warrior",
+			},
+			"feature_adjective": {
+				"strange",
+				"ancient",
+				"mysterious",
+				"magical",
+				"glowing",
+				"pulsing",
+				"shimmering",
+				"dark",
+				"light",
+				"bright",
+				"faint",
+			},
+			"feature_location": {
+				"on the back",
+				"on the front",
+				"on the side",
+				"allong the edge",
+				"on the top",
+				"on the bottom",
+			},
+			"object_phrase": {
+				"[adjective] [object] with [feature]",
+				"[adjective] [object]",
+				"[object]",
+			},
+		},
+		Start: "[object_phrase]",
+	}
+)
+
+// NewTreasure creates a new treasure.
+func (m *Civ) NewTreasure() *Artifact {
+	id := m.getNextArtifactID()
+	// Now we do the same with grammar rules.
+	res := treasureNameRules.NewStory(int64(id))
+	trRes, err := res.Expand()
+	if err != nil {
+		log.Println("error expanding story:", err)
+	}
+	artifactName := trRes
+
+	art := &Artifact{
+		ID:   id,
+		Name: artifactName,
+	}
+
+	// Check if it is cursed or blessed.
+	const (
+		outcomeCursed  = 0
+		outcomeBlessed = 1
+	)
+
+	switch rand.Intn(10) {
+	case outcomeCursed:
+		art.Name += " (cursed)"
+
+		// Pick a random curse.
+		curses := []*Condition{
+			curseLazinessAndCarelessness,
+			curseCrueltyAndDeception,
+			curseAmbitionAndCruelty,
+			curseParanoiaCrueltyAndDeception,
+			curseOfCursedFamily,
+		}
+		art.Condition = curses[rand.Intn(len(curses))]
+	case outcomeBlessed:
+		art.Name += " (blessed)"
+
+		// Pick a blessing.
+		art.Condition = blessingOfTheBrave
+	}
+	return art
+}

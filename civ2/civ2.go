@@ -16,6 +16,11 @@ const (
 	HistoryEventFaction      = "faction"
 	HistoryEventDiplomacy    = "diplomacy"
 	HistoryEventMilitary     = "military"
+
+	CurrencyCopper   = 0.01
+	CurrencySilver   = 0.1
+	CurrencyGold     = 1.0
+	CurrencyPlatinum = 10.0
 )
 
 type Civ struct {
@@ -39,9 +44,10 @@ type Civ struct {
 	NumCities     int // Number of generated cities (regions)
 	NumCityStates int // Number of generated city states
 	navCache      *civ.NavCache
-	nextPersonID  int
-	nextFactionID int
-	People        []*Person // People in the world
+	nextPersonID   int
+	nextFactionID  int
+	nextArtifactID int
+	People         []*Person // People in the world
 	TradeRoutes   []*TradeRoute
 	Relationships map[civ.ObjectReference]map[civ.ObjectReference]int
 	disasterFunc  func(int) geo.GeoDisasterChance
@@ -132,6 +138,24 @@ func (m *Civ) Tick() {
 
 	// Update trade.
 	m.tickTrade(nDays)
+
+	// Sync the global population map.
+	m.syncPopulation()
+}
+
+func (m *Civ) syncPopulation() {
+	for i := range m.Population {
+		m.Population[i] = 0
+	}
+	for _, t := range m.Tribes.Objects {
+		m.Population[t.RegionID] += t.Population
+	}
+	for _, s := range m.Settlements.Objects {
+		m.Population[s.ID] += s.Population
+	}
+	for _, c := range m.Cities.Objects {
+		m.Population[c.ID] += c.Population
+	}
 }
 
 func (m *Civ) getNextPersonID() int {
@@ -142,6 +166,11 @@ func (m *Civ) getNextPersonID() int {
 func (m *Civ) getNextFactionID() int {
 	m.nextFactionID++
 	return m.nextFactionID
+}
+
+func (m *Civ) getNextArtifactID() int {
+	m.nextArtifactID++
+	return m.nextArtifactID
 }
 
 // getTerritoryNeighbors returns a list of territories neighboring the

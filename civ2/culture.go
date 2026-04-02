@@ -45,6 +45,24 @@ func (m *Civ) GetCulture(id int) *Culture {
 	return nil
 }
 
+func (c *Culture) Fork(newID int) *Culture {
+	if c == nil {
+		return nil
+	}
+	lang := c.Language.Fork(int64(newID))
+
+	cNew := &Culture{
+		ID:       newID,
+		Name:     lang.MakeName(),
+		Language: lang,
+		Religion: c.Religion,
+		Type:     c.Type,
+		Skills:   make([]*Skill, len(c.Skills)),
+	}
+	copy(cNew.Skills, c.Skills)
+	return cNew
+}
+
 func (c *Culture) compare(other *Culture) float64 {
 	if c == nil || other == nil {
 		return -1.0

@@ -45,6 +45,14 @@ func (b *BaseEntity) SetPopulation(pop int) {
 	b.Population = pop
 }
 
+func (b *BaseEntity) GetCulture() *Culture {
+	return b.Culture
+}
+
+func (b *BaseEntity) SetCulture(c *Culture) {
+	b.Culture = c
+}
+
 func (b *BaseEntity) GetStorage() *Storage {
 	return b.Storage
 }

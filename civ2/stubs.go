@@ -3,7 +3,6 @@ package civ2
 import (
 	"math"
 
-	"github.com/Flokey82/genworldvoronoi/geo"
 )
 
 func (m *Civ) GetTradeRoutes() ([][]int, [][]int) {
@@ -14,9 +13,6 @@ func (m *Civ) GetTradeRoutesInLatLonBB(minLat, minLon, maxLat, maxLon float64) [
 	return nil
 }
 
-func (m *Civ) GenerateCityFlavorText(c *City, p geo.RegProperty) string {
-	return ""
-}
 
 // CalcCityScore calculates the fitness value for settlements for all regions.
 //

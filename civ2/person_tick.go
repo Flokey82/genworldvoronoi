@@ -2,6 +2,7 @@ package civ2
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"sort"
 
@@ -82,7 +83,9 @@ func (m *Civ) tickPerson(p *Person, nDays int) *Person {
 		}
 	}
 
-	// TODO: tickFamily
+	// Pick an action for this tick.
+	m.tickAction(p, nDays)
+
 	return child
 }
 
@@ -159,7 +162,41 @@ func (m *Civ) handleInheritance(p *Person) {
 	sort.Slice(relatives, func(i, j int) bool {
 		return p.Opinions.GetOpinion(relatives[i].p) > p.Opinions.GetOpinion(relatives[j].p)
 	})
-	// TODO: Transfer artifacts and gold.
+
+	// Transfer artifacts and gold to the most loved people.
+	if len(relatives) == 0 {
+		return
+	}
+
+	// Transfer artifacts until we run out of artifacts.
+	// We make a copy of the slice because p.transferArtifact modifies p.Artifacts.
+	remainingArtifacts := make([]*Artifact, len(p.Artifacts))
+	copy(remainingArtifacts, p.Artifacts)
+
+	for len(remainingArtifacts) > 0 {
+		for _, r := range relatives {
+			if len(remainingArtifacts) == 0 {
+				return
+			}
+			// Transfer artifacts.
+			p.transferArtifact(m, remainingArtifacts[0], r.p)
+			remainingArtifacts = remainingArtifacts[1:]
+		}
+	}
+
+	// Distribute gold.
+	for p.Gold > CurrencyCopper {
+		for _, r := range relatives {
+			if p.Gold <= CurrencyCopper {
+				return
+			}
+			// Transfer gold, make sure we round down to the nearest copper.
+			amount := p.Gold * rand.Float64()
+			amount = math.Floor(amount/CurrencyCopper)*CurrencyCopper + CurrencyCopper
+			p.Gold -= amount
+			r.p.Gold += amount
+		}
+	}
 }
 
 func (m *Civ) tickPersonPregnancy(p *Person, nDays int) *Person {

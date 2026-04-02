@@ -92,12 +92,21 @@ func (m *Civ) tickDisasters(e peopleThing, nDays int) {
 	}
 
 	// Apply population loss.
-	m.Population[e.GetID()] -= dead
-	if m.Population[e.GetID()] < 0 {
-		m.Population[e.GetID()] = 0
-	}
-	e.SetPopulation(m.Population[e.GetID()])
+	remaining := pop - dead
+	e.SetPopulation(remaining)
 
 	// Logging and History.
 	m.History.AddEvent(HistoryEventDisaster, fmt.Sprintf("A %s has struck %s, causing %d deaths.", dis.Name, e.String(), dead), e.Ref())
+
+	// 5. Check for migration.
+	// If the disaster was severe (e.g., popLoss > 10%), some might leave.
+	if popLoss > 0.1 && remaining > 100 && rand.Intn(100) < 50 {
+		migratePop := int(float64(remaining) * (rand.Float64() * 0.3)) // Up to 30% migrate.
+		if migratePop > 50 {
+			e.SetPopulation(remaining - migratePop)
+			newT := m.NewTribe(e.GetID(), migratePop)
+			newT.Culture = e.GetCulture()
+			m.History.AddEvent(HistoryEventDisaster, fmt.Sprintf("Due to the %s, %d people have left %s to find a new home.", dis.Name, migratePop, e.String()), e.Ref())
+		}
+	}
 }

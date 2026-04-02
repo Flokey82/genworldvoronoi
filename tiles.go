@@ -1019,7 +1019,6 @@ func (m *Map) GetGeoJSONCities(la1, lo1, la2, lo2 float64, zoom int) ([]byte, er
 	moists := m.Moisture.GetValues()
 	maxMois := m.Moisture.Max
 
-	regPropertyFunc := m.GetRegPropertyFunc()
 
 	// Depending on the zoom level we want to show more or less cities.
 	sortedCities := make([]*civ.City, len(m.Cities.Objects))
@@ -1081,7 +1080,7 @@ func (m *Map) GetGeoJSONCities(la1, lo1, la2, lo2 float64, zoom int) ([]byte, er
 		f.SetProperty("biome", genbiome.WhittakerModBiomeToString(biomeFunc(c.ID))+
 			fmt.Sprintf(" (%.1f°C, %.1fdm, %.1fm)", temperature, precip, elev))
 		f.SetProperty("coordinates", fmt.Sprintf("lat %.2f, lon %.2f", cLat, cLon))
-		f.SetProperty("flavortext", m.GenerateCityFlavorText(c, regPropertyFunc(c.ID)))
+		f.SetProperty("flavortext", m.GenerateCityFlavorText(c))
 		var sName string
 		for _, sp := range m.Species.GetAt(c.ID) {
 			sName += sp.Name + ", "

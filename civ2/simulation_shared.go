@@ -14,6 +14,8 @@ type peopleThing interface {
 	Ref() civ.ObjectReference
 	GetPopulation() int
 	SetPopulation(int)
+	GetCulture() *Culture
+	SetCulture(*Culture)
 	GetStorage() *Storage
 	GetPeople() []*Person
 	GetGoverningPeople() *GoverningPeople

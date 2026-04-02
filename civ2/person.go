@@ -53,6 +53,7 @@ type Person struct {
 	City        *City                    // City of the person
 	Culture     *Culture                 // Culture of the person
 	Opinions    *Opinions                // Opinions of the person
+	Conditions  *Conditions              // Conditions of the person
 	Popularity  ClampedVal               // Popularity of the person (reputation, 0.0-1.0)
 	Karma       ClampedVal               // Karma of the person (good/bad deeds, 0.0-1.0)
 
@@ -79,6 +80,9 @@ type Person struct {
 	Father   *Person
 	Spouse   *Person
 	Children []*Person
+
+	// Artifacts
+	Artifacts []*Artifact
 }
 
 func (p *Person) GetID() int {
@@ -109,11 +113,40 @@ func (p *Person) String() string {
 	if p.Dead() {
 		isDead = "†"
 	}
-	str := fmt.Sprintf("%s (%s%s%d) (P:%.1f, K:%.1f, G:%.1f)", name, gender, isDead, p.Age, p.Popularity, p.Karma, p.Gold)
+	str := fmt.Sprintf("%s (%s%s%d) (P:%.1f, K:%.1f, G:%.1f, A:%d)", name, gender, isDead, p.Age, p.Popularity, p.Karma, p.Gold, len(p.Artifacts))
 	if p.Traits != 0 {
 		str += " [" + p.Traits.String() + "]"
 	}
 	return fmt.Sprintf("(%d) %s", p.ID, str)
+}
+
+func (p *Person) addArtifact(m *Civ, a *Artifact) {
+	p.Artifacts = append(p.Artifacts, a)
+	// Apply any condition (blessing, curse, etc.) from the artifact.
+	if a.Condition != nil {
+		if p.Conditions == nil {
+			p.Conditions = NewConditions()
+		}
+		p.Conditions.Add(a.Condition, m, p)
+	}
+}
+
+func (p *Person) removeArtifact(m *Civ, a *Artifact) {
+	for i, art := range p.Artifacts {
+		if art == a {
+			p.Artifacts = append(p.Artifacts[:i], p.Artifacts[i+1:]...)
+			// Remove any condition (blessing, curse, etc.) from the artifact.
+			if a.Condition != nil && p.Conditions != nil {
+				p.Conditions.Remove(a.Condition, true, m, p)
+			}
+			break
+		}
+	}
+}
+
+func (p *Person) transferArtifact(m *Civ, a *Artifact, to *Person) {
+	p.removeArtifact(m, a)
+	to.addArtifact(m, a)
 }
 
 func (p *Person) compare(other *Person) float64 {
